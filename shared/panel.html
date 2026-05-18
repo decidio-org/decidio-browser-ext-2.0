@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    /* The Background Layer */
+    html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden; /* Prevents the base page from scrolling while overlay is up */
+    }
+    
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      /* Dims the website behind the overlay */
+      background: rgba(0, 0, 0, 0.4) !important;
+    }
+
+    /* The "card" which is the box that holds the parts of the extension */
+    .card {
+        position: fixed;
+        top: 0; 
+        right: 0;
+        z-index: 10000;
+        width: 275px;
+        max-width: 90vw;
+        height: 100vh;
+  
+
+        display: flex;
+        flex-direction: column;
+        overflow: hidden; /* Prevent the whole card from scrolling */
+  
+        background: rgba(255, 255, 255, 0.1) !important;
+        backdrop-filter: blur(25px) saturate(150%);
+        -webkit-backdrop-filter: blur(25px) saturate(150%);
+        border-left: 1px solid rgba(255, 255, 255, 0.3);
+        padding: 25px;
+        box-sizing: border-box;
+        box-shadow: -10px 0 30px rgba(0,0,0,0.3);
+        color: white;
+    }
+
+    /* The top "bar"*/
+    .top-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 1px solid rgb(255, 255, 255);
+      padding-bottom: 15px;
+    }
+
+    .header-container {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .logo {
+        width: 35px;
+        height: auto;
+    }
+    
+    h3 {
+      color: white;
+      font-size: 28px; /* Matches Icon Size */
+      margin: 0;
+      font-weight: 600;
+    }
+
+    .nav-icon {
+      font-size: 28px; /* Big as the title */
+      color: #ffffff;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.2s, transform 0.1s;
+      line-height: 1;
+    }
+
+    .nav-icon:hover {
+      color: white;
+      transform: scale(1.1);
+    }
+
+    /* Content area */
+    #aiDisplay {
+        flex: 1;            /* Grows to fill space */
+        overflow-y: auto;   /* Internal scrollbar */
+        padding-right: 5px; /* Space for the scrollbar */
+  
+        color: #FFFFFF;
+        font-family: 'Segoe UI';
+        font-size: 16px;
+        line-height: 1.6;
+        margin-top: 10px;
+        white-space: pre-wrap;
+    }
+
+    /* Character Fade Animation */
+    .fade-char {
+        display: inline-block;
+        opacity: 0;
+        transform: translateY(5px);
+        animation: letterFade 0.4s ease forwards;
+    }
+
+    @keyframes letterFade {
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* The load/spinner area */
+    .loader-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+    }
+
+    /* Container for the blades */
+    .blade-spinner {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      animation: pulse-spin 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;;
+    }
+
+    /* Individual | bars */
+      .blade-spinner span {
+      position: absolute;
+      left: 44.5%;
+      top: 37%;
+      width: 10%;
+      height: 25%;
+      background: #ffffff;
+      border-radius: 50px;
+    }
+
+    /* Position the bars in a static wheel */
+    .blade-spinner span:nth-child(1) { transform: rotate(0deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(2) { transform: rotate(30deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(3) { transform: rotate(60deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(4) { transform: rotate(90deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(5) { transform: rotate(120deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(6) { transform: rotate(150deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(7) { transform: rotate(180deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(8) { transform: rotate(210deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(9) { transform: rotate(240deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(10) { transform: rotate(270deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(11) { transform: rotate(300deg) translate(0, -130%);}
+    .blade-spinner span:nth-child(12) { transform: rotate(330deg) translate(0, -130%);}
+
+    /* The rotation animation */
+    @keyframes pulse-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Output of the AI response will go in this part of the extension */
+    .selection-area { 
+      display: none; 
+      margin-top: 20px; 
+      padding: 15px; 
+      background: rgba(240, 141, 57, 0.05);
+      border: 1px solid rgba(240, 141, 57, 0.2);
+      animation: fadeInArea 0.8s ease forwards;
+    }
+
+    @keyframes fadeInArea {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* "Footer" and the add button */
+    .footer-actions {
+      position: relative; 
+    width: 100%;
+    padding: 20px 0; /* Vertical padding only */
+    display: flex;
+    justify-content: center; 
+    align-items: center;
+    border-top: 1px solid white;
+    margin-top: 20px;
+    flex-shrink: 0;
+    
+    padding-left: 0;
+    padding-right: 0;
+    }
+
+    .plus-button {
+      width: 50px;
+      height: 50px;
+      background-color: transparent;
+      border: 5px solid white;
+      box-sizing: border-box;
+      color: white;
+      border-radius: 50%;
+      
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 0;
+      padding-bottom: 4px; /* Optical centering tweak */
+      
+      font-size: 30px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      transition: transform 0.2s, background-color 0.2s;
+      user-select: none;
+    }
+
+    .plus-button:hover {
+      background-color: #b6afaa;
+      transform: scale(1.1);
+    }
+
+    .plus-button:active {
+      transform: scale(0.9);
+    }
+    
+    /* Jump to the top button */
+    .scroll-top-arrow {
+        position: absolute;
+        bottom: 190px; /* Adjust based on footer height */
+        left: 44%;
+    
+        --size: 26px;
+        width: var(--size);
+        height: var(--size);
+        font-size: calc(var(--size) * 0.6);
+        -webkit-text-stroke: 1.8px white;
+    
+        background: rgba(255, 255, 255, 0.2);
+        border: 3px solid rgba(255, 255, 255, 0.5);
+        backdrop-filter: blur(10px);
+        color: white;
+        border-radius: 50%;
+        display: flex; /* Hidden by default so change this back later */
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 10005;
+        transition: background 0.3s, transform 0.2s;
+    }
+
+    .scroll-top-arrow:hover {
+        background: rgba(255, 255, 255, 0.4);
+        transform: translateY(-3px);
+    }
+    
+    /* Show less button */
+    .show-less-button {
+        position: absolute;
+        left: 4px;
+        bottom: 0px;
+        
+        width: 5px;
+        height: 10px;
+        
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 10005;
+        font-weight: 900;
+        font-size: 22px;
+        transition: all 0.3s ease;
+    }
+
+    /* The "Mini" extension */
+    .card.mini-mode {
+        width: 200px;
+        height: 120px;
+        top: 20px;    /* Pull it down slightly from the top */
+        right: 10px;  /* Align it near the extension icon area */
+        border-radius: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        padding: 15px;
+    }
+
+    /* Hide everything inside when in Mini Mode EXCEPT the AI display or a summary */
+    .card.mini-mode .top-nav, 
+    .card.mini-mode .footer-actions, 
+    .card.mini-mode .scroll-top-arrow,
+    .card.mini-mode .selection-area {
+            display: none !important;
+        }
+
+    /* The Speech Bubble Pointer (The Triangle) */
+    .card.mini-mode::after {
+        content: '';
+        position: absolute;
+        top: -10px;    /* Position at the top */
+        right: 20px;   /* Align with the extension icon */
+        width: 0;
+        height: 0;
+        border-left: 10px solid transparent;
+        border-right: 10px solid transparent;
+        border-bottom: 10px solid rgba(255, 255, 255, 0.2); /* Matches glass color */
+        backdrop-filter: blur(25px);
+    }
+    
+    
+    /* Below is part of the section that pops up after the AI output. It is for confirming the color of the product
+        since depending on the website, the color is available on the page or it is URL specific. */
+    label {
+      color: #F08D39;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    select {
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      margin-bottom: 20px;
+      background: #1a1a1a;
+      color: white;
+      border: 1px solid #444;
+      border-radius: 0px; /* Sharp corners */
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 0px; /* Sharp corners */
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="top-nav">
+      <div id="exitBtn" class="nav-icon" title="Close">&lt;</div>
+      
+      <div class="header-container">
+        <img src="decidio_logo.png" alt="Logo" class="logo">
+        <h3>Decidio</h3>
+      </div>
+
+      <div id="menuBtn" class="nav-icon" title="Menu">&#9776;</div>
+    </div>
+
+    <div id="loader" class="loader-wrapper" style="display:flex;">
+      <div class="blade-spinner">
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <div id="aiDisplay"></div>
+
+    <div id="selectionArea" class="selection-area">
+      <label><strong>Confirm Primary Color:</strong></label>
+      <select id="colorDropdown"></select>
+      
+      <label style="display:block; margin-top:10px;"><strong>Confirm Accent:</strong></label>
+      <select id="accentDropdown"></select>
+
+      <button id="confirmBtn" style="margin-top:15px; background: #34a853;">Save Harmonized JSON</button>
+    </div>
+    <div id="scrollTopBtn" class="scroll-top-arrow">↑</div>
+    
+    <div class="footer-actions">
+      <div id="showLessBtn" class="show-less-button" title="Show Less">-</div>
+      <div id="addToListBtn" class="plus-button" title="Add to List">+</div>
+    </div>
+  </div>
+
+  <script src="panel_helper.js"></script>
+</body>
+</html>

@@ -50,6 +50,15 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 });
 
+/*
+* The const USE_MOCK_FILE will be used to similate the AI's JSON output.
+* To prevent the usage of tokens for prompting the AI, this will make it 
+* easier to test formating issues with how the table with the product specs
+* will appear
+*/
+
+const USE_MOCK_FILE = true; // Setting this to false will allow you to use the AI
+
 window.addEventListener("message", async (event) => {
   if (event.data.type === "PRODUCT_DATA") {
     const data = event.data.data;
@@ -60,19 +69,34 @@ window.addEventListener("message", async (event) => {
     const addBtn = document.getElementById('addToListBtn');
 
     loader.style.display = 'flex';
-    aiDisplay.innerHTML = ""; // Clear old text
+    aiDisplay.innerHTML = ""; // Clear old content
 
     try {
-      // 1. Send the scraped specs to your Python AI server
-      const response = await fetch(`http://localhost:8000/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          html_content: data.html_content
-        })
-      });
 
-      const aiResult = await response.json();
+      let aiResult;
+
+      if (USE_MOCK_FILE) {
+        // 1. Get the path for the sample.json file
+
+        // 2. Fetch it locally
+
+        // Artificial delay to test if the "loading" layout is working correctly
+        await new Promise(resolve => setTimeout(resolve, 600));
+
+      } else {
+        // Original functionality with the Gemini AI
+        // 1. Send the scraped specs to your Python AI server
+        const response = await fetch(`http://localhost:8000/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            html_content: data.html_content
+          })
+        });
+
+        aiResult = await response.json();
+      }
+
       loader.style.display = 'none';
 
       // 2. Setup the Add Button

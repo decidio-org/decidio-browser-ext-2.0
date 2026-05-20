@@ -147,7 +147,6 @@ window.addEventListener("message", async (event) => {
 
       descText.style.margin = '0 0 15px 0';
       descText.style.fontSize = '16px';
-      descText.style.color = '#eee';
       descText.style.lineHeight = '1.4';
       descText.style.fontFamily = 'Arial, sans-serif'; // Font placeholder
       descText.textContent = aiResult.Description;
@@ -250,6 +249,7 @@ function renderSpecsTable(containerElement, specsObject) {
     typeCell.style.fontWeight = 'bold';
     typeCell.style.verticalAlign = 'top';
     typeCell.style.width = '45%';
+    typeCell.style.textAlign = 'left';
     typeCell.textContent = specType;
 
     // Right Cell: Value
@@ -258,6 +258,7 @@ function renderSpecsTable(containerElement, specsObject) {
     valueCell.style.padding = '8px 4px';
     valueCell.style.verticalAlign = 'top';
     valueCell.style.width = '55%';
+    valueCell.style.textAlign = 'right';
 
     // "Flatten" array values into strings
     valueCell.textContent = Array.isArray(valueArray) ? valueArray.join(', ') : valueArray;

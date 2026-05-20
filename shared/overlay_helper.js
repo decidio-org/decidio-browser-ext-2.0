@@ -59,7 +59,6 @@ document.addEventListener("DOMContentLoaded", () => {
 * easier to test formating issues with how the table with the product specs
 * will appear
 */
-
 const USE_MOCK_FILE = true; // Setting this to false will allow you to use the AI
 
 window.addEventListener("message", async (event) => {
@@ -75,7 +74,6 @@ window.addEventListener("message", async (event) => {
     aiDisplay.innerHTML = ""; // Clear old content
 
     try {
-
       let aiResult;
 
       if (USE_MOCK_FILE) {
@@ -111,6 +109,83 @@ window.addEventListener("message", async (event) => {
         };
       }
 
+      // Product name heading
+      const productName = document.createElement('h2');
+
+      productName.style.margin = '0 0 10px 0';
+      productName.style.fontSize = '22px';
+      productName.style.fontWeight = 'bold';
+      productName.style.fontFamily = 'Arial, sans-serif'; // Placeholder font
+      productName.textContent =aiResult.Name;
+      aiDisplay.appendChild(productName);
+
+      // Dark line to seperate the section
+      aiDisplay.appendChild(createDarkLine());
+
+      // Image Section CURRENTLY A PLACEHOLDER
+      const image = document.createElement('div');
+
+      image.style.width = '100%';
+      image.style.height = '150px';
+      image.style.margin = '15px 0';
+      aiDisplay.appendChild(image);
+      
+      aiDisplay.appendChild(createDarkLine());
+
+      // Description Heading
+      const descHeading = document.createElement('h3');
+
+      descHeading.style.margin = '15px 0 5px 0';
+      descHeading.style.fontSize = '20px';
+      descHeading.style.fontWeight = 'bold';
+      descHeading.style.fontFamily = 'Arial, sans-serif'; // Placeholder font
+      descHeading.textContent = 'Description';
+      aiDisplay.appendChild(descHeading);
+
+      // Description Text
+      const descText = document.createElement('p');
+
+      descText.style.margin = '0 0 15px 0';
+      descText.style.fontSize = '16px';
+      descText.style.color = '#eee';
+      descText.style.lineHeight = '1.4';
+      descText.style.fontFamily = 'Arial, sans-serif'; // Font placeholder
+      descText.textContent = aiResult.Description;
+
+      // CSS Line clamping for three lines
+      descText.style.display = '-webkit-box';
+      descText.style.webkitBoxOrient = 'vertical';
+      descText.style.webkitLineClamp = '3';
+      descText.style.overflow = 'hidden';
+      descText.style.cursor = 'pointer'; // Clickable
+      descText.title = "Expand"; // Hovering over triggers this
+
+      descText.onclick = () => {
+        if (descText.style.webkitLineClamp === '3') {
+          // Expand text
+          descText.style.webkitLineClamp = 'unset';
+          descText.style.cursor = 'default';
+        } else {
+          // Shrink it back
+          descText.style.webkitLineClamp = '3';
+          descText.style.cursor = 'pointer';
+        }
+      };
+
+      aiDisplay.appendChild(descText);
+
+      aiDisplay.appendChild(createDarkLine());
+
+      // Specifications heading
+      const specsHeading = document.createElement('h3');
+
+      specsHeading.style.margin = '15px 0 10px 0';
+      specsHeading.style.fontSize = '20px';
+      specsHeading.style.fontWeight = 'bold';
+      specsHeading.style.fontFamily = 'Arial, sans-serif'; // Placeholder
+      specsHeading.textContent = 'Specifications';
+      aiDisplay.appendChild(specsHeading);
+
       /* // 3. Trigger the typing animation with the AI's response
       // aiResult.analysis should be the summary text returned by server.py
       typeEffect(aiDisplay, aiResult.description_summary, () => {
@@ -135,6 +210,21 @@ window.addEventListener("message", async (event) => {
 });
 
 /**
+ * The createDarkLine function
+ * 
+ * This is a helper function to generate consistent dividing lines
+ */
+function createDarkLine() {
+  const line = document.createElement('hr');
+
+  line.style.border = 'none';
+  line.style.borderTop = '2px solid #eee'; // Includes thickness & color
+  line.style.marign = '10px 0';
+
+  return line;
+}
+
+/**
  * The renderSpecsTable function
  * 
  * This function dynamically builds a specifications table from a structured JSON object
@@ -145,7 +235,7 @@ function renderSpecsTable(containerElement, specsObject) {
   // Formating the table:
   table.style.width = '100%';
   table.style.borderCollapse = 'collapse';
-  table.style.marginTop = '10px' // Placeholder for later changes.....
+  table.style.marginTop = '0px' // Placeholder for later changes.....
   table.style.fontFamily = 'Arial, sans-serif'; //Placeholder for true font....
 
   for (const [specType, valueArray] of Object.entries(specsObject)) {
@@ -179,7 +269,6 @@ function renderSpecsTable(containerElement, specsObject) {
 
   containerElement.appendChild(table);
 }
-
 
 /**
  * Creates a "Fade-In" typing effect by wrapping every letter in a span

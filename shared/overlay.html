@@ -15,7 +15,7 @@
       display: flex;
       justify-content: center;
       /* Dims the website behind the overlay */
-      background: rgba(0, 0, 0, 0.4) !important;
+      background: rgba(0, 0, 0, 0.2) !important;
     }
 
     /* The "card" which is the box that holds the parts of the extension */
@@ -24,10 +24,9 @@
         top: 0; 
         right: 0;
         z-index: 10000;
-        width: 275px;
+        width: 290px;
         max-width: 90vw;
         height: 100vh;
-  
 
         display: flex;
         flex-direction: column;
@@ -97,6 +96,9 @@
         line-height: 1.6;
         margin-top: 10px;
         white-space: pre-wrap;
+    }
+    #aiDisplay::-webkit-scrollbar { /* Stops scrollbar from poping up when text is long*/
+      display: none;
     }
 
     /* Character Fade Animation */
@@ -346,7 +348,7 @@
       
       <div class="header-container">
         <img src="decidio_logo.png" alt="Logo" class="logo">
-        <h3>Decidio</h3>
+        <h3>decidio.</h3>
       </div>
 
       <div id="menuBtn" class="nav-icon" title="Menu">&#9776;</div>

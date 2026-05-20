@@ -40,17 +40,21 @@ chrome.runtime.onMessage.addListener((request) => {
         display: 'block'
       });
 
-      // Create the iframe to hold your panel.html
+      // Create the iframe to hold your overlay.html
       const iframe = document.createElement('iframe');
-      iframe.src = chrome.runtime.getURL("panel.html");
+      iframe.src = chrome.runtime.getURL("overlay.html");
 
-      iframe.onload = () => {
+      /**
+       * We now wait for the iframe to ask for the data. Prevents issues with the helper file not 
+       * loading in time before the data gets to it.
+       */
+      /* iframe.onload = () => {
         iframe.contentWindow.postMessage({ 
             type: "PRODUCT_DATA", 
             data: scrapeDetailedSpecs() 
         }, "*");
-      };
-
+      }; */
+      
 
       Object.assign(iframe.style, {
         width: '100%',
@@ -82,5 +86,17 @@ chrome.runtime.onMessage.addListener((request) => {
 window.addEventListener("message", (event) => {
   if (event.data === "CLOSE_OVERLAY" && overlayContainer) {
     overlayContainer.style.display = 'none';
+  }
+
+  // NEW LOGIC: Listen for the overlay to be ready, then send over product data 
+  if (event.data.type == "OVERLAY_READY" && overlayContainer) {
+    const iframe = overlayContainer.querySelector('iframe');
+
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage({
+        type: "PRODUCT_DATA",
+        data: scrapeDetailedSpecs()
+      }, "*");
+    }
   }
 });

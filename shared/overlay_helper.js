@@ -1,4 +1,4 @@
-// This runs the moment the side panel is opened
+// This runs the moment the extension is opened
 document.addEventListener("DOMContentLoaded", () => {
   const card = document.querySelector('.card');
   const aiDisplay = document.getElementById('aiDisplay');
@@ -48,6 +48,9 @@ document.addEventListener("DOMContentLoaded", () => {
             window.parent.postMessage("CLOSE_OVERLAY", "*");
         }
     };
+
+    // Once everything has loaded, now send the product data
+    window.parent.postMessage({ type: "OVERLAY_READY  "}, "*");
 });
 
 /*
@@ -77,8 +80,10 @@ window.addEventListener("message", async (event) => {
 
       if (USE_MOCK_FILE) {
         // 1. Get the path for the sample.json file
-
+        const mockFileUrl = chrome.runtime.getURL('sample.json');
         // 2. Fetch it locally
+        const response = await fetch(mockFileUrl);
+        aiResult = await response.json();
 
         // Artificial delay to test if the "loading" layout is working correctly
         await new Promise(resolve => setTimeout(resolve, 600));
@@ -102,23 +107,79 @@ window.addEventListener("message", async (event) => {
       // 2. Setup the Add Button
       if (addBtn) {
         addBtn.onclick = () => {
-          alert(`Added ${data.product_name} to your list!`);
+          alert(`Added ${aiResult.Name || data.product_name} to your Decidio list!`);
         };
       }
 
-      // 3. Trigger the typing animation with the AI's response
+      /* // 3. Trigger the typing animation with the AI's response
       // aiResult.analysis should be the summary text returned by server.py
       typeEffect(aiDisplay, aiResult.description_summary, () => {
           setupSelectionArea(data, selectionArea);
-      });
+      }); */
+
+      // From here, we extract the "Specs" object from the JSON and build the table for the extention
+      if (aiResult.Specs) {
+        renderSpecsTable(aiDisplay, aiResult.Specs);
+      } else {
+        aiDisplay.innerHTML = "<p style='color: #666; '>No specifications found in JSON structure.</p>";
+      }
+
+      // If keeping the dropdown menu for colors or user confirmation, add line to trigger the function
 
     } catch (err) {
         console.error(err);
-        aiDisplay.innerHTML = "<span class='fade-char' style='color: #ff4d4d;'>AI Analysis Error. check chrome developer</span>";
+        aiDisplay.innerHTML = "<span class='fade-char' style='color: #ff4d4d;'>Error loading data. Check developer tools</span>";
         loader.style.display = 'none';
     }
   }
 });
+
+/**
+ * The renderSpecsTable function
+ * 
+ * This function dynamically builds a specifications table from a structured JSON object
+ */
+function renderSpecsTable(containerElement, specsObject) {
+  const table = document.createElement('table');
+
+  // Formating the table:
+  table.style.width = '100%';
+  table.style.borderCollapse = 'collapse';
+  table.style.marginTop = '10px' // Placeholder for later changes.....
+  table.style.fontFamily = 'Arial, sans-serif'; //Placeholder for true font....
+
+  for (const [specType, valueArray] of Object.entries(specsObject)) {
+    const row = document.createElement('tr');
+
+    row.style.borderBottom = '1px solid #eee'; // Border thickness
+
+    // Left Cell: Spec type (Bold)
+    const typeCell = document.createElement('td');
+
+    typeCell.style.padding = '8px 4px';
+    typeCell.style.fontWeight = 'bold';
+    typeCell.style.verticalAlign = 'top';
+    typeCell.style.width = '45%';
+    typeCell.textContent = specType;
+
+    // Right Cell: Value
+    const valueCell = document.createElement('td');
+
+    valueCell.style.padding = '8px 4px';
+    valueCell.style.verticalAlign = 'top';
+    valueCell.style.width = '55%';
+
+    // "Flatten" array values into strings
+    valueCell.textContent = Array.isArray(valueArray) ? valueArray.join(', ') : valueArray;
+
+    row.appendChild(typeCell);
+    row.appendChild(valueCell);
+    table.appendChild(row);
+  }
+
+  containerElement.appendChild(table);
+}
+
 
 /**
  * Creates a "Fade-In" typing effect by wrapping every letter in a span
@@ -136,7 +197,7 @@ function typeEffect(element, text, callback, speed = 25) {
         element.appendChild(document.createElement("br"));
       } else {
         span.textContent = char;
-        span.className = "fade-char"; // Linked to the CSS in panel.html
+        span.className = "fade-char"; // Linked to the CSS in overlay.html
         element.appendChild(span);
       }
       element.scrollTop = element.scrollHeight;
@@ -152,6 +213,9 @@ function typeEffect(element, text, callback, speed = 25) {
 
 /**
  * Populates dropdowns and handles the Save button
+ * 
+ * -------------- CURRENTLY NOT BEING USED IN THIS TESTING --------------
+ * 
  */
 function setupSelectionArea(data, selectionArea) {
     const colorDrop = document.getElementById('colorDropdown');
@@ -189,6 +253,12 @@ function setupSelectionArea(data, selectionArea) {
 
 /**
  * Downloads the final harmonized file
+ * 
+ * -- NOTE: --------------------------------------------------------
+ *  This may need to be fixed later to the following logic?
+ *  
+ *  If the product is something not in the database, then
+ *  we save the JSON to the database. 
  */
 function downloadJson(obj) {
   const blob = new Blob([JSON.stringify(obj, null, 2)], {type: 'application/json'});

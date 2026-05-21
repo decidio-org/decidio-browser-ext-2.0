@@ -29,7 +29,7 @@
     {
       "resources": [
         "panel.html", 
-        "panel_helper.js", 
+        "overlay_helper.js", 
         "decidio_logo.png"
       ],
       "matches": ["<all_urls>"]

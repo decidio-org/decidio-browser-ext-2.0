@@ -84,7 +84,7 @@ window.addEventListener("message", async (event) => {
         aiResult = await response.json();
 
         // Artificial delay to test if the "loading" layout is working correctly
-        await new Promise(resolve => setTimeout(resolve, 600));
+        await sleep(600);
 
       } else {
         // Original functionality with the Gemini AI
@@ -135,6 +135,7 @@ window.addEventListener("message", async (event) => {
       // Description Heading
       const descHeading = document.createElement('h3');
 
+      descHeading.className = 'fade-in';
       descHeading.style.margin = '15px 0 5px 0';
       descHeading.style.fontSize = '20px';
       descHeading.style.fontWeight = 'bold';
@@ -159,6 +160,10 @@ window.addEventListener("message", async (event) => {
       descText.style.cursor = 'pointer'; // Clickable
       descText.title = "Expand"; // Hovering over triggers this
 
+      // Fade In transition
+      descText.style.opacity = '0';
+      descText.style.transition = 'opacity 1.5s ease-in-out';
+
       descText.onclick = () => {
         if (descText.style.webkitLineClamp === '3') {
           // Expand text
@@ -173,11 +178,21 @@ window.addEventListener("message", async (event) => {
 
       aiDisplay.appendChild(descText);
 
+      // Trigger the description fade-in
+      requestAnimationFrame(() => {
+        descText.style.opacity = '1';
+      });
+
+      // Allow description to fade before continuing
+      await sleep(1200);
+      autoScroll(aiDisplay);
+
       aiDisplay.appendChild(createDarkLine());
 
       // Specifications heading
       const specsHeading = document.createElement('h3');
 
+      specsHeading.className = 'fade-in';
       specsHeading.style.margin = '15px 0 10px 0';
       specsHeading.style.fontSize = '20px';
       specsHeading.style.fontWeight = 'bold';
@@ -185,15 +200,9 @@ window.addEventListener("message", async (event) => {
       specsHeading.textContent = 'Specifications';
       aiDisplay.appendChild(specsHeading);
 
-      /* // 3. Trigger the typing animation with the AI's response
-      // aiResult.analysis should be the summary text returned by server.py
-      typeEffect(aiDisplay, aiResult.description_summary, () => {
-          setupSelectionArea(data, selectionArea);
-      }); */
-
       // From here, we extract the "Specs" object from the JSON and build the table for the extention
       if (aiResult.Specs) {
-        renderSpecsTable(aiDisplay, aiResult.Specs);
+        await renderSpecsTable(aiDisplay, aiResult.Specs);
       } else {
         aiDisplay.innerHTML = "<p style='color: #666; '>No specifications found in JSON structure.</p>";
       }
@@ -209,9 +218,7 @@ window.addEventListener("message", async (event) => {
 });
 
 /**
- * The createDarkLine function
- * 
- * This is a helper function to generate consistent dividing lines
+ * Helper function to generate consistent dividing lines
  */
 function createDarkLine() {
   const line = document.createElement('hr');
@@ -224,11 +231,9 @@ function createDarkLine() {
 }
 
 /**
- * The renderSpecsTable function
- * 
- * This function dynamically builds a specifications table from a structured JSON object
+ * Dynamically builds a specifications table from a structured JSON object
  */
-function renderSpecsTable(containerElement, specsObject) {
+async function renderSpecsTable(containerElement, specsObject) {
   const table = document.createElement('table');
 
   // Formating the table:
@@ -237,69 +242,88 @@ function renderSpecsTable(containerElement, specsObject) {
   table.style.marginTop = '0px' // Placeholder for later changes.....
   table.style.fontFamily = 'Arial, sans-serif'; //Placeholder for true font....
 
-  for (const [specType, valueArray] of Object.entries(specsObject)) {
-    const row = document.createElement('tr');
+  containerElement.appendChild(table);
 
+  // Will use Object.entries which returns an array so we can loop through with an index
+  const specsEntries = Object.entries(specsObject);
+
+  for (let i = 0; i < specsEntries.length; i++) {
+    const [specType, valueArray] = specsEntries[i];
+    const rawVal = Array.isArray(valueArray) ? valueArray.join(', ') : String(valueArray);
+
+    const row = document.createElement('tr');
     row.style.borderBottom = '1px solid #eee'; // Border thickness
 
     // Left Cell: Spec type (Bold)
     const typeCell = document.createElement('td');
 
+    typeCell.className = 'fade-key';
     typeCell.style.padding = '8px 4px';
     typeCell.style.fontWeight = 'bold';
     typeCell.style.verticalAlign = 'top';
     typeCell.style.width = '45%';
     typeCell.style.textAlign = 'left';
-    typeCell.textContent = specType;
 
     // Right Cell: Value
     const valueCell = document.createElement('td');
 
+    valueCell.className = 'fade-value';
     valueCell.style.padding = '8px 4px';
     valueCell.style.verticalAlign = 'top';
     valueCell.style.width = '55%';
     valueCell.style.textAlign = 'right';
 
-    // "Flatten" array values into strings
-    valueCell.textContent = Array.isArray(valueArray) ? valueArray.join(', ') : valueArray;
-
     row.appendChild(typeCell);
     row.appendChild(valueCell);
     table.appendChild(row);
-  }
 
-  containerElement.appendChild(table);
+    await typeTextEffect(typeCell, specType, containerElement);
+    await typeTextEffect(valueCell, rawVal, containerElement);
+    await sleep(30); // How fast the row comes in
+  }
 }
 
 /**
- * Creates a "Fade-In" typing effect by wrapping every letter in a span
+ * Character-by-character typewriter loop that scrolls the container element
  */
-function typeEffect(element, text, callback, speed = 25) {
-  element.innerHTML = "";
-  let i = 0;
+async function typeTextEffect(element, fullText, scrollContainer) {
+  const characters = fullText.split("");
+  element.textContent = ""; // Clear initial text layout space
 
-  function typing() {
-    if (i < text.length) {
-      const char = text.charAt(i);
-      const span = document.createElement("span");
-      
-      if (char === "\n") {
-        element.appendChild(document.createElement("br"));
-      } else {
-        span.textContent = char;
-        span.className = "fade-char"; // Linked to the CSS in overlay.html
-        element.appendChild(span);
-      }
-      element.scrollTop = element.scrollHeight;
-      
-      i++;
-      setTimeout(typing, speed);
-    } else if (callback) {
-      setTimeout(callback, 400); // Slight pause before dropdowns appear
-    }
+  for (const char of characters) {
+    element.textContent += char;
+    autoScroll(scrollContainer);
+    await sleep(15); // Speed adjustments (lower is faster typing)
   }
-  typing();
 }
+
+/**
+ * Ensures scrolling updates smoothly downward as elements inject content.
+ * If the user scrolls up, the auto scroll stops. The auto scroll will resume
+ * if the user scrolls back down. The words will continue to fade in regardless.
+ */
+function autoScroll(container) {
+  if (!container) return;
+
+  // Accounts for padding and font heights
+  const threshold = 50; 
+  const totalHeight = container.scrollHeight;
+  const visibleHeight = container.clientHeight;
+  const currentScrollTop = container.scrollTop;
+  // Checks if the user is actively watching the bottom edge
+  const isAtBottom = (totalHeight - visibleHeight - currentScrollTop) <= threshold;
+
+  // Only moves the camera view if the user is at the bottom.
+  // If false, the loop keeps typing text below, but leaves the user's view alone.
+  if (isAtBottom) {
+    container.scrollTop = totalHeight;
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 
 /**
  * Populates dropdowns and handles the Save button

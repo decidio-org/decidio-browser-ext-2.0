@@ -89,6 +89,7 @@
         flex: 1;            /* Grows to fill space */
         overflow-y: auto;   /* Internal scrollbar */
         padding-right: 5px; /* Space for the scrollbar */
+        scroll-behavior: smooth;
   
         color: #FFFFFF;
         font-family: 'Segoe UI';
@@ -102,15 +103,38 @@
     }
 
     /* Character Fade Animation */
-    .fade-char {
-        display: inline-block;
+    .fade-in {
         opacity: 0;
-        transform: translateY(5px);
-        animation: letterFade 0.4s ease forwards;
+        transform: translateY(10px);
+        animation: smoothFade 0.4s ease-out forwards;
     }
-
-    @keyframes letterFade {
-        to { opacity: 1; transform: translateY(0); }
+    @keyframes smoothFade {
+        to { 
+          opacity: 1;
+          transform: translateY(0);
+      }
+    }
+    .fade-key { /* For the left side*/
+      opacity: 0;
+      transform: translateX(-15px);
+      animation: slideInLeft 0.5s ease-out forwards;
+    }
+    .fade-value { /* For the right side*/
+      opacity: 0;
+      transform: translateX(15px);
+      animation: slideInRight 0.5s ease-out forwards;
+    }
+    @keyframes slideInLeft {
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    @keyframes slideInRight {
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
     }
     
     /* The load/spinner area */

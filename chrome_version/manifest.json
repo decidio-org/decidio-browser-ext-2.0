@@ -28,9 +28,10 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "panel.html", 
+        "overlay.html", 
         "overlay_helper.js", 
-        "decidio_logo.png"
+        "decidio_logo.png",
+        "sample.json"
       ],
       "matches": ["<all_urls>"]
     }

@@ -15,7 +15,7 @@
       display: flex;
       justify-content: center;
       /* Dims the website behind the overlay */
-      background: rgba(0, 0, 0, 0.4) !important;
+      background: rgba(0, 0, 0, 0.2) !important;
     }
 
     /* The "card" which is the box that holds the parts of the extension */
@@ -24,10 +24,9 @@
         top: 0; 
         right: 0;
         z-index: 10000;
-        width: 275px;
+        width: 290px;
         max-width: 90vw;
         height: 100vh;
-  
 
         display: flex;
         flex-direction: column;
@@ -90,6 +89,7 @@
         flex: 1;            /* Grows to fill space */
         overflow-y: auto;   /* Internal scrollbar */
         padding-right: 5px; /* Space for the scrollbar */
+        scroll-behavior: smooth;
   
         color: #FFFFFF;
         font-family: 'Segoe UI';
@@ -98,17 +98,43 @@
         margin-top: 10px;
         white-space: pre-wrap;
     }
-
-    /* Character Fade Animation */
-    .fade-char {
-        display: inline-block;
-        opacity: 0;
-        transform: translateY(5px);
-        animation: letterFade 0.4s ease forwards;
+    #aiDisplay::-webkit-scrollbar { /* Stops scrollbar from poping up when text is long*/
+      display: none;
     }
 
-    @keyframes letterFade {
-        to { opacity: 1; transform: translateY(0); }
+    /* Character Fade Animation */
+    .fade-in {
+        opacity: 0;
+        transform: translateY(10px);
+        animation: smoothFade 0.4s ease-out forwards;
+    }
+    @keyframes smoothFade {
+        to { 
+          opacity: 1;
+          transform: translateY(0);
+      }
+    }
+    .fade-key { /* For the left side*/
+      opacity: 0;
+      transform: translateX(-15px);
+      animation: slideInLeft 0.5s ease-out forwards;
+    }
+    .fade-value { /* For the right side*/
+      opacity: 0;
+      transform: translateX(15px);
+      animation: slideInRight 0.5s ease-out forwards;
+    }
+    @keyframes slideInLeft {
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    @keyframes slideInRight {
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
     }
     
     /* The load/spinner area */
@@ -346,7 +372,7 @@
       
       <div class="header-container">
         <img src="decidio_logo.png" alt="Logo" class="logo">
-        <h3>Decidio</h3>
+        <h3>decidio.</h3>
       </div>
 
       <div id="menuBtn" class="nav-icon" title="Menu">&#9776;</div>

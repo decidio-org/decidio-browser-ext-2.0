@@ -1,4 +1,4 @@
-// This runs the moment the side panel is opened
+// This runs the moment the extension is opened
 document.addEventListener("DOMContentLoaded", () => {
   const card = document.querySelector('.card');
   const aiDisplay = document.getElementById('aiDisplay');
@@ -48,7 +48,18 @@ document.addEventListener("DOMContentLoaded", () => {
             window.parent.postMessage("CLOSE_OVERLAY", "*");
         }
     };
+
+    // Once everything has loaded, now send the product data
+    window.parent.postMessage({ type: "OVERLAY_READY  "}, "*");
 });
+
+/*
+* The const USE_MOCK_FILE will be used to similate the AI's JSON output.
+* To prevent the usage of tokens for prompting the AI, this will make it 
+* easier to test formating issues with how the table with the product specs
+* will appear
+*/
+const USE_MOCK_FILE = true; // Setting this to false will allow you to use the AI
 
 window.addEventListener("message", async (event) => {
   if (event.data.type === "PRODUCT_DATA") {
@@ -60,74 +71,265 @@ window.addEventListener("message", async (event) => {
     const addBtn = document.getElementById('addToListBtn');
 
     loader.style.display = 'flex';
-    aiDisplay.innerHTML = ""; // Clear old text
+    aiDisplay.innerHTML = ""; // Clear old content
 
     try {
-      // 1. Send the scraped specs to your Python AI server
-      const response = await fetch(`http://localhost:8000/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          html_content: data.html_content
-        })
-      });
+      let aiResult;
 
-      const aiResult = await response.json();
+      if (USE_MOCK_FILE) {
+        // 1. Get the path for the sample.json file
+        const mockFileUrl = chrome.runtime.getURL('sample.json');
+        // 2. Fetch it locally
+        const response = await fetch(mockFileUrl);
+        aiResult = await response.json();
+
+        // Artificial delay to test if the "loading" layout is working correctly
+        await sleep(600);
+
+      } else {
+        // Original functionality with the Gemini AI
+        // 1. Send the scraped specs to your Python AI server
+        const response = await fetch(`http://localhost:8000/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            html_content: data.html_content
+          })
+        });
+
+        aiResult = await response.json();
+      }
+
       loader.style.display = 'none';
 
       // 2. Setup the Add Button
       if (addBtn) {
         addBtn.onclick = () => {
-          alert(`Added ${data.product_name} to your list!`);
+          alert(`Added ${aiResult.Name || data.product_name} to your Decidio list!`);
         };
       }
 
-      // 3. Trigger the typing animation with the AI's response
-      // aiResult.analysis should be the summary text returned by server.py
-      typeEffect(aiDisplay, aiResult.description_summary, () => {
-          setupSelectionArea(data, selectionArea);
+      // Product name heading
+      const productName = document.createElement('h2');
+
+      productName.style.margin = '0 0 10px 0';
+      productName.style.fontSize = '22px';
+      productName.style.fontWeight = 'bold';
+      productName.style.fontFamily = 'Arial, sans-serif'; // Placeholder font
+      productName.textContent =aiResult.Name;
+      aiDisplay.appendChild(productName);
+
+      // Dark line to seperate the section
+      aiDisplay.appendChild(createDarkLine());
+
+      // Image Section CURRENTLY A PLACEHOLDER
+      const image = document.createElement('div');
+
+      image.style.width = '100%';
+      image.style.height = '150px';
+      image.style.margin = '15px 0';
+      aiDisplay.appendChild(image);
+      
+      aiDisplay.appendChild(createDarkLine());
+
+      // Description Heading
+      const descHeading = document.createElement('h3');
+
+      descHeading.className = 'fade-in';
+      descHeading.style.margin = '15px 0 5px 0';
+      descHeading.style.fontSize = '20px';
+      descHeading.style.fontWeight = 'bold';
+      descHeading.style.fontFamily = 'Arial, sans-serif'; // Placeholder font
+      descHeading.textContent = 'Description';
+      aiDisplay.appendChild(descHeading);
+
+      // Description Text
+      const descText = document.createElement('p');
+
+      descText.style.margin = '0 0 15px 0';
+      descText.style.fontSize = '16px';
+      descText.style.lineHeight = '1.4';
+      descText.style.fontFamily = 'Arial, sans-serif'; // Font placeholder
+      descText.textContent = aiResult.Description;
+
+      // CSS Line clamping for three lines
+      descText.style.display = '-webkit-box';
+      descText.style.webkitBoxOrient = 'vertical';
+      descText.style.webkitLineClamp = '3';
+      descText.style.overflow = 'hidden';
+      descText.style.cursor = 'pointer'; // Clickable
+      descText.title = "Expand"; // Hovering over triggers this
+
+      // Fade In transition
+      descText.style.opacity = '0';
+      descText.style.transition = 'opacity 1.5s ease-in-out';
+
+      descText.onclick = () => {
+        if (descText.style.webkitLineClamp === '3') {
+          // Expand text
+          descText.style.webkitLineClamp = 'unset';
+          descText.style.cursor = 'default';
+        } else {
+          // Shrink it back
+          descText.style.webkitLineClamp = '3';
+          descText.style.cursor = 'pointer';
+        }
+      };
+
+      aiDisplay.appendChild(descText);
+
+      // Trigger the description fade-in
+      requestAnimationFrame(() => {
+        descText.style.opacity = '1';
       });
+
+      // Allow description to fade before continuing
+      await sleep(1200);
+      autoScroll(aiDisplay);
+
+      aiDisplay.appendChild(createDarkLine());
+
+      // Specifications heading
+      const specsHeading = document.createElement('h3');
+
+      specsHeading.className = 'fade-in';
+      specsHeading.style.margin = '15px 0 10px 0';
+      specsHeading.style.fontSize = '20px';
+      specsHeading.style.fontWeight = 'bold';
+      specsHeading.style.fontFamily = 'Arial, sans-serif'; // Placeholder
+      specsHeading.textContent = 'Specifications';
+      aiDisplay.appendChild(specsHeading);
+
+      // From here, we extract the "Specs" object from the JSON and build the table for the extention
+      if (aiResult.Specs) {
+        await renderSpecsTable(aiDisplay, aiResult.Specs);
+      } else {
+        aiDisplay.innerHTML = "<p style='color: #666; '>No specifications found in JSON structure.</p>";
+      }
+
+      // If keeping the dropdown menu for colors or user confirmation, add line to trigger the function
 
     } catch (err) {
         console.error(err);
-        aiDisplay.innerHTML = "<span class='fade-char' style='color: #ff4d4d;'>AI Analysis Error. check chrome developer</span>";
+        aiDisplay.innerHTML = "<span class='fade-char' style='color: #ff4d4d;'>Error loading data. Check developer tools</span>";
         loader.style.display = 'none';
     }
   }
 });
 
 /**
- * Creates a "Fade-In" typing effect by wrapping every letter in a span
+ * Helper function to generate consistent dividing lines
  */
-function typeEffect(element, text, callback, speed = 25) {
-  element.innerHTML = "";
-  let i = 0;
+function createDarkLine() {
+  const line = document.createElement('hr');
 
-  function typing() {
-    if (i < text.length) {
-      const char = text.charAt(i);
-      const span = document.createElement("span");
-      
-      if (char === "\n") {
-        element.appendChild(document.createElement("br"));
-      } else {
-        span.textContent = char;
-        span.className = "fade-char"; // Linked to the CSS in panel.html
-        element.appendChild(span);
-      }
-      element.scrollTop = element.scrollHeight;
-      
-      i++;
-      setTimeout(typing, speed);
-    } else if (callback) {
-      setTimeout(callback, 400); // Slight pause before dropdowns appear
-    }
-  }
-  typing();
+  line.style.border = 'none';
+  line.style.borderTop = '2px solid #eee'; // Includes thickness & color
+  line.style.marign = '10px 0';
+
+  return line;
 }
 
 /**
+ * Dynamically builds a specifications table from a structured JSON object
+ */
+async function renderSpecsTable(containerElement, specsObject) {
+  const table = document.createElement('table');
+
+  // Formating the table:
+  table.style.width = '100%';
+  table.style.borderCollapse = 'collapse';
+  table.style.marginTop = '0px' // Placeholder for later changes.....
+  table.style.fontFamily = 'Arial, sans-serif'; //Placeholder for true font....
+
+  containerElement.appendChild(table);
+
+  // Will use Object.entries which returns an array so we can loop through with an index
+  const specsEntries = Object.entries(specsObject);
+
+  for (let i = 0; i < specsEntries.length; i++) {
+    const [specType, valueArray] = specsEntries[i];
+    const rawVal = Array.isArray(valueArray) ? valueArray.join(', ') : String(valueArray);
+
+    const row = document.createElement('tr');
+    row.style.borderBottom = '1px solid #eee'; // Border thickness
+
+    // Left Cell: Spec type (Bold)
+    const typeCell = document.createElement('td');
+
+    typeCell.className = 'fade-key';
+    typeCell.style.padding = '8px 4px';
+    typeCell.style.fontWeight = 'bold';
+    typeCell.style.verticalAlign = 'top';
+    typeCell.style.width = '45%';
+    typeCell.style.textAlign = 'left';
+
+    // Right Cell: Value
+    const valueCell = document.createElement('td');
+
+    valueCell.className = 'fade-value';
+    valueCell.style.padding = '8px 4px';
+    valueCell.style.verticalAlign = 'top';
+    valueCell.style.width = '55%';
+    valueCell.style.textAlign = 'right';
+
+    row.appendChild(typeCell);
+    row.appendChild(valueCell);
+    table.appendChild(row);
+
+    await typeTextEffect(typeCell, specType, containerElement);
+    await typeTextEffect(valueCell, rawVal, containerElement);
+    await sleep(30); // How fast the row comes in
+  }
+}
+
+/**
+ * Character-by-character typewriter loop that scrolls the container element
+ */
+async function typeTextEffect(element, fullText, scrollContainer) {
+  const characters = fullText.split("");
+  element.textContent = ""; // Clear initial text layout space
+
+  for (const char of characters) {
+    element.textContent += char;
+    autoScroll(scrollContainer);
+    await sleep(15); // Speed adjustments (lower is faster typing)
+  }
+}
+
+/**
+ * Ensures scrolling updates smoothly downward as elements inject content.
+ * If the user scrolls up, the auto scroll stops. The auto scroll will resume
+ * if the user scrolls back down. The words will continue to fade in regardless.
+ */
+function autoScroll(container) {
+  if (!container) return;
+
+  // Accounts for padding and font heights
+  const threshold = 50; 
+  const totalHeight = container.scrollHeight;
+  const visibleHeight = container.clientHeight;
+  const currentScrollTop = container.scrollTop;
+  // Checks if the user is actively watching the bottom edge
+  const isAtBottom = (totalHeight - visibleHeight - currentScrollTop) <= threshold;
+
+  // Only moves the camera view if the user is at the bottom.
+  // If false, the loop keeps typing text below, but leaves the user's view alone.
+  if (isAtBottom) {
+    container.scrollTop = totalHeight;
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+
+/**
  * Populates dropdowns and handles the Save button
+ * 
+ * -------------- CURRENTLY NOT BEING USED IN THIS TESTING --------------
+ * 
  */
 function setupSelectionArea(data, selectionArea) {
     const colorDrop = document.getElementById('colorDropdown');
@@ -165,6 +367,12 @@ function setupSelectionArea(data, selectionArea) {
 
 /**
  * Downloads the final harmonized file
+ * 
+ * -- NOTE: --------------------------------------------------------
+ *  This may need to be fixed later to the following logic?
+ *  
+ *  If the product is something not in the database, then
+ *  we save the JSON to the database. 
  */
 function downloadJson(obj) {
   const blob = new Blob([JSON.stringify(obj, null, 2)], {type: 'application/json'});

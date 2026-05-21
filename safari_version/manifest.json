@@ -33,4 +33,7 @@
           "panel_helper.js", 
           "decidio_logo.png"
         ],
-        "matches": ["<all_url
+        "matches": ["<all_urls>"]
+      }
+    ]
+  }

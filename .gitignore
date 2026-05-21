@@ -1,0 +1,4 @@
+dist-chrome/
+dist-safari/
+node_modules/
+.DS_Store

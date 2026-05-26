@@ -1,0 +1,126 @@
+#decidio-root {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    pointer-events: none;
+}
+.product-card {
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    
+    /* Semi-transparent look */
+    background: rgba(18, 18, 20, 0.75); 
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    box-sizing: border-box;
+    pointer-events: auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+  /* The Anchor Triangle pointing upward */
+.product-card::before {
+    content: "";
+    position: absolute;
+    
+    /* Positions the triangle right on the top edge */
+    top: -8px; 
+    left: 20px; /* Aligns with JS math offset */
+    
+    /* Pure CSS Triangle Border Trick */
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid rgba(18, 18, 20, 0.75); /* Matches the glass color */
+    
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+/* --------- Card Layout ------------ */
+/* Top right */
+.close-button {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    cursor: pointer;
+    pointer-events: auto;
+}
+.close-button:hover {
+    color: #ffffff;
+}
+.overlay-main {
+    
+    overflow: hidden; /* temp ---------------------------*/
+}
+.title {
+    font-size: 11px;
+    font-weight: 600;
+    margin: 0;
+    padding-right: 16px; /* Leave room for 'X' button */
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+/* Place holder for future facet/facet value */
+.desc {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.65);
+    margin: 0;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+/* Button area */
+.footer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.actions {
+    display: flex;
+    gap: 6px;
+}
+/* Possible mix with word and symbol? Or just text in the button*/
+.button {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 10px;
+    padding: 8px 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    font-weight: 500;
+}
+.button:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+.logo {
+    align-self: flex-end;
+    font-size: 14px;
+    font-weight: bold;
+    color: #0066cc;
+    line-height: 1;
+    margin-top: -2px;
+}

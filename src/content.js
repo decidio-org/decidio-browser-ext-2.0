@@ -32,30 +32,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-document.addEventListener('click', (e) => {
+document.addEventListener('mousedown', (e) => {
   if (!isExtensionActive) return;
 
-  // Clicks will only affect the extension not website
-  e.preventDefault();
-  e.stopPropagation();
-
-  // Check if the user is clicking the close button
   if (e.target.classList.contains('close-button')) {
     e.preventDefault();
     e.stopPropagation();
-    
-    // Find the card container that holds this specific button
-    const cardToClose = e.target.closest('.product-card');
-    if (cardToClose) cardToClose.remove();
+    e.target.closest('.product-card')?.remove();
     return;
   }
 
-  // Clicked an existing card, bring it to the "top"
   const clickedCard = e.target.closest('.product-card');
   if (clickedCard) {
     bringToFront(clickedCard);
-    return; 
+    return;
   }
+
+ 
 
   // Potential block for users to select only X amount of products? Keep?
   // Currently 5 ----------------------------------------------------------
@@ -70,6 +63,19 @@ document.addEventListener('click', (e) => {
   // Possibility for only products? Not sure if extension can be clicked on anything...
   const productTitle = e.target.innerText ? e.target.innerText.trim() : "Unknown Product";
   if (!productTitle) return;
+
+  // Ask background.js if a card should appear
+  chrome.runtime.sendMessage({
+    action: "check_element",
+    elementTag: e.target.tagName,
+    elementClass: e.target.className,
+    pageURL: window.location.href
+  }, (response) => {
+    if (!response?.shouldShow) return;
+
+  // Block the page before asking background.js
+  e.preventDefault();
+  e.stopPropagation();
 
   // Card container
   const card = document.createElement('div');
@@ -98,5 +104,16 @@ document.addEventListener('click', (e) => {
   `;
 
   document.body.appendChild(card);
+  });
 
+}, true);
+
+// Blocks the paired click from firing on the page
+document.addEventListener('click', (e) => {
+  if (!isExtensionActive) return;
+  if(e.target.closest('.product-card')) return;
+  const allowedTags = ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'A'];
+  if (allowedTags.includes(e.target.tagName)) return;
+  e.preventDefault();
+  e.stopPropagation();
 }, true);

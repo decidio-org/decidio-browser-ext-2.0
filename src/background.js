@@ -31,3 +31,12 @@ chrome.action.onClicked.addListener((tab) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete activeTabs[tabId];
 });
+
+// Decide whether a card should appear
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "check_element") {
+    const blockedTags = ['BUTTON', 'INPUT'];
+    const shouldShow = !blockedTags.includes(request.elementTag);
+    sendResponse({ shouldShow });
+  }
+});

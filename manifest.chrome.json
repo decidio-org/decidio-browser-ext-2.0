@@ -7,7 +7,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "http://localhost:8000/*"
+    "http://localhost:8000/*",
+    "<all_urls>"
   ],
   "action": { 
     "default_title": "decidio.",

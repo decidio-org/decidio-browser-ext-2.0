@@ -1,3 +1,4 @@
+
 // Overlay container
 const overlayRoot = document.createElement('div');
 overlayRoot.id = 'decidio-root';
@@ -11,6 +12,7 @@ let isExtensionActive = false;
 function bringToFront(card) {
   cardLayer++;
   card.style.zIndex = cardLayer;
+  
 }
 
 // Listen for the message from background.js

@@ -4,6 +4,34 @@
     z-index: 2147483647;
     pointer-events: none;
 }
+/* The text badge trailing the cursor */
+.decidio-hover-badge {
+    position: fixed;
+    pointer-events: none; /* Doesn't block mouse events */
+    z-index: 999999;
+    display: none;
+    background-color: rgba(18, 18, 20, 0.75);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: sans-serif;
+    font-size: 12px;
+  }
+  /* The semi-transparent rectangle on the title/product name for visual aid? */
+  .decidio-hover-box {
+    position: absolute;
+    pointer-events: none;
+    z-index: 999998; /* Below the badge text */
+    display: none;
+    border: 2px dashed #007bff; /* Dashed rectangle */
+    background-color: rgba(0, 123, 255, 0.15); /* Semi-transparent blue fill */
+    border-radius: 8px;
+  }
+  /* Utility classes to toggle visibility */
+  .decidio-hover-badge.visible,
+  .decidio-hover-box.visible {
+    display: block;
+  }
 .product-card {
     position: absolute;
     width: 260px;

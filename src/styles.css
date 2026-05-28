@@ -15,7 +15,7 @@
     padding: 4px 8px;
     border-radius: 4px;
     font-family: sans-serif;
-    font-size: 12px;
+    font-size: 14px;
   }
   /* The semi-transparent rectangle on the title/product name for visual aid? */
   .decidio-hover-box {
@@ -82,7 +82,7 @@
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.6);
-    font-size: 14px;
+    font-size: 22px;
     cursor: pointer;
     padding: 0;
     line-height: 1;
@@ -97,7 +97,7 @@
     overflow: hidden; /* temp ---------------------------*/
 }
 .title {
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 600;
     margin: 0;
     padding-right: 16px; /* Leave room for 'X' button */
@@ -109,7 +109,7 @@
 }
 /* Place holder for future facet/facet value */
 .desc {
-    font-size: 11px;
+    font-size: 12px;
     color: rgba(255, 255, 255, 0.65);
     margin: 0;
     line-height: 1.4;
@@ -146,7 +146,7 @@
 }
 .logo {
     align-self: flex-end;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: bold;
     color: #0066cc;
     line-height: 1;

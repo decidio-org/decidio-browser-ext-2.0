@@ -1,3 +1,5 @@
+import { getActiveDriver, SITE_DRIVERS } from './drivers.js';
+
 /**
  * Initialization and DOM (document object model) setup section
  */
@@ -17,13 +19,6 @@ document.body.appendChild(hoverBadge);
 const hoverBox = document.createElement('div');
 hoverBox.className = 'decidio-hover-box';
 document.body.appendChild(hoverBox);
-
-// This section can be deleted? ----------
-const globalVisualStyle = document.createElement('style');
-globalVisualStyle.id = 'decidio-global-visuals';
-globalVisualStyle.textContent = ``;
-document.head.appendChild(globalVisualStyle);
-// ----------------------------
 
 
 let cardLayer = 1; // Tracks z-index layer so the newest clicked product card stays on top
@@ -168,21 +163,9 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
     return;
   }
 
-  // Look for either a link card OR a primary page heading (H1) on a product detail page
-  const clickableCard = targetElement.closest([
-    'a',
-    '.product-card-container',
-    '.s-result-item',           // For amazon (may need to be removed?)
-    '[class*="ListItem-c11n"]', // For Zillow listings
-    '[class*="product-item"]',  
-    '[class*="productGrid"]',
-    'article',                  // HTML Item containers
-    'h1',                       // Handles standalone product page titles
-    '[class*="product-title"]',
-    '[class*="product-meta"]'   // Pricing blocks
-  ].join(','));
-  
-  // Make sure the target holds inner text characters
+  const driver = getActiveDriver();
+  const clickableCard = targetElement.closest(driver.productItemSelector);
+  // Make sure there is inner text characters
   const hasText = targetElement.innerText && targetElement.innerText.trim().length > 0;
   
   if (clickableCard && hasText) {
@@ -266,11 +249,10 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  //  Check if element was identified as a valid product
-  const isProductCard = e.target.closest([
-    'a', '.product-card-container', '.s-result-item', '[class*="ListItem-c11n"]',
-    'h1', '[class*="product-title"]', '[class*="product-meta"]'
-  ].join(','));
+  // Get the config rule again for the click listener
+  const driver = getActiveDriver();
+  // Use the driver's selector map
+  const isProductCard = e.target.closest(driver.productItemSelector);
   
   // If the user clicked a random whitespace on the screen
   if (!isProductCard) {
@@ -290,8 +272,18 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  // If clicking a giant title wrapper, pull from target or closest heading
-  let productTitle = e.target.innerText ? e.target.innerText.trim() : "Unknown Product";
+  //
+  let productTitle = "Unknown product";
+
+  // Look into the product container block using the custom sub-selector matching the product title string
+  const targetedTitleElement = isProductCard.querySelector(driver.titleSelector);
+  
+  if (targetedTitleElement) {
+    productTitle = targetedTitleElement.innerText.trim();
+  } else if (e.target.innerText) {
+    // Fallback if the site mapping doesn't intercept a distinct child element
+    productTitle = e.target.innerText.trim();
+  }
   
   // If text is super long (like a whole product description block), grab just the title text
   if (productTitle.length > 150) {

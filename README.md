@@ -3,18 +3,13 @@ This is the repository for the Chrome and Safari browser extension. Created and 
 
 
 ## Summary
-Upon activation, the extension scrapes the website and will give Gemini the data. The Ai is given a hard-coded prompt and a schema to format the product data. The extension outputs the result using the desired "typing" effect.
+The extension has an icon for when it is on/off and shows the "product card" when the user clicks on a product.
 
 
 ## Features
 
-* **Add button** - Adds the product into the user's Decidio List
-* **"-" button** - Change the extension view to a smaller version
-* **Jump-up button** - Sharp jump to the top of the product specification table
-* **Hamburger Menu** - 
-* **< button** - Closes the extension
-
-* **Spinner** - Appears while the Ai is "thinking"
+* **Add buttons** - add to recent, new and existing
+* **Close button** - close card
 
 ## Testing
 

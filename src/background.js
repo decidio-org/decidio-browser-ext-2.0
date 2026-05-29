@@ -6,7 +6,7 @@ chrome.action.onClicked.addListener((tab) => {
   const tabId = tab.id;
   
   // Send the message to content script
-  chrome.tabs.sendMessage(tabId, { action: "toggle_decidio." });
+  chrome.tabs.sendMessage(tabId, { action: "toggle_decidio" });
   // Toggle the icon image for this specific tab
   if (!activeTabs[tabId]) {
     activeTabs[tabId] = true;

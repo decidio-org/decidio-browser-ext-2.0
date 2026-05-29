@@ -1,11 +1,10 @@
-
 // Overlay container
 const overlayRoot = document.createElement('div');
 overlayRoot.id = 'decidio-root';
 
 document.body.appendChild(overlayRoot);
 
-let cardLayer = 1;
+let cardLayer = 1000;
 let isExtensionActive = false;
 
 // Ensures that when user clicks on one of the overlays, it will come to the "front"
@@ -17,7 +16,7 @@ function bringToFront(card) {
 
 // Listen for the message from background.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "toggle_decidio.") {
+  if (request.action === "toggle_decidio") {
     isExtensionActive = !isExtensionActive;
     
     if (isExtensionActive) {

@@ -13,6 +13,8 @@ function build(browser) {
     fs.copyFileSync('src/content.js', path.join(distDir, 'content.js'));
     //fs.copyFileSync('src/overlay_helper.js', path.join(distDir, 'overlay_helper.js'));
     fs.copyFileSync('src/styles.css', path.join(distDir, 'styles.css'));
+    fs.copyFileSync('src/loader.js', path.join(distDir, 'loader.js'));
+    fs.copyFileSync('src/drivers.js', path.join(distDir, 'drivers.js'));
 
 
     // Update asset copying to pull from src/

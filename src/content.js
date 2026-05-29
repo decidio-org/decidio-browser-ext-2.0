@@ -21,7 +21,7 @@ hoverBox.className = 'decidio-hover-box';
 document.body.appendChild(hoverBox);
 
 
-let cardLayer = 1; // Tracks z-index layer so the newest clicked product card stays on top
+let cardLayer = 1000; // Tracks z-index layer so the newest clicked product card stays on top
 let isExtensionActive = false; // On/off tracker
 
 // Increment and apply z-index so clicked cards stack

@@ -9,12 +9,15 @@ function build(browser) {
 
     // Copy code assets into it from the src/ folder
     fs.copyFileSync('src/background.js', path.join(distDir, 'background.js'));
-    fs.copyFileSync('src/overlay.html', path.join(distDir, 'overlay.html'));
+    //fs.copyFileSync('src/overlay.html', path.join(distDir, 'overlay.html'));
     fs.copyFileSync('src/content.js', path.join(distDir, 'content.js'));
-    fs.copyFileSync('src/overlay_helper.js', path.join(distDir, 'overlay_helper.js'));
+    //fs.copyFileSync('src/overlay_helper.js', path.join(distDir, 'overlay_helper.js'));
+    fs.copyFileSync('src/styles.css', path.join(distDir, 'styles.css'));
+
 
     // Update asset copying to pull from src/
-    fs.copyFileSync('src/decidio_logo.png', path.join(distDir, 'decidio_logo.png'));
+    fs.copyFileSync('src/default_logo.png', path.join(distDir, 'default_logo.png'));
+    fs.copyFileSync('src/active_logo.png', path.join(distDir, 'active_logo.png'));
 
 
     // Copy data mock files (Ensure casing matches exactly)

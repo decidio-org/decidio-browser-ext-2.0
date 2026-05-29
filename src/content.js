@@ -28,6 +28,7 @@ let isExtensionActive = false; // On/off tracker
 function bringToFront(card) {
   cardLayer++;
   card.style.zIndex = cardLayer;
+  
 }
 
 
@@ -100,7 +101,7 @@ function toggleVisualLocks(apply) {
 
 // Listen for the message from background.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "toggle_decidio.") {
+  if (request.action === "toggle_decidio") {
     isExtensionActive = !isExtensionActive;
 
     if (isExtensionActive) {

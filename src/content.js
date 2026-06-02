@@ -17,18 +17,72 @@ document.body.appendChild(hoverBadge);
 let cardLayer = 1; // Tracks z-index layer so the newest clicked product card stays on top
 let isExtensionActive = false; // On/off tracker
 
+// Increment and apply z-index so clicked cards stack
+function bringToFront(card) {
+  cardLayer++;
+  card.style.zIndex = cardLayer;
+}
+
+
 // Check storage on page load ---
 chrome.storage.local.get({ isExtensionActive: false }, (data) => {
   isExtensionActive = data.isExtensionActive;
   if (isExtensionActive) {
     console.log("decidio. AUTO-ACTIVATED on page load/navigation");
+    handleInitialPageLayout();
   }
 });
 
-// Increment and apply z-index so clicked cards stack
-function bringToFront(card) {
-  cardLayer++;
-  card.style.zIndex = cardLayer;
+
+function handleInitialPageLayout() {
+  const driver = getActiveDriver();
+  if (!driver) return;
+
+  // Prevent duplicate product page cards from stacking on re-runs
+  const existingProductCard = document.querySelector('.product-card.product-page-mode');
+  if (existingProductCard) existingProductCard.remove();
+
+  // If the driver confirms we are looking at an individual product page
+  if (typeof driver.isProductPage === 'function' && driver.isProductPage()) {
+    
+    // Hide trailing search badge since we're in product mode
+    hideHoverElements();
+
+    // Safely extract the title using your driver's selector
+    let productTitle = "Unknown Product";
+    const titleEl = document.querySelector(driver.productPageTitleSelector);
+    
+    if (titleEl) {
+      // Clone it to safely strip out any sneaky inner prices/tags inside the H1
+      const clone = titleEl.cloneNode(true);
+      const extraElements = clone.querySelectorAll('span, script, style, .price');
+      extraElements.forEach(el => el.remove());
+      productTitle = clone.innerText.trim();
+    }
+
+    // Create the fixed layout card
+    const card = document.createElement('div');
+    card.className = 'product-card product-page-mode'; // Notice the special layout class
+    bringToFront(card);
+
+    card.innerHTML = `
+      <button class="close-button">&times;</button>
+      <div class="overlay-main">
+        <h4 class="title">${productTitle}</h4>
+        <p class="desc">Product overview dashboard active.</p>
+      </div>
+      <div class="footer">
+        <div class="actions">
+          <button class="button">Add Recent</button>
+          <button class="button">Add New</button>
+          <button class="button">Add to Existing</button>
+        </div>
+        <span class="logo">d.</span>
+      </div>
+    `;
+
+    document.body.appendChild(card);
+  }
 }
 
 
@@ -39,6 +93,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (isExtensionActive) {
       console.log("decidio. is now ACTIVE");
+      handleInitialPageLayout();
     } else {
       console.log("decidio. is now INACTIVE");
 
@@ -49,11 +104,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // Hide hover elements and restore site's styling
       hoverBadge.classList.remove('visible');
     }
-    sendResponse({nextState: isExtensionActive});
+    sendResponse({nextState: isExtensionActive });
   }
   return true;
 });
-
 
 /**
  * Mouse motion & position section
@@ -67,6 +121,13 @@ let lastClientY = 0;
 document.addEventListener('mousemove', (e) => {
   if (!isExtensionActive) return;
   
+  // Don't track mouse or show search badge if we are on an active product page
+  const driver = getActiveDriver();
+  if (driver && typeof driver.isProductPage === 'function' && driver.isProductPage()) {
+    hideHoverElements();
+    return;
+  }
+
   lastClientX = e.clientX;
   lastClientY = e.clientY;
 
@@ -76,6 +137,12 @@ document.addEventListener('mousemove', (e) => {
 // Handle scroll changes and look up what's under the cursor
 document.addEventListener('scroll', () => {
   if (!isExtensionActive) return;
+
+  // Exit early if we are on a product page so scroll math doesn't conflict
+  const driver = getActiveDriver();
+  if (driver && typeof driver.isProductPage === 'function' && driver.isProductPage()) {
+    return; 
+  }
 
   // Calculates what element has scrolled beneath the mouse
   const elementUnderCursor = document.elementFromPoint(lastClientX, lastClientY);
@@ -159,6 +226,12 @@ document.addEventListener('click', (e) => {
 
   // Get the config rule again for the click listener
   const driver = getActiveDriver();
+
+  // If we are on a product page, don't allow search-click rules to override anything
+  if (driver && typeof driver.isProductPage === 'function' && driver.isProductPage()) {
+    return;
+  }
+
   // Use the driver's selector map
   const isProductCard = e.target.closest(driver.productItemSelector);
   

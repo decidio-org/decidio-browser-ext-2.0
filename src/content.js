@@ -17,6 +17,14 @@ document.body.appendChild(hoverBadge);
 let cardLayer = 1; // Tracks z-index layer so the newest clicked product card stays on top
 let isExtensionActive = false; // On/off tracker
 
+// Check storage on page load ---
+chrome.storage.local.get({ isExtensionActive: false }, (data) => {
+  isExtensionActive = data.isExtensionActive;
+  if (isExtensionActive) {
+    console.log("decidio. AUTO-ACTIVATED on page load/navigation");
+  }
+});
+
 // Increment and apply z-index so clicked cards stack
 function bringToFront(card) {
   cardLayer++;
@@ -27,7 +35,7 @@ function bringToFront(card) {
 // Listen for the message from background.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "toggle_decidio.") {
-    isExtensionActive = !isExtensionActive;
+    isExtensionActive = request.state;
 
     if (isExtensionActive) {
       console.log("decidio. is now ACTIVE");

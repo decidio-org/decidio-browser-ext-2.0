@@ -48,7 +48,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       hoverBadge.classList.remove('visible');
       hoverBox.classList.remove('visible');
     }
+    sendResponse({nextState: isExtensionActive});
   }
+  return true;
 });
 
 
@@ -137,10 +139,6 @@ document.addEventListener('mouseleave', () => {
 document.addEventListener('click', (e) => {
   if (!isExtensionActive) return;
 
-  // Prevent normal site interactions
-  if (isElementBlocked(e.target)) {
-    return;
-  }
 
   // x button on the overlay card
   if (e.target.classList.contains('close-button')) {

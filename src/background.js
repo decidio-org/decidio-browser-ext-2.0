@@ -1,51 +1,37 @@
-// Object to track if the icon is active on current tab
-let activeTabs = {};
+// The content script will tell us what state it is in.
 
 // Listen for when the user clicks the extension toolbar icon
 chrome.action.onClicked.addListener((tab) => {
   const tabId = tab.id;
   
   // Send the message to content script
-  chrome.tabs.sendMessage(tabId, { action: "toggle_decidio." });
-
-  // Toggle the icon image for this specific tab
-  if (!activeTabs[tabId]) {
-    activeTabs[tabId] = true;
+  chrome.tabs.sendMessage(tabId, { action: "toggle_decidio." }, (response) => {
     
-    // Switch to active logo (Using the correct object format)
-    chrome.action.setIcon({
-      tabId: tabId,
-      path: {
-        "16": "active_logo.png", 
-        "48": "active_logo.png",
-        "128": "active_logo.png"
-      }
-    });
-  } else {
-    activeTabs[tabId] = false;
-    
-    // Switch back to default logo
-    chrome.action.setIcon({
-      tabId: tabId,
-      path: {
-        "16": "default_logo.png",
-        "48": "default_logo.png",
-        "128": "default_logo.png"
-      }
-    });
-  }
-});
+    // If the content script didn't respond
+    if (chrome.runtime.lastError || !response) {
+      console.warn("decidio.: Content script not ready on this tab.");
+      return; 
+    }
 
-// Clean up memory when the user closes a tab
-chrome.tabs.onRemoved.addListener((tabId) => {
-  delete activeTabs[tabId];
-});
-
-// Reset state if the tab reloads or navigates to a new URL
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'loading') {
-    delete activeTabs[tabId];
-    // Chrome automatically resets the icon to the manifest default 
-    // when a page refreshes/navigates.
-  }
+    // Update the icon based on the exact state returned by the content script
+    if (response.nextState === true) {
+      chrome.action.setIcon({
+        tabId: tabId,
+        path: {
+          "16": "active_logo.png", 
+          "48": "active_logo.png",
+          "128": "active_logo.png"
+        }
+      });
+    } else {
+      chrome.action.setIcon({
+        tabId: tabId,
+        path: {
+          "16": "default_logo.png",
+          "48": "default_logo.png",
+          "128": "default_logo.png"
+        }
+      });
+    }
+  });
 });

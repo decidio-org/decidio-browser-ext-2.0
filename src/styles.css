@@ -7,7 +7,7 @@
 /* The text badge trailing the cursor */
 .decidio-hover-badge {
     position: fixed;
-    pointer-events: none; /* Doesn't block mouse events */
+    pointer-events: none !important; /* Doesn't block mouse events */
     z-index: 999999;
     display: none;
     background-color: rgba(18, 18, 20, 0.75);
@@ -19,8 +19,8 @@
   }
   /* The semi-transparent rectangle on the title/product name for visual aid? */
   .decidio-hover-box {
-    position: absolute;
-    pointer-events: none;
+    position: fixed;
+    pointer-events: none !important;
     z-index: 999998; /* Below the badge text */
     display: none;
     border: 2px dashed #007bff; /* Dashed rectangle */

@@ -1,4 +1,3 @@
-import { getActiveDriver, SITE_DRIVERS } from './drivers.js';
 
 /**
  * Initialization and DOM (document object model) setup section
@@ -28,85 +27,16 @@ let isExtensionActive = false; // On/off tracker
 function bringToFront(card) {
   cardLayer++;
   card.style.zIndex = cardLayer;
-  
 }
 
-
-/**
- * Element blocking section
- */
-// Determines whether an element should be ignored by the extension.
-// This effects search bar, drop down menus, filter section, etc.
-function isElementBlocked(element) {
-  if (!element || !isExtensionActive) return false;
-  
-  // Don't block our extension components
-  if (
-    element.closest('#decidio-root') || 
-    element.closest('.product-card')
-  ) {
-    return false; // Valid product zones
-  }
-
-  // Extract element attributes
-  const id = (element.id || '').toLowerCase();
-  const className = (typeof element.className === 'string' ? element.className : '').toLowerCase();
-  const tagName = element.tagName;
-
-  // Instantly block parts where the user would input text in
-  if (tagName === 'INPUT' || tagName === 'TEXTAREA' || element.getAttribute('contenteditable') === 'true') {
-    return true; 
-  }
-  
-  // Search and the cart stay unusable
-  if (id === 'search' || className.includes('search-input') || className.includes('mini-cart')) {
-    return true;
-  }
-
-  // Walk up the DOM tree to see if an element lives inside a header or main nav
-  let parent = element.parentElement;
-  while (parent && parent !== document.body) {
-    const pTagName = parent.tagName;
-    const pId = (parent.id || '').toLowerCase();
-    const pClass = (typeof parent.className === 'string' ? parent.className : '').toLowerCase();
-
-    // Block global navigation headers and side-menus, but avoid general blocks on product contents
-    if (pTagName === 'HEADER' || pTagName === 'NAV' || pId === 'nav' || pClass === 'global-nav') {
-      return true;
-    }
-    // Block side layout menus
-    if (pTagName === 'ASIDE' || pId.includes('sidebar-menu')) {
-      return true;
-    }
-
-    parent = parent.parentElement;
-  }
-  // Element is ok to interact with
-  return false;
-}
-
-// Visual layout painter to toggle styles when activated
-function toggleVisualLocks(apply) {
-  const elements = document.querySelectorAll('header, nav, aside, [role="search"], #navbar, #nav-belt');
-  elements.forEach(el => {
-    if (apply) {
-      if (!el.closest('.product-card')) {
-        el.classList.add('decidio-locked');
-      }
-    } else {
-      el.classList.remove('decidio-locked');
-    }
-  });
-}
 
 // Listen for the message from background.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "toggle_decidio") {
+  if (request.action === "toggle_decidio.") {
     isExtensionActive = !isExtensionActive;
 
     if (isExtensionActive) {
       console.log("decidio. is now ACTIVE");
-      toggleVisualLocks(true);
     } else {
       console.log("decidio. is now INACTIVE");
 
@@ -117,7 +47,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // Hide hover elements and restore site's styling
       hoverBadge.classList.remove('visible');
       hoverBox.classList.remove('visible');
-      toggleVisualLocks(false);
     }
   }
 });
@@ -157,8 +86,7 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
   // Edge-case for clearing the hover elements when on the product card
   if (
     targetElement.closest('#decidio-root') || 
-    targetElement.closest('.product-card') || 
-    isElementBlocked(targetElement)
+    targetElement.closest('.product-card')
   ) {
     hideHoverElements();
     return;
@@ -170,8 +98,6 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
   const hasText = targetElement.innerText && targetElement.innerText.trim().length > 0;
   
   if (clickableCard && hasText) {
-    if (isElementBlocked(clickableCard)) return;
-
     // Read where the target element is placed on the user's screen
     const rect = clickableCard.getBoundingClientRect();
 
@@ -207,24 +133,15 @@ document.addEventListener('mouseleave', () => {
   hoverBox.classList.remove('visible');
 });
 
-document.addEventListener('mousedown', (e) => {
-  if (!isExtensionActive) return;
-  if (isElementBlocked(e.target)) {
-    e.preventDefault();
-    e.stopPropagation(); // Stop element from recognizing it was pressed
-  }
-}, true);
-
 // Clicking logic for the overlay cards
 document.addEventListener('click', (e) => {
   if (!isExtensionActive) return;
 
   // Prevent normal site interactions
   if (isElementBlocked(e.target)) {
-    e.preventDefault();
-    e.stopPropagation();
     return;
   }
+
   // x button on the overlay card
   if (e.target.classList.contains('close-button')) {
     e.preventDefault();
@@ -257,12 +174,10 @@ document.addEventListener('click', (e) => {
   
   // If the user clicked a random whitespace on the screen
   if (!isProductCard) {
-    e.preventDefault();
-    e.stopPropagation();
     return;
   }
 
-  // Stop browser navigation
+  // Stop browser navigation for the product card
   e.preventDefault();
   e.stopPropagation();
 
@@ -323,26 +238,4 @@ document.addEventListener('click', (e) => {
   document.body.appendChild(card);
   hoverBadge.classList.remove('visible');
   hoverBox.classList.remove('visible');
-}, true);
-
-/**
- * Block keys and tabbing with the keyboard
- */
-
-//Block keystrokes
-document.addEventListener('keydown', (e) => {
-  if (isElementBlocked(e.target)) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}, true);
-
-// Prevent tab key presses
-document.addEventListener('focusin', (e) => {
-  if (!isExtensionActive) return;
-  if (isElementBlocked(e.target)) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.target.blur();
-  }
 }, true);

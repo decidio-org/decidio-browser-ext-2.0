@@ -16,8 +16,8 @@ chrome.action.onClicked.addListener((tab) => {
     chrome.action.setIcon({
       tabId: tabId,
       path: {
-        "16": "active_logo.png", // It's best practice to define sizes, 
-        "48": "active_logo.png", // but even {"128": "active_logo.png"} works
+        "16": "active_logo.png", 
+        "48": "active_logo.png",
         "128": "active_logo.png"
       }
     });

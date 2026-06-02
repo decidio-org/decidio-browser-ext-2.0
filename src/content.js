@@ -13,12 +13,6 @@ hoverBadge.className = 'decidio-hover-badge';
 hoverBadge.innerText = 'decidio.';
 document.body.appendChild(hoverBadge);
 
-// THIS IS FOR TESTING, BLUE RECTANGLE 
-// Can be removed after icon fix?
-const hoverBox = document.createElement('div');
-hoverBox.className = 'decidio-hover-box';
-document.body.appendChild(hoverBox);
-
 
 let cardLayer = 1; // Tracks z-index layer so the newest clicked product card stays on top
 let isExtensionActive = false; // On/off tracker
@@ -46,7 +40,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       // Hide hover elements and restore site's styling
       hoverBadge.classList.remove('visible');
-      hoverBox.classList.remove('visible');
     }
     sendResponse({nextState: isExtensionActive});
   }
@@ -103,13 +96,6 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
     // Read where the target element is placed on the user's screen
     const rect = clickableCard.getBoundingClientRect();
 
-    // Configure trailing hover box (TESTING)
-    hoverBox.classList.add('visible');
-    hoverBox.style.width = `${rect.width}px`;
-    hoverBox.style.height = `${rect.height}px`;
-    hoverBox.style.left = `${rect.left + window.scrollX}px`;
-    hoverBox.style.top = `${rect.top + window.scrollY}px`;
-
     // The decidio. badge by the mouse
     hoverBadge.classList.add('visible');
     hoverBadge.style.left = `${clientX + 15}px`; 
@@ -121,7 +107,6 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
 
 function hideHoverElements() {
   hoverBadge.classList.remove('visible');
-  hoverBox.classList.remove('visible');
 }
 
 
@@ -132,7 +117,6 @@ function hideHoverElements() {
 // Clean up hover UI when user's cursor exits the web page
 document.addEventListener('mouseleave', () => {
   hoverBadge.classList.remove('visible');
-  hoverBox.classList.remove('visible');
 });
 
 // Clicking logic for the overlay cards
@@ -159,7 +143,7 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  if (e.target.classList.contains('decidio-hover-badge') || e.target.closest('.decidio-hover-box')) {
+  if (e.target.classList.contains('decidio-hover-badge')) {
     e.preventDefault();
     e.stopPropagation();
     return;
@@ -235,5 +219,4 @@ document.addEventListener('click', (e) => {
 
   document.body.appendChild(card);
   hoverBadge.classList.remove('visible');
-  hoverBox.classList.remove('visible');
 }, true);

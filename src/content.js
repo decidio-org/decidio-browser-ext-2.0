@@ -1,3 +1,9 @@
+/**
+ * ====================================================
+ * Content.js file is the main controller file that sets up state, listens
+ * for Chrome messages, tracks the mouse, and handles event listeners.
+ * ====================================================
+ */
 
 /**
  * Initialization and DOM (document object model) setup section
@@ -13,48 +19,9 @@ hoverBadge.className = 'decidio-hover-badge';
 hoverBadge.innerText = 'decidio.';
 document.body.appendChild(hoverBadge);
 
-
-let cardLayer = 1; // Tracks z-index layer so the newest clicked product card stays on top
 let isExtensionActive = false; // On/off tracker
-
-// Increment and apply z-index so clicked cards stack
-function bringToFront(card) {
-  cardLayer++;
-  card.style.zIndex = cardLayer;
-}
-
-/**
- * Keep cards strictly within the visible viewport bounds. This prevents the cards
- * from being unreachable.
- */
-function positionCardSafely(card, targetX, targetY, isFixedMode = false) {
-  const cardWidth = 260;  // From CSS width
-  const cardHeight = 260; // From CSS height
-  const padding = 16;     // Safe boundary space from the edge
-
-  let maxX, maxY;
-
-  if (isFixedMode) {
-    // Lock inside the visible browser window boundaries
-    card.style.position = 'fixed';
-    maxX = window.innerWidth - cardWidth - padding;
-    maxY = window.innerHeight - cardHeight - padding;
-  } else {
-    // Lock inside the entire scrollable document content height/width
-    card.style.position = 'absolute';
-    maxX = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - cardWidth - padding;
-    maxY = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) - cardHeight - padding;
-  }
-
-  // Clamp coordinates safely
-  let safeX = Math.max(padding, Math.min(targetX, maxX));
-  let safeY = Math.max(padding, Math.min(targetY, maxY));
-
-  card.style.left = `${safeX}px`;
-  card.style.top = `${safeY}px`;
-  card.style.right = 'auto';  
-  card.style.bottom = 'auto';
-}
+let lastClientX = 0;
+let lastClientY = 0;
 
 
 // Check storage on page load ---
@@ -65,60 +32,6 @@ chrome.storage.local.get({ isExtensionActive: false }, (data) => {
     handleInitialPageLayout();
   }
 });
-
-
-function handleInitialPageLayout() {
-  const driver = getActiveDriver();
-  if (!driver) return;
-
-  // Prevent duplicate product page cards from stacking on re-runs
-  const existingProductCard = document.querySelector('.product-card.product-page-mode');
-  if (existingProductCard) existingProductCard.remove();
-
-  // If the driver confirms we are looking at an individual product page
-  if (typeof driver.isProductPage === 'function' && driver.isProductPage()) {
-    
-    // Hide trailing search badge since we're in product mode
-    hideHoverElements();
-
-    // Safely extract the title using your driver's selector
-    let productTitle = "Unknown Product";
-    const titleEl = document.querySelector(driver.productPageTitleSelector);
-    
-    if (titleEl) {
-      // Clone it to safely strip out any sneaky inner prices/tags inside the H1
-      const clone = titleEl.cloneNode(true);
-      const extraElements = clone.querySelectorAll('span, script, style, .price');
-      extraElements.forEach(el => el.remove());
-      productTitle = clone.innerText.trim();
-    }
-
-    // Create the fixed layout card
-    const card = document.createElement('div');
-    card.className = 'product-card product-page-mode'; // Notice the special layout class
-    bringToFront(card);
-
-    card.innerHTML = `
-      <button class="close-button">&times;</button>
-      <div class="overlay-main">
-        <h4 class="title">${productTitle}</h4>
-        <p class="desc">Product overview dashboard active.</p>
-      </div>
-      <div class="footer">
-        <div class="actions">
-          <button class="button">Add Recent</button>
-          <button class="button">Add New</button>
-          <button class="button">Add to Existing</button>
-        </div>
-        <span class="logo">d.</span>
-      </div>
-    `;
-
-    document.body.appendChild(card);
-    positionCardSafely(card, window.innerWidth - 280, 20, true);
-  }
-}
-
 
 // Listen for the message from background.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -135,8 +48,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const existingCards = document.querySelectorAll('.product-card');
       existingCards.forEach(card => card.remove());
 
-      // Hide hover elements and restore site's styling
-      hoverBadge.classList.remove('visible');
+      hideHoverElements();
     }
     sendResponse({nextState: isExtensionActive });
   }
@@ -146,10 +58,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 /**
  * Mouse motion & position section
  */
-
-// Store mouse coordinates
-let lastClientX = 0;
-let lastClientY = 0;
 
 // Track mouse movement
 document.addEventListener('mousemove', (e) => {
@@ -202,9 +110,6 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
   const hasText = targetElement.innerText && targetElement.innerText.trim().length > 0;
   
   if (clickableCard && hasText) {
-    // Read where the target element is placed on the user's screen
-    const rect = clickableCard.getBoundingClientRect();
-
     // The decidio. badge by the mouse
     hoverBadge.classList.add('visible');
     hoverBadge.style.left = `${clientX + 15}px`; 
@@ -225,7 +130,7 @@ function hideHoverElements() {
 
 // Clean up hover UI when user's cursor exits the web page
 document.addEventListener('mouseleave', () => {
-  hoverBadge.classList.remove('visible');
+  hideHoverElements();
 });
 
 // Clicking logic for the overlay cards
@@ -285,7 +190,6 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  //
   let productTitle = "Unknown product";
 
   // Look into the product container block using the custom sub-selector matching the product title string
@@ -306,35 +210,12 @@ document.addEventListener('click', (e) => {
 
   if (!productTitle) return;
 
-  /**
-   * The product card section
-   */
-  const card = document.createElement('div');
-  card.className = 'product-card';
-  //card.style.top = `${e.pageY + 15}px`;
-  //card.style.left = `${e.pageX - 20}px`;
-  bringToFront(card);
-
-  // The structure of the card
-  card.innerHTML = `
-    <button class="close-button">&times;</button>
-    <div class="overlay-main">
-      <h4 class="title">${productTitle}</h4>
-      <p class="desc">Placeholder for future text here</p>
-    </div>
-    <div class="footer">
-      <div class="actions">
-        <button class="button">Add Recent</button>
-        <button class="button">Add New</button>
-        <button class="button">Add to Existing</button>
-      </div>
-      <span class="logo">d.</span>
-    </div>
-  `;
+  // Build the product card
+  const card = createExtenCard(productTitle, false);
 
   document.body.appendChild(card);
   positionCardSafely(card, e.pageX - 20, e.pageY + 15, false);
-  hoverBadge.classList.remove('visible');
+  hideHoverElements();
 }, true);
 
 // Part of keeping the card from being somewhere you can't see/reach the close button

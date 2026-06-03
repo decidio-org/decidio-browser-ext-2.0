@@ -23,6 +23,39 @@ function bringToFront(card) {
   card.style.zIndex = cardLayer;
 }
 
+/**
+ * Keep cards strictly within the visible viewport bounds. This prevents the cards
+ * from being unreachable.
+ */
+function positionCardSafely(card, targetX, targetY, isFixedMode = false) {
+  const cardWidth = 260;  // From CSS width
+  const cardHeight = 260; // From CSS height
+  const padding = 16;     // Safe boundary space from the edge
+
+  let maxX, maxY;
+
+  if (isFixedMode) {
+    // Lock inside the visible browser window boundaries
+    card.style.position = 'fixed';
+    maxX = window.innerWidth - cardWidth - padding;
+    maxY = window.innerHeight - cardHeight - padding;
+  } else {
+    // Lock inside the entire scrollable document content height/width
+    card.style.position = 'absolute';
+    maxX = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - cardWidth - padding;
+    maxY = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) - cardHeight - padding;
+  }
+
+  // Clamp coordinates safely
+  let safeX = Math.max(padding, Math.min(targetX, maxX));
+  let safeY = Math.max(padding, Math.min(targetY, maxY));
+
+  card.style.left = `${safeX}px`;
+  card.style.top = `${safeY}px`;
+  card.style.right = 'auto';  
+  card.style.bottom = 'auto';
+}
+
 
 // Check storage on page load ---
 chrome.storage.local.get({ isExtensionActive: false }, (data) => {
@@ -82,6 +115,7 @@ function handleInitialPageLayout() {
     `;
 
     document.body.appendChild(card);
+    positionCardSafely(card, window.innerWidth - 280, 20, true);
   }
 }
 
@@ -277,8 +311,8 @@ document.addEventListener('click', (e) => {
    */
   const card = document.createElement('div');
   card.className = 'product-card';
-  card.style.top = `${e.pageY + 15}px`;
-  card.style.left = `${e.pageX - 20}px`;
+  //card.style.top = `${e.pageY + 15}px`;
+  //card.style.left = `${e.pageX - 20}px`;
   bringToFront(card);
 
   // The structure of the card
@@ -299,5 +333,21 @@ document.addEventListener('click', (e) => {
   `;
 
   document.body.appendChild(card);
+  positionCardSafely(card, e.pageX - 20, e.pageY + 15, false);
   hoverBadge.classList.remove('visible');
 }, true);
+
+// Part of keeping the card from being somewhere you can't see/reach the close button
+window.addEventListener('resize', () => {
+  if (!isExtensionActive) return;
+  const activeCards = document.querySelectorAll('.product-card');
+  activeCards.forEach(card => {
+    // Only recalculate bounds if it's in fixed viewport mode. 
+    // Absolute cards are already anchored safely to the page body layout flow!
+    if (card.classList.contains('product-page-mode')) {
+      const currentLeft = parseInt(card.style.left) || 0;
+      const currentTop = parseInt(card.style.top) || 0;
+      positionCardSafely(card, currentLeft, currentTop, true);
+    }
+  });
+});

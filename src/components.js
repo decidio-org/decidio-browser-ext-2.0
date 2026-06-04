@@ -15,13 +15,15 @@ function bringToFront(card) {
 }
 
 
-function handleInitialPageLayout() {
+function handleInitialPageLayout(retries = 5) {
     const driver = getActiveDriver();
     if (!driver) return;
-  
-    // Prevent duplicate product page cards from stacking on re-runs
-    const existingProductCard = document.querySelector('.product-card.product-page-mode');
-    if (existingProductCard) existingProductCard.remove();
+
+    const titleEl = document.querySelector(driver.productPageTitleSelector);
+    if (!titleEl && retries > 0) {
+      setTimeout(() => handleInitialPageLayout(retries - 1), 500);
+      return;
+    }
   
     // If the driver confirms we are looking at an individual product page
     if (typeof driver.isProductPage === 'function' && driver.isProductPage()) {
@@ -38,7 +40,7 @@ function handleInitialPageLayout() {
         const clone = titleEl.cloneNode(true);
         const extraElements = clone.querySelectorAll('span, script, style, .price');
         extraElements.forEach(el => el.remove());
-        productTitle = clone.innerText.trim();
+        productTitle = clone.textContent.trim();
       }
   
       // Create the fixed layout card

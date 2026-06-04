@@ -181,7 +181,7 @@ document.addEventListener('click', (e) => {
 
   // Stop browser navigation for the product card
   e.preventDefault();
-  e.stopPropagation();
+  e.stopImmediatePropagation();
 
   // Cap the user at max 5 concurrent open cards (Review??)
   const activeCards = document.querySelectorAll('.product-card');

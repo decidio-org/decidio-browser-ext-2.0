@@ -6,7 +6,11 @@
  * ===========================================
  */
 
-let cardLayer = 1; // Tracks z-index layer so the newest clicked product card stays on top
+
+ if (typeof getActiveDriver === 'undefined') {
+    console.error('decidio: drivers.js not loaded yet');
+  }
+let cardLayer = 1000; // Tracks z-index layer so the newest clicked product card stays on top
 
 // Increment and apply z-index so clicked cards stack
 function bringToFront(card) {
@@ -72,17 +76,17 @@ function createExtenCard(title, isProductPageMode = false) {
     card.innerHTML = `
         <button class="close-button">&times;</button>
         <div class="overlay-main">
-            <h4 class="title">${title}</h4>
+            <h2 class="title">${title}</h2>
             <p class="desc">${isProductPageMode ? 'Product overview dashboard active.' : 'Placeholder for future text here'}</p>
         </div>
-        <div class="footer">
+        <footer class="footer">
             <div class="actions">
                 <button class="button">Add Recent</button>
                 <button class="button">Add New</button>
                 <button class="button">Add to Existing</button>
                 </div>
             <span class="logo">d.</span>
-        </div>
+        </footer>
     `;
     return card;
 }

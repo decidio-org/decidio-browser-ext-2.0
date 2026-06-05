@@ -81,8 +81,6 @@ function createExtenCard(title, isProductPageMode = false) {
             <div class="loader-text">Analyzing specs with decidio. Intelligence...</div>
         </div>
         <button class="close-button">&times;</button>
-    // 3. REPLACE card.innerHTML — close button label and logo aria-hidden
-    card.innerHTML = `
         <button class="close-button" aria-label="Close ${title} card">&times;</button>
         <div class="overlay-main">
             <h2 class="title">${title}</h2>

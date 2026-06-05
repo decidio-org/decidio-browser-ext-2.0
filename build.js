@@ -14,6 +14,8 @@ function build(browser) {
     fs.copyFileSync('src/util.js', path.join(distDir, 'util.js'));
     fs.copyFileSync('src/components.js', path.join(distDir, 'components.js'));
     fs.copyFileSync('src/styles.css', path.join(distDir, 'styles.css'));
+    fs.copyFileSync('src/loader.js', path.join(distDir, 'loader.js'));
+    fs.copyFileSync('src/drivers.js', path.join(distDir, 'drivers.js'));
 
 
     // Update asset copying to pull from src/

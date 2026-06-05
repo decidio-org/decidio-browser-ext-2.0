@@ -1,3 +1,51 @@
+// Listen for messages from content.js
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "fetchProductSpecs") {
+    const productTitle = request.title;
+
+    // Grab the URL for AI later....
+    const tabUrl = sender.tab ? sender.tab.url : "";
+
+    // Call AI API wrapper here (now serving local sample.json mock data)
+    callYourAIService(productTitle, tabUrl)
+      .then(aiResultData => {
+        // Send the JSON object back to content.js
+        sendResponse({ specs: aiResultData });
+      })
+      .catch(error => {
+        console.error("AI Fetch Error:", error);
+        sendResponse({ specs: null });
+      });
+
+    return true; // Keeps the message channel open for async handlers
+  }
+});
+
+/**
+ * Mock AI Service
+ * Reads sample.json locally, mimicking a server response delay.
+ */
+async function callYourAIService(title, url) {
+  // Mimicking a 1.5-second API network delay for realism:
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  
+  try {
+    // Fetch the local JSON file asset directly from the extension's folder
+    const jsonUrl = chrome.runtime.getURL('sample.json');
+    const response = await fetch(jsonUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to read sample.json: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data; // Returns the full structured JSON layout object
+  } catch (err) {
+    console.error("Error reading local sample.json asset:", err);
+    throw err;
+  }
+}
+
 // Helper function to update the extension icon based on active state
 function updateIcon(tabId, isActive) {
   const iconPath = isActive ? "active_logo.png" : "default_logo.png";

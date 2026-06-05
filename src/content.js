@@ -5,6 +5,7 @@
  * ====================================================
  */
 
+
 /**
  * Initialization and DOM (document object model) setup section
  */
@@ -106,7 +107,21 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
   }
 
   const driver = getActiveDriver();
-  const clickableCard = targetElement.closest(driver.productItemSelector);
+  let clickableCard = null;
+
+
+
+  // ---- May need change after merge
+  if (driver && driver.productItemSelector) {
+    clickableCard = targetElement.closest(driver.productItemSelector);
+  }
+
+  // Fall back to scoring if the strict match isn't there
+  if (!clickableCard && driver && typeof driver.fallbackFinder === 'function') {
+    clickableCard = driver.fallbackFinder(targetElement);
+  }
+
+
   // Make sure there is inner text characters
   const hasText = targetElement.innerText && targetElement.innerText.trim().length > 0;
   
@@ -172,9 +187,22 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  // Use the driver's selector map
-  const isProductCard = e.target.closest(driver.productItemSelector);
+
+
+  let isProductCard = null;
+  // Attempt to locate container using structural selectors
+  if (driver && driver.productItemSelector) {
+    isProductCard = e.target.closest(driver.productItemSelector);
+  }
   
+  // If missed, engage scoring
+  if (!isProductCard && driver && typeof driver.fallbackFinder === 'function') {
+    console.log("Strict selector missed. Activating Heuristic Scoring Engine...");
+    isProductCard = driver.fallbackFinder(e.target);
+  }
+
+
+
   // If the user clicked a random whitespace on the screen
   if (!isProductCard) {
     return;
@@ -205,6 +233,7 @@ document.addEventListener('click', (e) => {
   const card = createExtenCard(productTitle, false);
 
   document.body.appendChild(card);
+  aiFetch(card, productTitle);
   positionCardSafely(card, e.pageX - 20, e.pageY + 15, false);
   hideHoverElements();
 }, true);
@@ -223,3 +252,69 @@ window.addEventListener('resize', () => {
     }
   });
 });
+
+
+
+
+/**
+ * Contacts background service worker for AI product specifications
+ * and turns off the card loader animation once received.
+ */
+function aiFetch(cardElement, productTitle) {
+  chrome.runtime.sendMessage({ action: "fetchProductSpecs", title: productTitle }, async (response) => {
+    
+    const overlayMain = cardElement.querySelector('.overlay-main');
+    const loader = cardElement.querySelector('.card-loader');
+
+    // Target the description paragraph in your card
+    const descElement = cardElement.querySelector('.desc');
+    
+
+
+    // Remove loading indicator immediately
+    cardElement.classList.remove('is-loading');
+    if (loader) loader.style.display = 'none';
+
+    // Clear or hide the default description paragraph so it doesn't crowd the card 
+    // since we only want to show the specifications
+    if (descElement) descElement.style.display = 'none';
+
+    try {
+      let aiResult;
+
+      if (response && response.specs) {
+        if (typeof response.specs === 'string') {
+          aiResult = JSON.parse(response.specs);
+        } else {
+          aiResult = response.specs;
+        }
+      } else {
+        throw new Error("No data received.");
+      }
+
+      // Create a specific container for the table typing system with a scroll limit
+      const aiDisplay = document.createElement('div');
+      aiDisplay.className = 'ai-display-container';
+      
+      // Max-height ensures a long spec list doesn't overflow off the screen layout.
+      aiDisplay.style.cssText = 'max-height: 320px; overflow-y: auto; margin-top: 10px; padding-right: 4px;';
+      overlayMain.appendChild(aiDisplay);
+
+      // Extract the nested "Specs" directly, skipping URL, Description, Visuals, etc.
+      if (aiResult && aiResult.Specs) {
+        await renderSpecsTable(aiDisplay, aiResult.Specs);
+      } else {
+        aiDisplay.innerHTML = "<p style='color: #888; font-size: 13px; text-align: center;'>No technical specifications found.</p>";
+      }
+
+    } catch (err) {
+        console.error("Decidio. data processing error:", err);
+        if (overlayMain) {
+          const errorMsg = document.createElement('p');
+          errorMsg.style.cssText = 'color: #ff4d4d; font-size: 13px; font-weight: bold; margin-top: 10px;';
+          errorMsg.textContent = "Error loading product data specs.";
+          overlayMain.appendChild(errorMsg);
+        }
+    }
+  });
+}

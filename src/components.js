@@ -20,40 +20,34 @@ function bringToFront(card) {
 
 
 function handleInitialPageLayout(retries = 5) {
-    const driver = getActiveDriver();
-    if (!driver) return;
+  // Guard against duplicate cards on retry
+  const existingCard = document.querySelector('.product-card.product-page-mode');
+  if (existingCard) return;
 
-    const titleEl = document.querySelector(driver.productPageTitleSelector);
-    if (!titleEl && retries > 0) {
-      setTimeout(() => handleInitialPageLayout(retries - 1), 500);
-      return;
-    }
-  
-    // If the driver confirms we are looking at an individual product page
-    if (typeof driver.isProductPage === 'function' && driver.isProductPage()) {
-      
-      // Hide trailing search badge since we're in product mode
-      hideHoverElements();
-  
-      // Safely extract the title using your driver's selector
-      let productTitle = "Unknown Product";
-      const titleEl = document.querySelector(driver.productPageTitleSelector);
-      
-      if (titleEl) {
-        // Clone it to safely strip out any sneaky inner prices/tags inside the H1
-        const clone = titleEl.cloneNode(true);
-        const extraElements = clone.querySelectorAll('span, script, style, .price');
-        extraElements.forEach(el => el.remove());
-        productTitle = clone.textContent.trim();
-      }
-  
-      // Create the fixed layout card
-      const card = createExtenCard(productTitle, true);
-  
-      document.body.appendChild(card);
-      
-      positionCardSafely(card, window.innerWidth - 280, 20, true);
-    }
+  const driver = getActiveDriver();
+  if (!driver) return;
+
+  // Check product page first before querying anything
+  if (typeof driver.isProductPage === 'function' && !driver.isProductPage()) return;
+
+  const titleEl = document.querySelector(driver.productPageTitleSelector);
+  if (!titleEl && retries > 0) {
+    setTimeout(() => handleInitialPageLayout(retries - 1), 500);
+    return;
+  }
+
+  hideHoverElements();
+
+  let productTitle = "Unknown Product";
+  if (titleEl) {
+    const clone = titleEl.cloneNode(true);
+    clone.querySelectorAll('span, script, style, .price').forEach(el => el.remove());
+    productTitle = clone.textContent.trim();
+  }
+
+  const card = createExtenCard(productTitle, true);
+  document.body.appendChild(card);
+  positionCardSafely(card, window.innerWidth - 280, 20, true);
 }
 
 
@@ -61,32 +55,35 @@ function handleInitialPageLayout(retries = 5) {
    * Generates the extension card
    */
 function createExtenCard(title, isProductPageMode = false) {
-    const card = document.createElement('div');
+  const card = document.createElement('article'); 
+    card.setAttribute('role', 'dialog');             
+    card.setAttribute('aria-label', `Product details: ${title}`); 
+    card.setAttribute('aria-modal', 'true'); 
 
-    // Apply classes based on context
     if (isProductPageMode) {
         card.className = 'product-card product-page-mode';
     } else {
         card.className = 'product-card';
     }
-    
+
     bringToFront(card);
 
-    // The structure of the card
+    // 3. REPLACE card.innerHTML — close button label and logo aria-hidden
     card.innerHTML = `
-        <button class="close-button">&times;</button>
+        <button class="close-button" aria-label="Close ${title} card">&times;</button>
         <div class="overlay-main">
             <h2 class="title">${title}</h2>
             <p class="desc">${isProductPageMode ? 'Product overview dashboard active.' : 'Placeholder for future text here'}</p>
         </div>
-        <footer class="footer">
-            <div class="actions">
+        <div class="footer">
+            <nav class="actions" aria-label="Product actions">
                 <button class="button">Add Recent</button>
                 <button class="button">Add New</button>
                 <button class="button">Add to Existing</button>
-                </div>
-            <span class="logo">d.</span>
-        </footer>
+            </nav>
+            <span class="logo" aria-hidden="true">d.</span>
+        </div>
+
     `;
     return card;
 }

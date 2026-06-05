@@ -1,3 +1,18 @@
+function getTitleFromSchema() {
+  const schemas = document.querySelectorAll('script[type="application/ld+json"]');
+  for (const schema of schemas) {
+    try {
+      const data = JSON.parse(schema.textContent);
+      if (data['@type'] === 'Product' && data.name) return data.name;
+      if (data['@graph']) {
+        const product = data['@graph'].find(n => n['@type'] === 'Product');
+        if (product?.name) return product.name;
+      }
+    } catch {}
+  }
+  return null;
+}
+
 // Test to see if molding the extension to the format of certain sites can improve issues with the cards being selectable in areas it shouldn't be
 
 const SITE_DRIVERS = {
@@ -31,8 +46,36 @@ const SITE_DRIVERS = {
     productPageDescSelector: '[class*="Text-c11n"]'
   },
   "generic": { 
-    productItemSelector: '.product-card-container, [class*="product-card"], [class*="product-item"], [class*="grid-item"]',
-    titleSelector: 'h2, h3, .title, [class*="title"], [class*="name"]',
+    // productItemSelector: '.product-card-container,[class*="product-card"], [class*="product-item"], [class*="grid-item"]',
+    productItemSelector: [
+      'section[class*="product"]',
+      'ul[class*="product"] > li',
+      'ol[class*="product"] > li',
+      '.product-card-container',
+      '[class*="product-card"]',
+      '[class*="product-item"]',
+      '[class*="grid-item"]'
+    ].join(','),
+
+    // titleSelector: 'h2, h3, .title, [class*="title"], [class*="name"]',
+
+    titleSelector: [
+      'h1',   // product page titles
+      'h2',   // most grid cards
+      'h3',   // nested card titles
+      '[itemprop="name"]',      // schema.org markup
+      '[aria-label*="product"]', // aria-labeled titles
+      'figcaption'              // image-first cards
+    ].join(','),
+
+
+// FOR PRICE EXTRACTION IF WE NEED IT
+//     <data value="29.99">$29.99</data>   <!-- semantic price -->
+// <ins>$29.99</ins>                    <!-- sale price -->
+// <del>$39.99</del>                    <!-- original price -->
+// [itemprop="price"]                   <!-- schema.org -->
+// [aria-label*="price"]
+
     allowedZones: 'a, button, img',
 
     // --- GLOBAL E-COMMERCE PRODUCT PAGE DETECTOR ---

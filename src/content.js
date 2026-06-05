@@ -17,6 +17,7 @@ document.body.appendChild(overlayRoot);
 const hoverBadge = document.createElement('div');
 hoverBadge.className = 'decidio-hover-badge';
 hoverBadge.innerText = 'decidio.';
+hoverBadge.setAttribute('aria-hidden', 'true');
 document.body.appendChild(hoverBadge);
 
 let isExtensionActive = false; // On/off tracker
@@ -190,23 +191,13 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  let productTitle = "Unknown product";
-
-  // Look into the product container block using the custom sub-selector matching the product title string
-  const targetedTitleElement = isProductCard.querySelector(driver.titleSelector);
-  
-  if (targetedTitleElement) {
-    productTitle = targetedTitleElement.innerText.trim();
-  } else if (e.target.innerText) {
-    // Fallback if the site mapping doesn't intercept a distinct child element
-    productTitle = e.target.innerText.trim();
-  }
-  
-  // If text is super long (like a whole product description block), grab just the title text
-  if (productTitle.length > 150) {
-    const fallbackH1 = document.querySelector('h1');
-    if (fallbackH1) productTitle = fallbackH1.innerText.trim();
-  }
+  const productTitle = getTitleFromSchema()
+  ?? isProductCard.querySelector('[itemprop="name"]')?.textContent.trim()
+  ?? isProductCard.querySelector(driver.titleSelector)?.textContent.trim()
+  ?? isProductCard.querySelector('img[alt]')?.alt.trim()
+  ?? isProductCard.querySelector('a')?.getAttribute('aria-label')
+  ?? getTitleFromSchema()   // page-level last resort
+  ?? "Unknown Product";
 
   if (!productTitle) return;
 

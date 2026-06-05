@@ -1,4 +1,9 @@
-import { getActiveDriver, SITE_DRIVERS } from './drivers.js';
+/**
+ * ====================================================
+ * Content.js file is the main controller file that sets up state, listens
+ * for Chrome messages, tracks the mouse, and handles event listeners.
+ * ====================================================
+ */
 
 /**
  * Initialization and DOM (document object model) setup section
@@ -12,101 +17,31 @@ document.body.appendChild(overlayRoot);
 const hoverBadge = document.createElement('div');
 hoverBadge.className = 'decidio-hover-badge';
 hoverBadge.innerText = 'decidio.';
+hoverBadge.setAttribute('aria-hidden', 'true');
 document.body.appendChild(hoverBadge);
 
-// THIS IS FOR TESTING, BLUE RECTANGLE 
-// Can be removed after icon fix?
-const hoverBox = document.createElement('div');
-hoverBox.className = 'decidio-hover-box';
-document.body.appendChild(hoverBox);
-
-
-let cardLayer = 1000; // Tracks z-index layer so the newest clicked product card stays on top
 let isExtensionActive = false; // On/off tracker
-
-// Increment and apply z-index so clicked cards stack
-function bringToFront(card) {
-  cardLayer++;
-  card.style.zIndex = cardLayer;
-  
-}
+let lastClientX = 0;
+let lastClientY = 0;
 
 
-/**
- * Element blocking section
- */
-// Determines whether an element should be ignored by the extension.
-// This effects search bar, drop down menus, filter section, etc.
-function isElementBlocked(element) {
-  if (!element || !isExtensionActive) return false;
-  
-  // Don't block our extension components
-  if (
-    element.closest('#decidio-root') || 
-    element.closest('.product-card')
-  ) {
-    return false; // Valid product zones
+// Check storage on page load ---
+chrome.storage.local.get({ isExtensionActive: false }, (data) => {
+  isExtensionActive = data.isExtensionActive;
+  if (isExtensionActive) {
+    console.log("decidio. AUTO-ACTIVATED on page load/navigation");
+    handleInitialPageLayout();
   }
-
-  // Extract element attributes
-  const id = (element.id || '').toLowerCase();
-  const className = (typeof element.className === 'string' ? element.className : '').toLowerCase();
-  const tagName = element.tagName;
-
-  // Instantly block parts where the user would input text in
-  if (tagName === 'INPUT' || tagName === 'TEXTAREA' || element.getAttribute('contenteditable') === 'true') {
-    return true; 
-  }
-  
-  // Search and the cart stay unusable
-  if (id === 'search' || className.includes('search-input') || className.includes('mini-cart')) {
-    return true;
-  }
-
-  // Walk up the DOM tree to see if an element lives inside a header or main nav
-  let parent = element.parentElement;
-  while (parent && parent !== document.body) {
-    const pTagName = parent.tagName;
-    const pId = (parent.id || '').toLowerCase();
-    const pClass = (typeof parent.className === 'string' ? parent.className : '').toLowerCase();
-
-    // Block global navigation headers and side-menus, but avoid general blocks on product contents
-    if (pTagName === 'HEADER' || pTagName === 'NAV' || pId === 'nav' || pClass === 'global-nav') {
-      return true;
-    }
-    // Block side layout menus
-    if (pTagName === 'ASIDE' || pId.includes('sidebar-menu')) {
-      return true;
-    }
-
-    parent = parent.parentElement;
-  }
-  // Element is ok to interact with
-  return false;
-}
-
-// Visual layout painter to toggle styles when activated
-function toggleVisualLocks(apply) {
-  const elements = document.querySelectorAll('header, nav, aside, [role="search"], #navbar, #nav-belt');
-  elements.forEach(el => {
-    if (apply) {
-      if (!el.closest('.product-card')) {
-        el.classList.add('decidio-locked');
-      }
-    } else {
-      el.classList.remove('decidio-locked');
-    }
-  });
-}
+});
 
 // Listen for the message from background.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "toggle_decidio.") {
-    isExtensionActive = !isExtensionActive;
+    isExtensionActive = request.state;
 
     if (isExtensionActive) {
       console.log("decidio. is now ACTIVE");
-      toggleVisualLocks(true);
+      handleInitialPageLayout();
     } else {
       console.log("decidio. is now INACTIVE");
 
@@ -114,27 +49,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const existingCards = document.querySelectorAll('.product-card');
       existingCards.forEach(card => card.remove());
 
-      // Hide hover elements and restore site's styling
-      hoverBadge.classList.remove('visible');
-      hoverBox.classList.remove('visible');
-      toggleVisualLocks(false);
+      hideHoverElements();
     }
+    sendResponse({nextState: isExtensionActive });
   }
+  return true;
 });
-
 
 /**
  * Mouse motion & position section
  */
 
-// Store mouse coordinates
-let lastClientX = 0;
-let lastClientY = 0;
-
 // Track mouse movement
 document.addEventListener('mousemove', (e) => {
   if (!isExtensionActive) return;
   
+  // Don't track mouse or show search badge if we are on an active product page
+  const driver = getActiveDriver();
+  if (driver && typeof driver.isProductPage === 'function' && driver.isProductPage()) {
+    hideHoverElements();
+    return;
+  }
+
   lastClientX = e.clientX;
   lastClientY = e.clientY;
 
@@ -144,6 +80,12 @@ document.addEventListener('mousemove', (e) => {
 // Handle scroll changes and look up what's under the cursor
 document.addEventListener('scroll', () => {
   if (!isExtensionActive) return;
+
+  // Exit early if we are on a product page so scroll math doesn't conflict
+  const driver = getActiveDriver();
+  if (driver && typeof driver.isProductPage === 'function' && driver.isProductPage()) {
+    return; 
+  }
 
   // Calculates what element has scrolled beneath the mouse
   const elementUnderCursor = document.elementFromPoint(lastClientX, lastClientY);
@@ -157,8 +99,7 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
   // Edge-case for clearing the hover elements when on the product card
   if (
     targetElement.closest('#decidio-root') || 
-    targetElement.closest('.product-card') || 
-    isElementBlocked(targetElement)
+    targetElement.closest('.product-card')
   ) {
     hideHoverElements();
     return;
@@ -170,18 +111,6 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
   const hasText = targetElement.innerText && targetElement.innerText.trim().length > 0;
   
   if (clickableCard && hasText) {
-    if (isElementBlocked(clickableCard)) return;
-
-    // Read where the target element is placed on the user's screen
-    const rect = clickableCard.getBoundingClientRect();
-
-    // Configure trailing hover box (TESTING)
-    hoverBox.classList.add('visible');
-    hoverBox.style.width = `${rect.width}px`;
-    hoverBox.style.height = `${rect.height}px`;
-    hoverBox.style.left = `${rect.left + window.scrollX}px`;
-    hoverBox.style.top = `${rect.top + window.scrollY}px`;
-
     // The decidio. badge by the mouse
     hoverBadge.classList.add('visible');
     hoverBadge.style.left = `${clientX + 15}px`; 
@@ -193,7 +122,6 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
 
 function hideHoverElements() {
   hoverBadge.classList.remove('visible');
-  hoverBox.classList.remove('visible');
 }
 
 
@@ -203,28 +131,14 @@ function hideHoverElements() {
 
 // Clean up hover UI when user's cursor exits the web page
 document.addEventListener('mouseleave', () => {
-  hoverBadge.classList.remove('visible');
-  hoverBox.classList.remove('visible');
+  hideHoverElements();
 });
-
-document.addEventListener('mousedown', (e) => {
-  if (!isExtensionActive) return;
-  if (isElementBlocked(e.target)) {
-    e.preventDefault();
-    e.stopPropagation(); // Stop element from recognizing it was pressed
-  }
-}, true);
 
 // Clicking logic for the overlay cards
 document.addEventListener('click', (e) => {
   if (!isExtensionActive) return;
 
-  // Prevent normal site interactions
-  if (isElementBlocked(e.target)) {
-    e.preventDefault();
-    e.stopPropagation();
-    return;
-  }
+
   // x button on the overlay card
   if (e.target.classList.contains('close-button')) {
     e.preventDefault();
@@ -244,7 +158,7 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  if (e.target.classList.contains('decidio-hover-badge') || e.target.closest('.decidio-hover-box')) {
+  if (e.target.classList.contains('decidio-hover-badge')) {
     e.preventDefault();
     e.stopPropagation();
     return;
@@ -252,19 +166,23 @@ document.addEventListener('click', (e) => {
 
   // Get the config rule again for the click listener
   const driver = getActiveDriver();
+
+  // If we are on a product page, don't allow search-click rules to override anything
+  if (driver && typeof driver.isProductPage === 'function' && driver.isProductPage()) {
+    return;
+  }
+
   // Use the driver's selector map
   const isProductCard = e.target.closest(driver.productItemSelector);
   
   // If the user clicked a random whitespace on the screen
   if (!isProductCard) {
-    e.preventDefault();
-    e.stopPropagation();
     return;
   }
 
-  // Stop browser navigation
+  // Stop browser navigation for the product card
   e.preventDefault();
-  e.stopPropagation();
+  e.stopImmediatePropagation();
 
   // Cap the user at max 5 concurrent open cards (Review??)
   const activeCards = document.querySelectorAll('.product-card');
@@ -273,76 +191,35 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  //
-  let productTitle = "Unknown product";
-
-  // Look into the product container block using the custom sub-selector matching the product title string
-  const targetedTitleElement = isProductCard.querySelector(driver.titleSelector);
-  
-  if (targetedTitleElement) {
-    productTitle = targetedTitleElement.innerText.trim();
-  } else if (e.target.innerText) {
-    // Fallback if the site mapping doesn't intercept a distinct child element
-    productTitle = e.target.innerText.trim();
-  }
-  
-  // If text is super long (like a whole product description block), grab just the title text
-  if (productTitle.length > 150) {
-    const fallbackH1 = document.querySelector('h1');
-    if (fallbackH1) productTitle = fallbackH1.innerText.trim();
-  }
+  const productTitle = getTitleFromSchema()
+  ?? isProductCard.querySelector('[itemprop="name"]')?.textContent.trim()
+  ?? isProductCard.querySelector(driver.titleSelector)?.textContent.trim()
+  ?? isProductCard.querySelector('img[alt]')?.alt.trim()
+  ?? isProductCard.querySelector('a')?.getAttribute('aria-label')
+  ?? getTitleFromSchema()   // page-level last resort
+  ?? "Unknown Product";
 
   if (!productTitle) return;
 
-  /**
-   * The product card section
-   */
-  const card = document.createElement('div');
-  card.className = 'product-card';
-  card.style.top = `${e.pageY + 15}px`;
-  card.style.left = `${e.pageX - 20}px`;
-  bringToFront(card);
-
-  // The structure of the card
-  card.innerHTML = `
-    <button class="close-button">&times;</button>
-    <div class="overlay-main">
-      <h4 class="title">${productTitle}</h4>
-      <p class="desc">Placeholder for future text here</p>
-    </div>
-    <div class="footer">
-      <div class="actions">
-        <button class="button">Add Recent</button>
-        <button class="button">Add New</button>
-        <button class="button">Add to Existing</button>
-      </div>
-      <span class="logo">d.</span>
-    </div>
-  `;
+  // Build the product card
+  const card = createExtenCard(productTitle, false);
 
   document.body.appendChild(card);
-  hoverBadge.classList.remove('visible');
-  hoverBox.classList.remove('visible');
+  positionCardSafely(card, e.pageX - 20, e.pageY + 15, false);
+  hideHoverElements();
 }, true);
 
-/**
- * Block keys and tabbing with the keyboard
- */
-
-//Block keystrokes
-document.addEventListener('keydown', (e) => {
-  if (isElementBlocked(e.target)) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}, true);
-
-// Prevent tab key presses
-document.addEventListener('focusin', (e) => {
+// Part of keeping the card from being somewhere you can't see/reach the close button
+window.addEventListener('resize', () => {
   if (!isExtensionActive) return;
-  if (isElementBlocked(e.target)) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.target.blur();
-  }
-}, true);
+  const activeCards = document.querySelectorAll('.product-card');
+  activeCards.forEach(card => {
+    // Only recalculate bounds if it's in fixed viewport mode. 
+    // Absolute cards are already anchored safely to the page body layout flow!
+    if (card.classList.contains('product-page-mode')) {
+      const currentLeft = parseInt(card.style.left) || 0;
+      const currentTop = parseInt(card.style.top) || 0;
+      positionCardSafely(card, currentLeft, currentTop, true);
+    }
+  });
+});

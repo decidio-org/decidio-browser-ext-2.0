@@ -9,10 +9,13 @@ function build(browser) {
 
     // Copy code assets into it from the src/ folder
     fs.copyFileSync('src/background.js', path.join(distDir, 'background.js'));
-    //fs.copyFileSync('src/overlay.html', path.join(distDir, 'overlay.html'));
+    fs.copyFileSync('src/drivers.js', path.join(distDir, 'drivers.js'))
     fs.copyFileSync('src/content.js', path.join(distDir, 'content.js'));
-    //fs.copyFileSync('src/overlay_helper.js', path.join(distDir, 'overlay_helper.js'));
+    fs.copyFileSync('src/util.js', path.join(distDir, 'util.js'));
+    fs.copyFileSync('src/components.js', path.join(distDir, 'components.js'));
     fs.copyFileSync('src/styles.css', path.join(distDir, 'styles.css'));
+    //fs.copyFileSync('src/loader.js', path.join(distDir, 'loader.js'));
+    fs.copyFileSync('src/drivers.js', path.join(distDir, 'drivers.js'));
 
 
     // Update asset copying to pull from src/

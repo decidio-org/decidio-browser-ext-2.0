@@ -219,15 +219,21 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  const productTitle = getTitleFromSchema()
+  const productTitle =
+  (typeof driver.extractTitle === 'function'
+    ? driver.extractTitle(isProductCard)
+    : null)
+  ?? getTitleFromSchema()
   ?? isProductCard.querySelector('[itemprop="name"]')?.textContent.trim()
   ?? isProductCard.querySelector(driver.titleSelector)?.textContent.trim()
-  ?? isProductCard.querySelector('img[alt]')?.alt.trim()
-  ?? isProductCard.querySelector('a')?.getAttribute('aria-label')
-  ?? getTitleFromSchema()   // page-level last resort
+  ?? (() => {
+      const alt = isProductCard.querySelector('img[alt]')?.alt.trim();
+      return alt && alt.length > 5 ? alt : null;
+    })()
+  ?? isProductCard.querySelector('a[aria-label]')?.getAttribute('aria-label')?.trim()
+  ?? isProductCard.querySelector('a[title]')?.getAttribute('title')?.trim()
+  ?? getLongestTextNode(isProductCard)
   ?? "Unknown Product";
-
-  if (!productTitle) return;
 
   // Build the product card
   const card = createExtenCard(productTitle, false);

@@ -73,15 +73,208 @@ const SITE_DRIVERS = {
   }
 };
 
+
+const ARCHETYPE_DRIVERS = {
+  realestate: {
+    productItemSelector: [
+      // Semantic
+      'article[class*="card"]',
+      'li[class*="card"]',
+      'li[class*="result"]',
+      'li[class*="listing"]',
+      // Common patterns across sites
+      '[class*="property-card"]',
+      '[class*="listing-card"]',
+      '[class*="home-card"]',
+      '[class*="result-card"]',
+      '[class*="MapHome"]',
+      // Data attributes (more stable than class names)
+      '[data-test*="card"]',
+      '[data-testid*="card"]',
+      '[data-listing-id]',
+      '[data-propertyid]',
+    ].join(','),
+
+    titleSelector: [
+      // Most reliable — semantic address element
+      'address',
+      // Data attributes (stable across deployments)
+      '[data-test*="addr"]',
+      '[data-testid*="addr"]',
+      '[data-test*="street"]',
+      // Common class patterns (case-insensitive via JS, not CSS)
+      '[class*="address"]',
+      '[class*="Address"]',
+      '[class*="street"]',
+      '[class*="Street"]',
+    ].join(','),
+
+    isProductPage: () => {
+      const url = window.location.href;
+      // URL patterns common to property detail pages
+      const detailPatterns = [
+        /\/homedetails\//,
+        /\/homes?\/.*\/home\//,
+        /\/property\//,
+        /\/listing\//,
+        /\/for-sale\//,
+        /\/for-rent\//,
+        /\/(mls|mlsid)[=-]/i,
+      ];
+      if (detailPatterns.some(p => p.test(url))) return true;
+
+      // DOM signals for a property detail page
+      const hasGallery = document.querySelector('[class*="gallery"], [class*="Gallery"], [class*="photo-carousel"]') !== null;
+      const hasFactsSection = document.querySelector('[class*="facts"], [class*="Facts"], [class*="details-section"]') !== null;
+      const hasContactForm = document.querySelector('form[class*="contact"], form[class*="Contact"], button[class*="tour"]') !== null;
+
+      return hasGallery && (hasFactsSection || hasContactForm);
+    },
+
+    productPageTitleSelector: [
+      'h1',
+      'address',
+      '[class*="summary-address"]',
+      '[class*="street-address"]',
+      '[data-test*="addr"]',
+    ].join(','),
+
+    // Custom title extractor for real estate — called before the generic chain
+    extractTitle: (container) => extractRealEstateTitle(container),
+  }
+};
+
+function detectSiteArchetype() {
+  const host = window.location.hostname;
+  const text = document.body.innerText.toLowerCase();
+  const url = window.location.href;
+
+  // Known real estate domains (extend as needed)
+  const realEstateDomains = [
+    'zillow', 'redfin', 'realtor', 'trulia', 'homes.com',
+    'coldwellbanker', 'century21', 'compass', 'movoto',
+    'loopnet', 'crexi', 'apartments.com', 'rent.com',
+  ];
+  if (realEstateDomains.some(d => host.includes(d))) return 'realestate';
+
+  // Structural signals for unknown real estate sites
+  const hasAddressTag = document.querySelector('address') !== null;
+  const hasBedBath = /\b\d+\s*(bd|ba|bed|bath|bedroom|bathroom|sqft|sq\.?\s?ft)/i.test(text);
+  const hasPricePerMonth = /\$[\d,]+\s*\/\s*(mo|month)/i.test(text);
+  const hasForSaleRent = /(for sale|for rent|homes? for|listing price|asking price)/i.test(text);
+  const hasMapView = document.querySelector('[class*="map"], [id*="map"], [aria-label*="map"]') !== null;
+
+  const score =
+    (hasAddressTag ? 3 : 0) +
+    (hasBedBath ? 3 : 0) +
+    (hasPricePerMonth ? 2 : 0) +
+    (hasForSaleRent ? 2 : 0) +
+    (hasMapView ? 1 : 0);
+
+  if (score >= 4) return 'realestate';
+  return 'generic';
+}
 // Helper function to figure out which site rules to apply
 function getActiveDriver() {
   const host = window.location.hostname;
 
   if (host.includes('amazon')) return SITE_DRIVERS.amazon;
-  if (host.includes('zillow')) return SITE_DRIVERS.zillow;
+  // if (host.includes('zillow')) return SITE_DRIVERS.zillow;
+
+  // Archetype detection for everything else
+  const archetype = detectSiteArchetype();
+  if (archetype === 'realestate') return ARCHETYPE_DRIVERS.realestate;
   
   // Falls back to global commerce rules for every other website on the web
   return SITE_DRIVERS.generic;
+}
+
+/**
+ * Last-resort title heuristic: finds the longest non-price text string
+ * inside a container that's plausibly a product name.
+ */
+ function getLongestTextNode(container) {
+  const pricePattern = /^[\$€£¥]?\s?\d+[\.,]?\d*$|^\d+[\.,]\d{2}$/;
+  let best = null;
+
+  container.querySelectorAll('*').forEach(el => {
+    if (['SCRIPT','STYLE','NOSCRIPT'].includes(el.tagName)) return;
+    const text = (el.childNodes[0]?.textContent ?? '').trim(); // direct text only, no children
+    if (!text || pricePattern.test(text)) return;
+    if (text.length > 10 && (!best || text.length > best.length)) {
+      best = text;
+    }
+  });
+
+  return best;
+}
+
+
+/**
+ * Strips city/state/zip suffixes from an address string,
+ * returning just the street line.
+ */
+ function cleanAddressText(raw) {
+  if (!raw) return null;
+  // Take only the first line if multi-line
+  const first = raw.split(/[\n,|]/)[0].trim();
+  // Must look like a street address: starts with a number
+  if (/^\d+\s+\w/.test(first) && first.length > 5) return first;
+  // Or return the whole thing trimmed if it's short enough to be an address
+  const full = raw.trim().replace(/\s+/g, ' ');
+  if (full.length < 80) return full;
+  return null;
+}
+
+/**
+ * Walks text nodes looking for strings that match US/CA address patterns.
+ */
+function findAddressPattern(container) {
+  const addressPattern = /^\d+\s[\w\s]+(?:st|ave|rd|blvd|dr|ln|ct|pl|way|cir|terr?|pkwy|hwy)\b/i;
+
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const text = walker.currentNode.textContent.trim();
+    if (addressPattern.test(text) && text.length < 100) return text;
+  }
+  return null;
+}
+
+/**
+ * Extracts a clean street address from a real estate card.
+ * Tries semantic/attribute selectors first, then falls back to
+ * pattern-matching text nodes for address-shaped strings.
+ */
+ function extractRealEstateTitle(container) {
+  // 1. Semantic address element
+  const addressEl = container.querySelector('address');
+  if (addressEl) return cleanAddressText(addressEl.textContent);
+
+  // 2. Data attribute selectors (stable)
+  const dataSelectors = [
+    '[data-test*="addr"]', '[data-testid*="addr"]',
+    '[data-test*="street"]', '[data-testid*="street"]',
+  ];
+  for (const sel of dataSelectors) {
+    const el = container.querySelector(sel);
+    if (el) return cleanAddressText(el.textContent);
+  }
+
+  // 3. Class name patterns (case-insensitive JS match — more reliable than CSS [class*=])
+  const allEls = container.querySelectorAll('*');
+  for (const el of allEls) {
+    const cls = el.className?.toString().toLowerCase() ?? '';
+    if (
+      (cls.includes('address') || cls.includes('street')) &&
+      !cls.includes('city') && !cls.includes('state') // avoid city/state-only spans
+    ) {
+      const text = cleanAddressText(el.textContent);
+      if (text) return text;
+    }
+  }
+
+  // 4. Pattern-match for address-shaped strings in any text node
+  return findAddressPattern(container);
 }
 
 // New Code Section
@@ -145,6 +338,11 @@ function scoreProductCard(el, clickedEl) {
   if (/\b(bd|ba|sqft|home|house|address)\b/i.test(text)) score += 30; 
   if (/star|review|rating/i.test(text)) score += 10;
 
+  const wordCount = text.trim().split(/\s+/).length;
+  if (wordCount >= 3 && wordCount <= 60) score += 15; // typical product card copy
+  if (wordCount > 100) score -= 20; // probably a paragraph block, not a card
+
+
   return score;
 }
 
@@ -162,13 +360,13 @@ function findProductContainer(startEl) {
       const currentScore = scoreProductCard(current, startEl);
       
       // Capturing the peak score
-      if (currentScore >= 70 && currentScore >= highestScore) {
+      if (currentScore >= 55 && currentScore >= highestScore) {
           highestScore = currentScore;
           bestCandidate = current;
       }
       
       // Relaxed boundaries for modern high-res grid items
-      if (current.offsetWidth > 800 || current.offsetHeight > 900) {
+      if (current.offsetWidth > 600 || current.offsetHeight > 700) {
         console.log("Geometric boundary reached. Stopping DOM climb.");
         break;
       }

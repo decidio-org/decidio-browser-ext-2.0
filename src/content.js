@@ -225,6 +225,23 @@ function handleBadgeActivation(productCardElement, appendX, appendY) {
 
 
   // UI RENDERING: Instantiate and pin container immediately in loading status mode
+  const productTitle =
+  (typeof driver.extractTitle === 'function'
+    ? driver.extractTitle(isProductCard)
+    : null)
+  ?? getTitleFromSchema()
+  ?? isProductCard.querySelector('[itemprop="name"]')?.textContent.trim()
+  ?? isProductCard.querySelector(driver.titleSelector)?.textContent.trim()
+  ?? (() => {
+      const alt = isProductCard.querySelector('img[alt]')?.alt.trim();
+      return alt && alt.length > 5 ? alt : null;
+    })()
+  ?? isProductCard.querySelector('a[aria-label]')?.getAttribute('aria-label')?.trim()
+  ?? isProductCard.querySelector('a[title]')?.getAttribute('title')?.trim()
+  ?? getLongestTextNode(isProductCard)
+  ?? "Unknown Product";
+
+  // Build the product card
   const card = createExtenCard(productTitle, false);
   card.classList.add('is-loading'); // Engages loading screen spinner styles
   document.body.appendChild(card);

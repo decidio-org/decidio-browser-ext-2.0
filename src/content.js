@@ -196,28 +196,12 @@ function handleBadgeActivation(productCardElement, appendX, appendY) {
   }
 
   // Scrape Card Metadata
-  // const productTitle = getTitleFromSchema()
-  //   ?? productCardElement.querySelector('[itemprop="name"]')?.textContent.trim()
-  //   ?? (driver.titleSelector ? productCardElement.querySelector(driver.titleSelector)?.textContent.trim() : null)
-  //   ?? productCardElement.querySelector('img[alt]')?.alt.trim()
-  //   ?? productCardElement.querySelector('a')?.getAttribute('aria-label')
-  //   ?? "Unknown Product";
-
-    const productTitle =
-    (typeof driver.extractTitle === 'function'
-      ? driver.extractTitle(isProductCard)
-      : null)
-    ?? getTitleFromSchema()
-    ?? isProductCard.querySelector('[itemprop="name"]')?.textContent.trim()
-    ?? isProductCard.querySelector(driver.titleSelector)?.textContent.trim()
-    ?? (() => {
-        const alt = isProductCard.querySelector('img[alt]')?.alt.trim();
-        return alt && alt.length > 5 ? alt : null;
-      })()
-    ?? isProductCard.querySelector('a[aria-label]')?.getAttribute('aria-label')?.trim()
-    ?? isProductCard.querySelector('a[title]')?.getAttribute('title')?.trim()
-    ?? getLongestTextNode(isProductCard)
-    ?? "Unknown Product";
+ const productTitle = getTitleFromSchema()
+   ?? productCardElement.querySelector('[itemprop="name"]')?.textContent.trim()
+   ?? (driver.titleSelector ? productCardElement.querySelector(driver.titleSelector)?.textContent.trim() : null)
+   ?? productCardElement.querySelector('img[alt]')?.alt.trim()
+   ?? productCardElement.querySelector('a')?.getAttribute('aria-label')
+   ?? "Unknown Product";
 
   const price = null;
 

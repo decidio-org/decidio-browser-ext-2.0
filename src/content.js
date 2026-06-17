@@ -1,10 +1,9 @@
 /**
- * ====================================================
- * Content.js file is the main controller file that sets up state, listens
- * for Chrome messages, tracks the mouse, and handles event listeners.
- * ====================================================
+ * ===========================
+ * Main controller file that sets up state, listens for chrome
+ * messages, tracks mouse, and handles event listeners.
+ * =========================
  */
-
 
 /**
  * Initialization and DOM (document object model) setup section
@@ -24,14 +23,13 @@ document.body.appendChild(hoverBadge);
 let isExtensionActive = false; // On/off tracker
 let lastClientX = 0;
 let lastClientY = 0;
-
+let currentTargetCard = null; // Keeps track of the targeted product context matching the badge
 
 // Check storage on page load ---
 chrome.storage.local.get({ isExtensionActive: false }, (data) => {
   isExtensionActive = data.isExtensionActive;
   if (isExtensionActive) {
     console.log("decidio. AUTO-ACTIVATED on page load/navigation");
-    handleInitialPageLayout();
   }
 });
 
@@ -42,7 +40,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (isExtensionActive) {
       console.log("decidio. is now ACTIVE");
-      handleInitialPageLayout();
     } else {
       console.log("decidio. is now INACTIVE");
 
@@ -52,7 +49,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       hideHoverElements();
     }
-    sendResponse({nextState: isExtensionActive });
+    sendResponse({ nextState: isExtensionActive });
   }
   return true;
 });
@@ -64,13 +61,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Track mouse movement
 document.addEventListener('mousemove', (e) => {
   if (!isExtensionActive) return;
-  
-  // Don't track mouse or show search badge if we are on an active product page
-  const driver = getActiveDriver();
-  if (driver && typeof driver.isProductPage === 'function' && driver.isProductPage()) {
-    hideHoverElements();
-    return;
-  }
 
   lastClientX = e.clientX;
   lastClientY = e.clientY;
@@ -82,12 +72,6 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('scroll', () => {
   if (!isExtensionActive) return;
 
-  // Exit early if we are on a product page so scroll math doesn't conflict
-  const driver = getActiveDriver();
-  if (driver && typeof driver.isProductPage === 'function' && driver.isProductPage()) {
-    return; 
-  }
-
   // Calculates what element has scrolled beneath the mouse
   const elementUnderCursor = document.elementFromPoint(lastClientX, lastClientY);
   if (elementUnderCursor) {
@@ -97,21 +81,18 @@ document.addEventListener('scroll', () => {
 
 // Checks whether the element beneath the cursor is a "target"
 function evaluateBadgeState(targetElement, clientX, clientY) {
-  // Edge-case for clearing the hover elements when on the product card
+  // Edge-case for clearing the hover elements when on the product card or extension interface
   if (
     targetElement.closest('#decidio-root') || 
-    targetElement.closest('.product-card')
+    targetElement.closest('.product-card') ||
+    targetElement.classList.contains('decidio-hover-badge')
   ) {
-    hideHoverElements();
     return;
   }
 
   const driver = getActiveDriver();
   let clickableCard = null;
 
-
-
-  // ---- May need change after merge
   if (driver && driver.productItemSelector) {
     clickableCard = targetElement.closest(driver.productItemSelector);
   }
@@ -121,15 +102,17 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
     clickableCard = driver.fallbackFinder(targetElement);
   }
 
-
   // Make sure there is inner text characters
   const hasText = targetElement.innerText && targetElement.innerText.trim().length > 0;
   
   if (clickableCard && hasText) {
-    // The decidio. badge by the mouse
+    // Lock the global target reference for extraction synchronization
+    currentTargetCard = clickableCard;
+    
+    // The decidio. badge by the mouse TEMPORARY MAY MAKE IT INVISIBLE????
     hoverBadge.classList.add('visible');
-    hoverBadge.style.left = `${clientX + 15}px`; 
-    hoverBadge.style.top = `${clientY + 15}px`;
+    hoverBadge.style.left = `${clientX - 20}px`; 
+    hoverBadge.style.top = `${clientY - 10}px`;
   } else {
     hideHoverElements();
   }
@@ -138,7 +121,6 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
 function hideHoverElements() {
   hoverBadge.classList.remove('visible');
 }
-
 
 /**
  * Dealing with clicks and interaction section
@@ -150,9 +132,8 @@ document.addEventListener('mouseleave', () => {
 });
 
 // Clicking logic for the overlay cards
-document.addEventListener('click', (e) => {
+document.body.addEventListener('click', (e) => {
   if (!isExtensionActive) return;
-
 
   // x button on the overlay card
   if (e.target.classList.contains('close-button')) {
@@ -173,52 +154,77 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // INTERCEPT CLICKS ONLY ON HOVER BADGE
   if (e.target.classList.contains('decidio-hover-badge')) {
     e.preventDefault();
     e.stopPropagation();
+    
+    if (currentTargetCard) {
+      handleBadgeActivation(currentTargetCard, e.pageX, e.pageY);
+    }
     return;
   }
-
-  // Get the config rule again for the click listener
-  const driver = getActiveDriver();
-
-  // If we are on a product page, don't allow search-click rules to override anything
-  if (driver && typeof driver.isProductPage === 'function' && driver.isProductPage()) {
-    return;
-  }
+}, true);
 
 
+/**
+ * DOM CAPTURE LAYER: Extraction & Pipelines
+ */
+function handleBadgeActivation(productCardElement, appendX, appendY) {
+  const driver = getActiveDriver() || {};
 
-  let isProductCard = null;
-  // Attempt to locate container using structural selectors
-  if (driver && driver.productItemSelector) {
-    isProductCard = e.target.closest(driver.productItemSelector);
-  }
-  
-  // If missed, engage scoring
-  if (!isProductCard && driver && typeof driver.fallbackFinder === 'function') {
-    console.log("Strict selector missed. Activating Heuristic Scoring Engine...");
-    isProductCard = driver.fallbackFinder(e.target);
-  }
-
-
-
-  // If the user clicked a random whitespace on the screen
-  if (!isProductCard) {
-    return;
-  }
-
-  // Stop browser navigation for the product card
-  e.preventDefault();
-  e.stopImmediatePropagation();
-
-  // Cap the user at max 5 concurrent open cards (Review??)
+  // Cap the user at max 5 concurrent open cards
   const activeCards = document.querySelectorAll('.product-card');
   if (activeCards.length >= 5) {
-    alert("You've reached the maximum limit of 5 product overlays. Close one to add another..");
+    alert("You've reached the maximum limit of 5 product overlays. Close one to add another.");
     return;
   }
 
+  // EXTRACT THE GENUINE PRODUCT PAGE URL FROM THE CARD
+  // Fallback pattern: Find active driver links, fallback to any anchor inside the card
+  const anchorElement = driver.titleSelector ? productCardElement.querySelector(driver.titleSelector)?.closest('a') : null;
+  const productUrlAnchor = anchorElement || productCardElement.querySelector('a');
+  const targetProductUrl = productUrlAnchor ? productUrlAnchor.href : null;
+
+  if (!targetProductUrl || !targetProductUrl.startsWith('http')) {
+    console.error("Decidio. could not find a valid product page URL inside this card framework.");
+    return;
+  } else {
+    console.log(`URL EXTRACTION SUCCESS:\n${targetProductUrl}\n`);
+
+    navigator.clipboard.writeText(targetProductUrl).catch(() => {});
+  }
+
+  // Scrape Card Metadata
+  const productTitle = getTitleFromSchema()
+    ?? productCardElement.querySelector('[itemprop="name"]')?.textContent.trim()
+    ?? (driver.titleSelector ? productCardElement.querySelector(driver.titleSelector)?.textContent.trim() : null)
+    ?? productCardElement.querySelector('img[alt]')?.alt.trim()
+    ?? productCardElement.querySelector('a')?.getAttribute('aria-label')
+    ?? "Unknown Product";
+
+  const price = null;
+
+  // Build Request Payload Object
+  const rawScrapePayload = {
+    product_type: "unknown",
+    name: productTitle,
+    price: price,
+    url: targetProductUrl,
+    raw_specs: {},
+    raw_features: []
+  };
+
+
+  // ==========================================
+  // TEMPORARY TESTING BLOCK FOR CONSOLE
+  // ==========================================
+  console.log("%c TARGET URL INTERCEPTED BY DECIDIO:", "color: #a855f7; font-weight: bold;");
+  console.log(`URL: ${targetProductUrl}`);
+  // ==========================================
+
+
+  // UI RENDERING: Instantiate and pin container immediately in loading status mode
   const productTitle =
   (typeof driver.extractTitle === 'function'
     ? driver.extractTitle(isProductCard)
@@ -237,90 +243,78 @@ document.addEventListener('click', (e) => {
 
   // Build the product card
   const card = createExtenCard(productTitle, false);
-
+  card.classList.add('is-loading'); // Engages loading screen spinner styles
   document.body.appendChild(card);
-  aiFetch(card, productTitle);
-  positionCardSafely(card, e.pageX - 20, e.pageY + 15, false);
+  positionCardSafely(card, appendX - 20, appendY + 15, false);
   hideHoverElements();
-}, true);
 
-// Part of keeping the card from being somewhere you can't see/reach the close button
-window.addEventListener('resize', () => {
-  if (!isExtensionActive) return;
-  const activeCards = document.querySelectorAll('.product-card');
-  activeCards.forEach(card => {
-    // Only recalculate bounds if it's in fixed viewport mode. 
-    // Absolute cards are already anchored safely to the page body layout flow!
-    if (card.classList.contains('product-page-mode')) {
-      const currentLeft = parseInt(card.style.left) || 0;
-      const currentTop = parseInt(card.style.top) || 0;
-      positionCardSafely(card, currentLeft, currentTop, true);
-    }
-  });
-});
-
-
-
+  // Route to pipeline coordinator
+  executeHarmonizationPipeline(card, rawScrapePayload);
+}
 
 /**
- * Contacts background service worker for AI product specifications
- * and turns off the card loader animation once received.
+ * RECEIVE & RENDER CANONICAL SPEC JSON
  */
-function aiFetch(cardElement, productTitle) {
-  chrome.runtime.sendMessage({ action: "fetchProductSpecs", title: productTitle }, async (response) => {
+function executeHarmonizationPipeline(cardElement, payload) {
+  const overlayMain = cardElement.querySelector('.overlay-main');
+  const loader = cardElement.querySelector('.card-loader');
+  const descElement = cardElement.querySelector('.desc');
+
+  if (descElement) descElement.style.display = 'none';
+
+  // REQUEST BUILDER: Send payload via background
+  chrome.runtime.sendMessage({ action: "PROCESS_PRODUCT_PIPELINE", payload: payload }, (response) => {
     
-    const overlayMain = cardElement.querySelector('.overlay-main');
-    const loader = cardElement.querySelector('.card-loader');
-
-    // Target the description paragraph in your card
-    const descElement = cardElement.querySelector('.desc');
-    
-
-
-    // Remove loading indicator immediately
+    // Clear Loading Architecture Flags
     cardElement.classList.remove('is-loading');
     if (loader) loader.style.display = 'none';
 
-    // Clear or hide the default description paragraph so it doesn't crowd the card 
-    // since we only want to show the specifications
-    if (descElement) descElement.style.display = 'none';
+    if (chrome.runtime.lastError || !response || response.error) {
+      console.error("Decidio error fallback triggered:", chrome.runtime.lastError || response?.error);
+      renderErrorState(overlayMain, response?.error || "Pipeline request failed.");
+      return;
+    }
 
     try {
-      let aiResult;
-
-      if (response && response.specs) {
-        if (typeof response.specs === 'string') {
-          aiResult = JSON.parse(response.specs);
-        } else {
-          aiResult = response.specs;
-        }
-      } else {
-        throw new Error("No data received.");
-      }
-
-      // Create a specific container for the table typing system with a scroll limit
-      const aiDisplay = document.createElement('div');
-      aiDisplay.className = 'ai-display-container';
+      const canonicalData = response.data;
+      // Inject standard template layout container
+      const specDisplay = cardElement.querySelector('.ai-display-container');
       
-      // Max-height ensures a long spec list doesn't overflow off the screen layout.
-      aiDisplay.style.cssText = 'max-height: 320px; overflow-y: auto; margin-top: 10px; padding-right: 4px;';
-      overlayMain.appendChild(aiDisplay);
-
-      // Extract the nested "Specs" directly, skipping URL, Description, Visuals, etc.
-      if (aiResult && aiResult.Specs) {
-        await renderSpecsTable(aiDisplay, aiResult.Specs);
-      } else {
-        aiDisplay.innerHTML = "<p style='color: #888; font-size: 13px; text-align: center;'>No technical specifications found.</p>";
-      }
-
-    } catch (err) {
-        console.error("Decidio. data processing error:", err);
-        if (overlayMain) {
-          const errorMsg = document.createElement('p');
-          errorMsg.style.cssText = 'color: #ff4d4d; font-size: 13px; font-weight: bold; margin-top: 10px;';
-          errorMsg.textContent = "Error loading product data specs.";
-          overlayMain.appendChild(errorMsg);
-        }
+      requestAnimationFrame(() => {
+        renderCanonicalSpecs(specDisplay, canonicalData);
+      });
+    } catch (parseError) {
+      console.error("Layout processing exception:", parseError);
+      renderErrorState(overlayMain, "Failed parsing system parameters safely.");
     }
   });
+}
+
+/**
+ * Fallback Renderer if components.js is not loaded
+ */
+function renderTiersUIFallback(container, rawJsonPayload) {
+  const specs = rawJsonPayload.Specs || rawJsonPayload.specs || {};
+  let rowsHtml = '';
+  
+  for (const [key, valueArray] of Object.entries(specs)) {
+    const displayValue = Array.isArray(valueArray) ? valueArray.join(', ') : (valueArray || '—');
+    rowsHtml += `
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.08);">
+        <td class="fade-key" style="padding: 6px 4px; text-align: left;">${key}</td>
+        <td class="fade-value" style="padding: 6px 4px; text-align: right;">${displayValue}</td>
+      </tr>
+    `;
+  }
+
+  container.innerHTML = `<table>${rowsHtml}</table>`;
+}
+
+function renderErrorState(container, message) {
+  container.innerHTML = `
+    <div class="decidio-error-wrapper" style="padding: 10px; color: #ef4444; font-size: 13px; text-align: center;">
+      <p style="font-weight: bold; margin: 0 0 4px 0;">Harmonization Error</p>
+      <p style="margin: 0; color: #ba9393;">${message}</p>
+    </div>
+  `;
 }

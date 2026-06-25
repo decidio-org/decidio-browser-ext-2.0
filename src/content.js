@@ -176,7 +176,7 @@ function handleBadgeActivation(productCardElement, appendX, appendY) {
   // Cap the user at max 5 concurrent open cards
   const activeCards = document.querySelectorAll('.product-card');
   if (activeCards.length >= 5) {
-    alert("You've reached the maximum limit of 5 product overlays. Close one to add another.");
+    alert("You've reached the maximum limit of 5 decidio. cards. Close one to add another.");
     return;
   }
 
@@ -207,7 +207,7 @@ function handleBadgeActivation(productCardElement, appendX, appendY) {
 
   // Build Request Payload Object
   const rawScrapePayload = {
-    product_type: "unknown",
+    product_type: "Unknown",
     name: productTitle,
     price: price,
     url: targetProductUrl,
@@ -215,33 +215,7 @@ function handleBadgeActivation(productCardElement, appendX, appendY) {
     raw_features: []
   };
 
-
-  // ==========================================
-  // TEMPORARY TESTING BLOCK FOR CONSOLE
-  // ==========================================
-  console.log("%c TARGET URL INTERCEPTED BY DECIDIO:", "color: #a855f7; font-weight: bold;");
-  console.log(`URL: ${targetProductUrl}`);
-  // ==========================================
-
-
   // UI RENDERING: Instantiate and pin container immediately in loading status mode
-  const productTitle =
-  (typeof driver.extractTitle === 'function'
-    ? driver.extractTitle(isProductCard)
-    : null)
-  ?? getTitleFromSchema()
-  ?? isProductCard.querySelector('[itemprop="name"]')?.textContent.trim()
-  ?? isProductCard.querySelector(driver.titleSelector)?.textContent.trim()
-  ?? (() => {
-      const alt = isProductCard.querySelector('img[alt]')?.alt.trim();
-      return alt && alt.length > 5 ? alt : null;
-    })()
-  ?? isProductCard.querySelector('a[aria-label]')?.getAttribute('aria-label')?.trim()
-  ?? isProductCard.querySelector('a[title]')?.getAttribute('title')?.trim()
-  ?? getLongestTextNode(isProductCard)
-  ?? "Unknown Product";
-
-  // Build the product card
   const card = createExtenCard(productTitle, false);
   card.classList.add('is-loading'); // Engages loading screen spinner styles
   document.body.appendChild(card);
@@ -277,37 +251,14 @@ function executeHarmonizationPipeline(cardElement, payload) {
 
     try {
       const canonicalData = response.data;
-      // Inject standard template layout container
-      const specDisplay = cardElement.querySelector('.ai-display-container');
-      
       requestAnimationFrame(() => {
-        renderCanonicalSpecs(specDisplay, canonicalData);
+        renderCanonicalSpecs(cardElement, canonicalData);
       });
     } catch (parseError) {
       console.error("Layout processing exception:", parseError);
       renderErrorState(overlayMain, "Failed parsing system parameters safely.");
     }
   });
-}
-
-/**
- * Fallback Renderer if components.js is not loaded
- */
-function renderTiersUIFallback(container, rawJsonPayload) {
-  const specs = rawJsonPayload.Specs || rawJsonPayload.specs || {};
-  let rowsHtml = '';
-  
-  for (const [key, valueArray] of Object.entries(specs)) {
-    const displayValue = Array.isArray(valueArray) ? valueArray.join(', ') : (valueArray || '—');
-    rowsHtml += `
-      <tr style="border-bottom: 1px solid rgba(255,255,255,0.08);">
-        <td class="fade-key" style="padding: 6px 4px; text-align: left;">${key}</td>
-        <td class="fade-value" style="padding: 6px 4px; text-align: right;">${displayValue}</td>
-      </tr>
-    `;
-  }
-
-  container.innerHTML = `<table>${rowsHtml}</table>`;
 }
 
 function renderErrorState(container, message) {

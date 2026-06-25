@@ -1,3 +1,4 @@
+import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -5,49 +6,64 @@ app = Flask(__name__)
 # Enable CORS so extension can talk to localhost:8000
 CORS(app)
 
+# This section needs review.......
 @app.route('/classify', methods=['POST'])
 def classify_product():
     data = request.json
     print("\n--- [BACKEND LOG] CLASSIFY ENDPOINT HIT ---")
     print(f"Product Name: {data.get('name')}")
+    print(f"Product URL: {data.get('url')}")
 
-    # Extract the text the extension sent over
-    scraped_text = data.get('raw_webpage_text', '')
-    print(f"Scraped Text Length: {len(scraped_text)} characters")
-    
-    # Prints the actual text to the terminal
-    print("\n--- VISIBLE TEXT CAPTURED BY EXTENSION ---")
-    print(scraped_text[:1000]) # Prints the first 1000 characters
-    print("-------------------------------------------\n")
-    
-    # Save it to a file so you can copy/paste it into ai manually
-    # I feel like this would make testing easier without spending gemini tokens (yet)
-    with open("scraped_dump.txt", "w", encoding="utf-8") as f:
-        f.write(scraped_text)
-        
-    print("Saved raw text to 'scraped_dump.txt'!")
+    # Pull variables out safely with fallbacks
+    url = data.get('url')
+    images = data.get('images', [])
+    name = data.get('name')
+    brand = data.get('brand') or ""  # Extracted if provided, otherwise empty
+    price_obj = data.get('price', { "amount": 0.0, "currency": "USD" })
+    raw_specs = data.get('raw_specs', {})
+    raw_features = data.get('raw_features', [])
 
-    # We will pretend it's a known product type to trigger the harmonizer next
-    return jsonify({"product_type": "laptop"})
+    # Construct the JSON structure
+    json_dump_payload = {
+        "url": url,
+        "images": images,
+        "product_type": "clothing",  # Or whatever classification
+        "name": name,
+        "brand": brand,
+        "price": price_obj,
+        "raw_specs": raw_specs,
+        "raw_features": raw_features
+    }
 
+    # Save it into a JSON file
+    with open("scraped_dump.json", "w", encoding="utf-8") as f:
+        json.dump(json_dump_payload, f, indent=2, ensure_ascii=False)
+
+    # Return "clothing" so types line up
+    return jsonify({"product_type": "clothing", "confidence": 0.98})
+
+
+# I believe this whole section can be deleted....
 @app.route('/harmonize', methods=['POST'])
 def harmonize_product():
     data = request.json
     print("\n--- [BACKEND LOG] HARMONIZE ENDPOINT HIT ---")
+    print(f"Processing payload for product type: {data.get('product_type')}")
     
-    # Here is the layout components.js expects
-    # Price is wrapped in an array [ ] so .join() won't crash.
+    # Here is the layout that is expected
     mock_canonical_response = {
-        "Category": "Laptop",
-        "Name": f"Harmonized: {data.get('name')}",
-        "Specs": {
-            "Price": ["$1,299.00"],
-            "Processor": "Apple M3 Chip",
-            "Memory": "16GB Unified RAM",
-            "Storage": "512GB SSD",
-            "Display": "14.2-inch Liquid Retina"
-        }
+        "product_type": data.get('product_type', 'clothing'),
+        "attributes": {
+            "Brand":            { "value": data.get('brand') or "PacSun", "tier": "required" },
+            "Model":            { "value": data.get('name'), "tier": "required" },
+            "Price":            { "value": data.get('price'), "tier": "required" }, # Matches the {amount, currency} object shape
+            "Processor":        { "value": "N/A", "raw_value": "N/A", "tier": "optional" },
+            "Memory":           { "value": "N/A", "raw_value": "N/A", "tier": "optional" },
+            "Storage":          { "value": "N/A", "raw_value": "N/A", "tier": "optional" }
+        },
+        "missing_required": [] 
     }
+    print("Sending official schema payload back to extension.")
     return jsonify(mock_canonical_response)
 
 if __name__ == '__main__':

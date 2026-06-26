@@ -25,8 +25,8 @@
 
 .product-card {
     position: absolute;
-    width: 360px; /* Few pixel difference from whatfont*/
-    height: 310px;
+    width: 350px;
+    height: 300px;
     padding: 16px 18px;
     
     /* Semi-transparent look */
@@ -82,12 +82,14 @@
 /* Top right */
 .close-button {
     position: absolute;
-    top: 6px;
-    right: 10px;
+    top: 16px;
+    right: 16px;
+
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.6);
     font-size: 22px;
+
     cursor: pointer;
     padding: 0;
     line-height: 1;
@@ -111,10 +113,19 @@
 }
 
 .title {
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 16px;
+    font-weight: 400;
     margin: 0 0 4px 0;
     color: #fff;
+
+    padding-right: 55px; 
+    box-sizing: border-box;
+
+    display: block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .desc {
@@ -137,33 +148,85 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-
     margin-top: 4px;
 }
 
 .actions {
     display: flex;
-    gap: 6px;
+    gap: 12px;
 }
 
-/* Possible mix with word and symbol? Or just text in the button*/
 .actions .button {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
-    padding: 6px 4px;
-    font-size: 10px;
+    background: transparent;
+    border: none;
+    padding: 4px 0;
+    color: #ffffff;
+
+    font-size: 13px;
     border-radius: 6px;
+
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    white-space: nowrap;
 }
 
+/* Creating the outer circle */
+.circle-plus {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ffffff; 
+    border-radius: 50%;
+    box-sizing: border-box;
+    
+    /* Position relative allows us to place the crossbars in the center */
+    position: relative; 
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+/* The horizontal bar of the plus */
+.circle-plus::before {
+    content: '';
+    position: absolute;
+    background-color: #ffffff;
+    
+    /* Dimensions of the bar */
+    width: 6px;
+    height: 2px;
+    
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* The vertical bar of the plus */
+.circle-plus::after {
+    content: '';
+    position: absolute;
+    background-color: #ffffff;
+    
+    /* Dimensions of the bar */
+    width: 2px;
+    height: 6px;
+    
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Subtle hover effect */
 .actions .button:hover {
-    background: rgba(255,255,255,0.14);
+    opacity: 0.8;
 }
 
 .logo {
     align-self: flex-end;
     font-size: 19px;
     font-weight: bold;
-    color: #0066cc;
+    color: #3A6FAC;
     line-height: 1;
     margin-top: -2px;
 }
@@ -292,8 +355,8 @@
 }
 
 .fade-key {
-    color: #e25822;
-    font-size: 13px;
+    color: #DE542B;
+    font-size: 12px;
     font-weight: 500;
 
     display: block;
@@ -307,7 +370,7 @@
 
 .fade-value {
     color: #ffffff;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: bold;
 
     display: block;

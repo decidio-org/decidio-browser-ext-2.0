@@ -52,9 +52,20 @@ function createExtenCard(title) {
 
       <div class="footer">
           <div class="actions">
-              <button class="button">Add Recent</button>
-              <button class="button">Add New</button>
-              <button class="button">Add to Existing</button>
+              <button class="button" id="btn-add-new">
+            <span class="circle-plus"></span>
+            New List
+        </button>
+        
+        <button class="button" id="btn-add-existing">
+            <span class="circle-plus"></span>
+            Existing List
+        </button>
+        
+        <button class="button" id="btn-add-recent">
+            <span class="circle-plus"></span>
+            Aldo's Office Lights
+        </button>
           </div>
           <span class="logo">d.</span>
       </div>

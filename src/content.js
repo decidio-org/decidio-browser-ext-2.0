@@ -109,10 +109,10 @@ function evaluateBadgeState(targetElement, clientX, clientY) {
     // Lock the global target reference for extraction synchronization
     currentTargetCard = clickableCard;
     
-    // The decidio. badge by the mouse TEMPORARY MAY MAKE IT INVISIBLE????
+    // The decidio. badge by the mouse
     hoverBadge.classList.add('visible');
     hoverBadge.style.left = `${clientX - 20}px`; 
-    hoverBadge.style.top = `${clientY - 10}px`;
+    hoverBadge.style.top = `${clientY - 35}px`;
   } else {
     hideHoverElements();
   }
@@ -154,15 +154,58 @@ document.body.addEventListener('click', (e) => {
     return;
   }
 
-  // INTERCEPT CLICKS ONLY ON HOVER BADGE
-  if (e.target.classList.contains('decidio-hover-badge')) {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (currentTargetCard) {
-      handleBadgeActivation(currentTargetCard, e.pageX, e.pageY);
+  // Skip extension's internal UI clicks so they still work perfectly
+  if (e.target.closest('#decidio-root') || e.target.closest('.product-card') || e.target.classList.contains('decidio-hover-badge')) {
+    return; 
+  }
+
+  // Grab the active driver rules
+  const driver = getActiveDriver();
+  let clickedProductCard = null;
+
+  // Use the driver's specific selector to see if a product card was clicked
+  if (driver && driver.productItemSelector) {
+    clickedProductCard = e.target.closest(driver.productItemSelector);
+  }
+
+  // If the strict selector missed it, use heuristic fallback
+  if (!clickedProductCard && driver && typeof driver.fallbackFinder === 'function') {
+    clickedProductCard = driver.fallbackFinder(e.target);
+  }
+
+  // If we successfully matched a product card via the driver...
+  if (clickedProductCard) {
+    console.log("User clicked directly on a driver-verified product card!");
+
+    // Extract the URL using the driver's layout rules
+    let destinationUrl = null;
+
+    // If they clicked directly on or inside a link, grab that first
+    const directLink = e.target.closest('a[href]');
+    if (directLink) {
+      destinationUrl = directLink.href;
+    } else if (driver.titleSelector) {
+      // Otherwise, use the driver's title selector to find the anchor link inside the card
+      const titleAnchor = clickedProductCard.querySelector(driver.titleSelector)?.closest('a') 
+                || clickedProductCard.querySelector(driver.titleSelector)?.querySelector('a');
+      if (titleAnchor) destinationUrl = titleAnchor.href;
     }
-    return;
+
+    // Ultimate fallback if the driver's structural link isn't found
+    if (!destinationUrl) {
+      const fallbackAnchor = clickedProductCard.querySelector('a[href]');
+      if (fallbackAnchor) destinationUrl = fallbackAnchor.href;
+    }
+
+    // You now have the exact product URL directly from the driver
+    if (destinationUrl && destinationUrl.startsWith('http')) {
+      console.log(`[Driver Match Success] Grabbed URL: ${destinationUrl}`);
+
+      e.preventDefault(); 
+      e.stopPropagation();
+
+      handleBadgeActivation(clickedProductCard, destinationUrl, e.pageX, e.pageY);
+    }
   }
 }, true);
 
@@ -170,7 +213,7 @@ document.body.addEventListener('click', (e) => {
 /**
  * DOM CAPTURE LAYER: Extraction & Pipelines
  */
-function handleBadgeActivation(productCardElement, appendX, appendY) {
+function handleBadgeActivation(productCardElement, targetProductUrl, appendX, appendY) {
   const driver = getActiveDriver() || {};
 
   // Cap the user at max 5 concurrent open cards
@@ -180,20 +223,7 @@ function handleBadgeActivation(productCardElement, appendX, appendY) {
     return;
   }
 
-  // EXTRACT THE GENUINE PRODUCT PAGE URL FROM THE CARD
-  // Fallback pattern: Find active driver links, fallback to any anchor inside the card
-  const anchorElement = driver.titleSelector ? productCardElement.querySelector(driver.titleSelector)?.closest('a') : null;
-  const productUrlAnchor = anchorElement || productCardElement.querySelector('a');
-  const targetProductUrl = productUrlAnchor ? productUrlAnchor.href : null;
-
-  if (!targetProductUrl || !targetProductUrl.startsWith('http')) {
-    console.error("Decidio. could not find a valid product page URL inside this card framework.");
-    return;
-  } else {
-    console.log(`URL EXTRACTION SUCCESS:\n${targetProductUrl}\n`);
-
-    navigator.clipboard.writeText(targetProductUrl).catch(() => {});
-  }
+  navigator.clipboard.writeText(targetProductUrl).catch(() => {});
 
   // Scrape Card Metadata
   const productTitle = getTitleFromSchema()

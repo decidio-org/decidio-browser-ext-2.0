@@ -39,7 +39,7 @@ function createExtenCard(title) {
               <span></span><span></span><span></span><span></span>
               <span></span><span></span><span></span><span></span>
           </div>
-          <div class="loader-text">Analyzing specs with decidio. Intelligence...</div>
+          <div class="loader-text">Gathering insights...</div>
       </div>
 
       <button class="close-button">&times;</button>

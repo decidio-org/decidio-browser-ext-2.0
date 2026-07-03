@@ -7,7 +7,7 @@
 /* The text badge trailing the cursor */
 .decidio-hover-badge {
     position: fixed;
-    pointer-events: auto !important;
+    pointer-events: none;
     cursor: pointer !important;
     z-index: 999999;
     display: none;
@@ -78,6 +78,49 @@
     pointer-events: none;
 }
 
+
+
+/* Define the fade-in keyframes */
+@keyframes fadeInTitle {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInFooter {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+/* After 2 seconds, fade in the title */
+.product-card.is-loading .title {
+    animation: fadeInTitle 0.5s ease-out 2s forwards; 
+}
+
+/* After 4 seconds (2s after the title), fade in the footer buttons */
+.product-card.is-loading .footer {
+    animation: fadeInFooter 0.5s ease-out 4s forwards;
+}
+
+/* Safety net: Clear the text immediately the moment a new load starts */
+.product-card.loaded .title,
+.product-card.loaded .footer {
+    opacity: 1;
+    transform: translateY(0);
+    animation: none !important;; /* No waiting, hide them instantly */
+    transition: none !important;;     /* Turn off transitions so they disappear instantly */
+}
+
 /* --------- Card Layout ------------ */
 /* Top right */
 .close-button {
@@ -126,6 +169,9 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+
+    opacity: 0;
+    transform: translateY(-10px); /* Subtle slide down effect */
 }
 
 .desc {
@@ -149,6 +195,9 @@
     flex-direction: column;
     gap: 10px;
     margin-top: 4px;
+
+    opacity: 0;
+    transform: translateY(10px); /* Subtle slide up effect */
 }
 
 .actions {
@@ -197,6 +246,7 @@
     width: 6px;
     height: 2px;
     
+    /* Dead-center positioning calculations */
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -208,10 +258,11 @@
     position: absolute;
     background-color: #ffffff;
     
-    /* Dimensions of the bar */
+    /* Dimensions of the bar (swapped width/height) */
     width: 2px;
     height: 6px;
     
+    /* Dead-center positioning calculations */
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -239,8 +290,9 @@
 .card-loader {
     position: absolute;
     inset: 0;
-    background: rgba(18, 18, 20); /* Dark tint to mask content underneath */
-    
+    background: rgba(20, 20, 22, 0.65);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     
     /* Centering the spinner and text */
     display: none; /* Hidden by default */

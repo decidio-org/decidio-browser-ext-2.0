@@ -3,7 +3,7 @@
  * from content.js
  */
 
-importScripts('scraper.js');
+importScripts('scraper_utils.js', 'scraper_shopify.js', 'scraper.js');
 
 
 // Listen for messages from content.js

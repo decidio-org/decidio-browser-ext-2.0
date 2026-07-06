@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { width: 240px; font-family: sans-serif; padding: 12px; margin: 0; background: #08090a; color: #fff; }
+    .blue-dot {
+      color: #3A6FAC;
+      font-weight: bold;
+    }
+    input { width: 100%; padding: 6px; margin: 4px 0 10px 0; box-sizing: border-box; }
+    .btn-group { display: flex; gap: 8px; }
+    button { flex: 1; padding: 8px; color: #fff; border: none; cursor: pointer; font-weight: 600; }
+    #loginBtn { background: #25272b; border: 1px solid rgba(255,255,255,0.1); }
+    #signupBtn { background: #3a6fac; }
+    #status { font-size: 11px; margin-top: 10px; color: #8a8f98; text-align: center; }
+  </style>
+</head>
+<body>
+  <h3>Decidio<span class="blue-dot">.</span> Log-In</h3>
+  <label>Email</label>
+  <input type="email" id="email" placeholder="you@example.com" />
+  
+  <label>Password</label>
+  <input type="password" id="password" />
+
+  <div class="btn-group">
+    <button id="loginBtn">LogIn</button>
+    <button id="signupBtn">SignUp</button>
+  </div>
+  
+  <div id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

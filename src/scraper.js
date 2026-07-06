@@ -30,7 +30,7 @@ async function orchestrateProductPipeline(payload) {
       waitForTabComplete(scraperTab.id),
       new Promise(resolve => setTimeout(resolve, 4000))
     ]);
-
+ 
     // Dynamically pick between standard extraction or Shopify driver
     const isShopifySite = targetUrl.includes('myshopify') || payload.isShopify;
     const extractionFunction = isShopifySite ? runShopifyExtractionScript : runDomExtractionScript;
@@ -87,30 +87,94 @@ async function orchestrateProductPipeline(payload) {
   const finalizedCanonicalJson = {
     product_type: "Unknown", // TO DO: Use fetchProductClassification later
     name: payload.name || "Unknown",
+    brand: payload.brand || null,
     price: payload.price || { amount: 0.00, currency: "USD" },
     raw_specs: payload.raw_specs || {},
     raw_features: payload.raw_features || [],
-    images: payload.images || []
+    raw_sections: {
+      webpage_text: payload.raw_webpage_text || "",
+      images: payload.images || []
+    },
+    source_url: targetUrl
   };
 
-  if (finalizedCanonicalJson) {
-    finalizedCanonicalJson._debugJsonLd = extractedJsonLd;
-    await chrome.storage.local.set({ [targetUrl]: finalizedCanonicalJson });
-    
-    // TO DO: callHarmonizeEndpoint(finalizedCanonicalJson.product_type, finalizedCanonicalJson) ? Outdated
-  }
 
-  return finalizedCanonicalJson;
+  try {
+    // Push data to the API ingestion path without blocking
+    await callIngestEndpoint(finalizedCanonicalJson).catch(err => {
+      console.warn("decidio: API Ingestion failed/bypassed, continuing to UI rendering:", err);
+    });
+    
+    // Cache a tracking status locally
+    await chrome.storage.local.set({ 
+      [targetUrl]: { status: "ingested", timestamp: Date.now() } 
+    });
+    
+    // Merge success flag directly with scraped data
+    return { 
+      success: true, 
+      message: "Product data offloaded.",
+      ...finalizedCanonicalJson 
+    }; 
+    
+  } catch (apiError) {
+    console.error("decidio: Critical pipeline failure fallback:", apiError);
+    return {
+      success: false,
+      message: "Operating in offline mode.",
+      ...finalizedCanonicalJson
+    };
+  }
 }
 
 /**
- * FUTURE WORK BLOCKS
+ * Upload scraped product to backend
  */
-/* async function fetchProductClassification(payload) {
-  // Classification logic here
-} 
+async function callIngestEndpoint(payload) {
 
-async function callHarmonizeEndpoint(productType, payload) {
-  // Harmonization logic here
-} 
-*/
+  const API_URL =
+    "https://decidio-api-production.up.railway.app";
+
+  const { jwtToken } =
+    await chrome.storage.local.get("jwtToken");
+
+  const activeToken =
+    jwtToken ||
+    (typeof JWT_TOKEN !== "undefined"
+      ? JWT_TOKEN
+      : null);
+
+  if (!activeToken) {
+    throw new Error(
+      "Missing authentication token."
+    );
+  }
+
+  // Map the local payload to match schema fields
+  const apiRequestBody = {
+    product_type: payload.product_type || "Unknown",
+    name: payload.name || "Unknown",
+    brand: payload.brand || null,
+    price: payload.price || { amount: 0.0, currency: "USD" },
+    raw_specs: payload.raw_specs || {},
+    raw_features: payload.raw_features || [],
+    raw_sections: payload.raw_sections || {},
+    source_url: payload.source_url || null
+  };
+
+  // Fire to the products endpoint
+  const response = await fetch(`${API_URL}/api/products/preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${activeToken}` // Injecting the live token securely
+    },
+    body: JSON.stringify(apiRequestBody)
+  });
+
+  if (!response.ok) {
+    throw new Error(`API Ingestion responded with code: ${response.status}`);
+  }
+
+  return await response.json();
+}

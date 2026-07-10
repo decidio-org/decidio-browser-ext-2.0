@@ -226,13 +226,26 @@ async function renderCanonicalSpecs(cardElement, rawJsonPayload) {
     ? `${priceCurrency === 'USD' ? '$' : priceCurrency + ' '}${priceAmount}` 
     : "—";
 
-  // Map dynamic backend raw_specs to custom layout array
-  const rawSpecsMap = rawJsonPayload.raw_specs || {};
-  // Collect all other specs except Price
-  const otherSpecs = Object.entries(rawSpecsMap)
+  let cleanSpecs = {};
+  
+  if (rawJsonPayload.harmonized && Object.keys(rawJsonPayload.harmonized).length > 0) {
+    // Merge harmonized and faded specs into one view block
+    cleanSpecs = { 
+      ...rawJsonPayload.harmonized, 
+      ...rawJsonPayload.faded 
+    };
+  } else {
+    // Fallback just in case the ML endpoint was offline
+    cleanSpecs = rawJsonPayload.raw_specs || {};
+  }
+
+  // Map these smart specs to your custom layout array
+  const otherSpecs = Object.entries(cleanSpecs)
     .map(([key, val]) => ({
       label: key,
-      val: Array.isArray(val) ? val.join(", ") : String(val)
+      val: Array.isArray(val) ? val.join(", ") : String(val),
+      // Pass a flag if it's a faded/suggested spec to style it later
+      isFaded: rawJsonPayload.faded && rawJsonPayload.faded[key] ? true : false
     }));
 
   // Fill remaining 5 slots (1‑2‑3 layout = 6 total)

@@ -86,7 +86,7 @@ async function orchestrateProductPipeline(payload) {
 
   // Building final payload
   const finalizedCanonicalJson = {
-    product_type: "Unknown", // TO DO: Use fetchProductClassification later
+    product_type: "Espresso Machine", // TO DO: Use fetchProductClassification later (this is testing type)
     name: payload.name || "Unknown",
     brand: payload.brand || null,
     price: payload.price || { amount: 0.00, currency: "USD" },
@@ -101,70 +101,89 @@ async function orchestrateProductPipeline(payload) {
 
 
   try {
-    // Push data to the API ingestion
-    let apiResult = null;
-    apiResult = await callIngestEndpoint(finalizedCanonicalJson).catch(err => {
-      console.warn("decidio: API Ingestion failed/bypassed, continuing to UI rendering:", err);
+    // Fetch ML Harmonized Preview instead of the immediate save
+    let previewResult = null;
+    previewResult = await getProductPreview(finalizedCanonicalJson).catch(err => {
+      console.warn("decidio: ML Preview failed/bypassed, continuing with raw data:", err);
     });
     
     // Cache a tracking status locally
     await chrome.storage.local.set({ 
-      [targetUrl]: { status: "ingested", timestamp: Date.now() } 
+      [targetUrl]: { status: "previewed", timestamp: Date.now() } 
     });
     
-    // Merge success flag with scraped data
+    //Return data to the UI layer
     return { 
       success: true, 
-      message: "Product data offloaded.", // I want to delete this not sure if it would break anything========
+      // If previewResult exists, pass its harmonized/faded fields. Otherwise, fallback to empty arrays/objects.
+      harmonized: previewResult?.harmonized || {},
+      faded: previewResult?.faded || {},
+      raw_from_preview: previewResult?.raw || {},
+      
       ...finalizedCanonicalJson,
-      id: apiResult?.id || apiResult?.product_id || null 
-    }; 
+      id: previewResult?.id || previewResult?.product_id || null 
+    };
     
   } catch (apiError) {
     console.error("decidio: Critical pipeline failure fallback:", apiError);
     return {
       success: false,
       message: "Operating in offline mode.",
+      harmonized: {},
+      faded: {},
       ...finalizedCanonicalJson
     };
   }
 }
 
 /**
- * Upload scraped product to backend
+ * Get the ML Harmonized Preview (Writes nothing)
+ * Call this as soon as the basic scraping is done.....
  */
-async function callIngestEndpoint(payload) {
+async function getProductPreview(payload) {
+  const API_URL = "https://decidio-api-production.up.railway.app";
+  const activeToken = await getAuthToken();
+  
+// Map the local payload to match schema fields ===================================
 
-  const API_URL =
-    "https://decidio-api-production.up.railway.app";
+  //Product view
+  const apiRequestBody = {
+      product_type: payload.product_type || "Unknown",
+      name: payload.name || "Unknown",
+      brand: payload.brand || null,
+      price: payload.price || { amount: 0.0, currency: "USD" },
+      raw_specs: payload.raw_specs || {},
+      raw_features: payload.raw_features || [],
+      raw_sections: payload.raw_sections || {},
+      source_url: payload.source_url || null
+  };
 
-  const { jwtToken } =
-    await chrome.storage.local.get("jwtToken");
+  const response = await fetch(`${API_URL}/api/products/preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${activeToken}` // Injecting the live token securely
+    },
+    body: JSON.stringify(apiRequestBody)
+  });
 
-  const activeToken =
-    jwtToken ||
-    (typeof JWT_TOKEN !== "undefined"
-      ? JWT_TOKEN
-      : null);
-
-  if (!activeToken) {
-    throw new Error(
-      "Missing authentication token."
-    );
+  if (!response.ok) {
+    throw new Error(`Preview failed with code: ${response.status}`);
   }
 
-  // Map the local payload to match schema fields ===================================
-  //Product view
-  /* const apiRequestBody = {
-    product_type: payload.product_type || "Unknown",
-    name: payload.name || "Unknown",
-    brand: payload.brand || null,
-    price: payload.price || { amount: 0.0, currency: "USD" },
-    raw_specs: payload.raw_specs || {},
-    raw_features: payload.raw_features || [],
-    raw_sections: payload.raw_sections || {},
-    source_url: payload.source_url || null
-  }; */
+  // This will return { harmonized, faded, raw } 
+  return await response.json();
+}
+
+
+/**
+ * Actually save the product to the database
+ * Call this ONLY when the user clicks the final "Add to List" button
+ */
+async function saveProductToDB(payload, curatedSpecs = {}) {
+  const API_URL = "https://decidio-api-production.up.railway.app";
+  const activeToken = await getAuthToken();
+  
   const apiRequestBody = {
     source_url: payload.source_url || null,
     product_type: payload.product_type || "Unknown",
@@ -179,24 +198,11 @@ async function callIngestEndpoint(payload) {
     "added_via": "browser_extension"
   };
 
-
-
-  // Product preview ========================================================
-  /* const response = await fetch(`${API_URL}/api/products/preview`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${activeToken}` // Injecting the live token securely
-    },
-    body: JSON.stringify(apiRequestBody)
-  }); */
-
-  // Add product
   const response = await fetch(`${API_URL}/api/products/add`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${activeToken}` // Injecting the live token
+      'Authorization': `Bearer ${activeToken}`
     },
     body: JSON.stringify(apiRequestBody)
   });
@@ -206,4 +212,14 @@ async function callIngestEndpoint(payload) {
   }
 
   return await response.json();
+}
+
+// Helper for token grabbing
+async function getAuthToken() {
+  const { jwtToken } = await chrome.storage.local.get("jwtToken");
+  const activeToken = jwtToken || (typeof JWT_TOKEN !== "undefined" ? JWT_TOKEN : null);
+
+  if (!activeToken) throw new Error("Missing authentication token.");
+
+  return activeToken;
 }

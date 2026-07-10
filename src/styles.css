@@ -202,7 +202,7 @@
 
 .actions {
     display: flex;
-    gap: 12px;
+    gap: 16px;
 }
 
 .actions .button {
@@ -230,7 +230,6 @@
     border-radius: 50%;
     box-sizing: border-box;
     
-    /* Position relative allows us to place the crossbars in the center */
     position: relative; 
     display: inline-block;
     flex-shrink: 0;
@@ -305,6 +304,10 @@
 }
 .product-card.is-loading .card-loader {
     display: flex;
+}
+/* Ensure the loader completely vanishes when the card is loaded */
+.product-card.loaded .card-loader {
+    display: none !important;
 }
 
 .blade-spinner {

@@ -16,6 +16,7 @@ async function orchestrateProductPipeline(payload) {
   let scriptResult = null;
   
   try {
+    // Seperate scraping window and it is minimized.
     const scraperWindow = await chrome.windows.create({
       url: targetUrl,
       type: 'popup',
@@ -31,7 +32,7 @@ async function orchestrateProductPipeline(payload) {
       new Promise(resolve => setTimeout(resolve, 4000))
     ]);
  
-    // Dynamically pick between standard extraction or Shopify driver
+    // Pick between standard extraction or Shopify driver
     const isShopifySite = targetUrl.includes('myshopify') || payload.isShopify;
     const extractionFunction = isShopifySite ? runShopifyExtractionScript : runDomExtractionScript;
 
@@ -100,8 +101,9 @@ async function orchestrateProductPipeline(payload) {
 
 
   try {
-    // Push data to the API ingestion path without blocking
-    await callIngestEndpoint(finalizedCanonicalJson).catch(err => {
+    // Push data to the API ingestion
+    let apiResult = null;
+    apiResult = await callIngestEndpoint(finalizedCanonicalJson).catch(err => {
       console.warn("decidio: API Ingestion failed/bypassed, continuing to UI rendering:", err);
     });
     
@@ -110,11 +112,12 @@ async function orchestrateProductPipeline(payload) {
       [targetUrl]: { status: "ingested", timestamp: Date.now() } 
     });
     
-    // Merge success flag directly with scraped data
+    // Merge success flag with scraped data
     return { 
       success: true, 
-      message: "Product data offloaded.",
-      ...finalizedCanonicalJson 
+      message: "Product data offloaded.", // I want to delete this not sure if it would break anything========
+      ...finalizedCanonicalJson,
+      id: apiResult?.id || apiResult?.product_id || null 
     }; 
     
   } catch (apiError) {
@@ -150,8 +153,9 @@ async function callIngestEndpoint(payload) {
     );
   }
 
-  // Map the local payload to match schema fields
-  const apiRequestBody = {
+  // Map the local payload to match schema fields ===================================
+  //Product view
+  /* const apiRequestBody = {
     product_type: payload.product_type || "Unknown",
     name: payload.name || "Unknown",
     brand: payload.brand || null,
@@ -160,14 +164,39 @@ async function callIngestEndpoint(payload) {
     raw_features: payload.raw_features || [],
     raw_sections: payload.raw_sections || {},
     source_url: payload.source_url || null
+  }; */
+  const apiRequestBody = {
+    source_url: payload.source_url || null,
+    product_type: payload.product_type || "Unknown",
+    name: payload.name || "Unknown",
+    brand: payload.brand || "Unknown",
+    raw_specs: {
+      "specs_dump": payload.raw_specs || {},
+      "scraped_price": payload.price || { amount: 0.0, currency: "USD" },
+      "scraped_features": payload.raw_features || [],
+      "scraped_sections": payload.raw_sections || {}
+    },
+    "added_via": "browser_extension"
   };
 
-  // Fire to the products endpoint
-  const response = await fetch(`${API_URL}/api/products/preview`, {
+
+
+  // Product preview ========================================================
+  /* const response = await fetch(`${API_URL}/api/products/preview`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${activeToken}` // Injecting the live token securely
+    },
+    body: JSON.stringify(apiRequestBody)
+  }); */
+
+  // Add product
+  const response = await fetch(`${API_URL}/api/products/add`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${activeToken}` // Injecting the live token
     },
     body: JSON.stringify(apiRequestBody)
   });

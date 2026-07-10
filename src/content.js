@@ -148,6 +148,11 @@ document.body.addEventListener('click', (e) => {
   // Bringing the card to the front of the stack
   const clickedCard = e.target.closest('.product-card');
   if (clickedCard) {
+    // If they clicked on a add to list or whatever button
+    if (e.target.closest('.actions') || e.target.classList.contains('button')) {
+       return; 
+    }
+    
     e.preventDefault();
     e.stopPropagation();
     bringToFront(clickedCard);

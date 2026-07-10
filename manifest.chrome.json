@@ -30,6 +30,7 @@
         "js": [
           "drivers.js", 
           "util.js", 
+          "requests.js",
           "components.js", 
           "content.js"
         ],

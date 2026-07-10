@@ -20,7 +20,9 @@ function bringToFront(card) {
 /**
  * Generates the extension card
  */
-function createExtenCard(title) {
+function createExtenCard(productData) {
+  const title = productData.name || productData.title || "Unknown Product";
+
   const card = document.createElement('article'); 
   card.setAttribute('role', 'dialog');            
   card.setAttribute('aria-label', `Product details: ${title}`); 
@@ -49,27 +51,141 @@ function createExtenCard(title) {
           <p class="desc">Product details</p>
           <div class="ai-display-container"></div>
       </div>
-
       <div class="footer">
           <div class="actions">
               <button class="button" id="btn-add-new">
             <span class="circle-plus"></span>
             New List
         </button>
-        
         <button class="button" id="btn-add-existing">
             <span class="circle-plus"></span>
             Existing List
         </button>
-        
         <button class="button" id="btn-add-recent">
             <span class="circle-plus"></span>
-            Aldo's Office Lights
+            <span class="recent-list-name">Loading recent...</span>
         </button>
           </div>
           <span class="logo">d.</span>
       </div>
   `;
+
+  // Grab our button elements (for recent list)
+  const recentBtn = card.querySelector('#btn-add-recent');
+  const recentBtnText = card.querySelector('.recent-list-name');
+  const existingBtn = card.querySelector('#btn-add-existing');
+
+  let latestListId = null;
+  
+  async function setupRecentButton() {
+      try {
+          const response = await getAllLists();
+          const lists = response && response.items;
+          
+          if (lists && Array.isArray(lists) && lists.length > 0) {
+              const latestList = lists[0]; 
+              latestListId = latestList.id;
+
+              // Setup and show recent shortcut
+              recentBtnText.textContent = latestList.name;
+              
+              // Trying to fix buttons not aligning with the specs.... ===============================================================
+              recentBtn.style.removeAttribute ? recentBtn.style.removeAttribute('display') : recentBtn.style.display = '';
+              existingBtn.style.removeAttribute ? existingBtn.style.removeAttribute('display') : existingBtn.style.display = '';
+
+          } else {
+              // If they have no lists at all, hide the "Recent List" button entirely
+              // Maybe we change this later?? 
+              recentBtn.style.display = 'none';
+              existingBtn.style.display = 'none';
+          }
+      } catch (err) {
+          console.error("Could not load recent list for button shortcut:", err);
+          recentBtn.style.display = 'none';
+          existingBtn.style.display = 'none';
+      }
+  }
+
+  setupRecentButton();
+
+  recentBtn.addEventListener('click', async () => {
+      if (!latestListId) return;
+
+      try {
+          const productId = card.getAttribute('data-product-id');
+
+          await addItemToList(latestListId, productId);
+          
+          card.remove();
+          alert(`Added to your most recent list: "${recentBtnText.textContent}"!`);
+      } catch (err) {
+          alert('Failed to add to the recent list.');
+          console.error(err);
+      }
+  });
+
+  // Add to New List process
+  card.querySelector('#btn-add-new').addEventListener('click', async () => { 
+    const listName = prompt("Enter a name for your new list:");
+      if (!listName) return; // Cancelled or empty
+
+      try {
+          const productId = card.getAttribute('data-product-id');
+        const newList = await createList(listName, "Created from extension"); // Allow function for adding a description ====================
+        const listId = newList.id;
+          await addItemToList(listId, productId);
+          
+          // Remove the card
+          card.remove();
+          alert(`Successfully created "${listName}" and added your item!`);
+      } catch (err) {
+          alert('Failed to complete the new list process.');
+          console.error(err);
+      }
+  });
+
+  // Add to Existing List process
+  card.querySelector('#btn-add-existing').addEventListener('click', async () => {
+      try {
+          const productId = card.getAttribute('data-product-id');
+          // Fetch all available lists from the DB
+          const response = await getAllLists();
+          const lists = response && response.items;
+
+          // Should we let all the buttons be visible to the user even if there is no lists? ================================================
+          if (!lists || lists.length === 0) {
+              alert("You don't have any lists yet! Try creating a new one first.");
+              return;
+          }
+
+          // Build a text menu for the prompt window
+          let menuText = "Choose a list number:\n";
+          lists.forEach((list, index) => {
+              menuText += `${index + 1}. ${list.name}\n`;
+          });
+
+          const choice = prompt(menuText);
+          if (!choice) return; // User hit cancel
+
+          const chosenIndex = parseInt(choice, 10) - 1;
+          
+          // Validate choice and grab the corresponding list id
+          if (chosenIndex >= 0 && chosenIndex < lists.length) {
+              const listId = lists[chosenIndex].id;
+
+              // Reuse addItemToList function
+              await addItemToList(listId, productId);
+
+              card.remove();
+              alert(`Added to "${lists[chosenIndex].name}"!`);
+          } else {
+              alert("Invalid selection. Please enter a valid number from the list.");
+          }
+      } catch (err) {
+          alert('Failed to add to existing list');
+          console.error(err);
+      }
+  });
 
   return card;
 }
@@ -84,6 +200,11 @@ async function renderCanonicalSpecs(cardElement, rawJsonPayload) {
   if (!cardElement || !rawJsonPayload) {
     console.error("decidio: Missing card element or json payload!");
     return;
+  }
+
+  // Save the incoming database product ID onto the card element container
+  if (rawJsonPayload.id) {
+    cardElement.setAttribute('data-product-id', rawJsonPayload.id);
   }
 
   const displayContainer = cardElement.querySelector('.ai-display-container') || cardElement;

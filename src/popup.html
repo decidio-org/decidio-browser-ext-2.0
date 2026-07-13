@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    /* Global Styles */
+    body { 
+      width: 280px;
+      font-family: Arial, sans-serif; 
+      padding: 20px 25px 35px 25px; 
+      margin: 0; 
+      background: #000000; /* True black background */
+      color: #fff; 
+      box-sizing: border-box;
+      text-align: center;
+
+      border-radius: 16px;
+    }
+
+    /* Logo "decidio." */
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+      margin: -10px 0 15px 0;
+      letter-spacing: -0.5px;
+      text-transform: lowercase; /* Makes sure it stays lowercase */
+    }
+    .blue-dot {
+      color: #3A6FAC;
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    /* "Welcome to Decidio" Header */
+    .welcome-text {
+      font-size: 22px;
+      font-weight: bold;
+      margin: 0 0 15px 0;
+    }
+
+    /* Form Inputs */
+    input { 
+      width: 100%; 
+      padding: 12px 14px; 
+      margin: 0 0 8px 0; /* Space between inputs */
+      box-sizing: border-box; 
+      background-color: #2c2c2c;
+      border: 1px solid #555555;
+      border-radius: 6px; /* Smooth rounded corners */
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    input::placeholder {
+      color: #8c8c8c;
+    }
+
+    /* Buttons */
+    #loginBtn { 
+      width: 100%;
+      padding: 12px; 
+      color: #fff; 
+      border: none; 
+      cursor: pointer; 
+      font-weight: 600; 
+      font-size: 15px;
+      background: #555555;
+      border-radius: 6px;
+      margin-top: 4px;
+      transition: background 0.2s ease;
+    }
+    #loginBtn:hover {
+      background: #3A6FAC;
+    }
+
+    /* Bottom Sign Up Link Text */
+    .signup-text { 
+      font-size: 11px; 
+      margin-top: 6px; 
+      color: #a0a0a0; 
+    }
+    #signupBtn {
+      background: none;
+      border: none;
+      color: #a0a0a0;
+      font-weight: bold;
+      cursor: pointer;
+      padding: 0;
+      font-size: 11px;
+      text-decoration: none;
+    }
+    #signupBtn:hover {
+      text-decoration: underline;
+    }
+
+    /* Status text container */
+    #status { 
+      font-size: 11px; 
+      margin-top: 10px; 
+      color: #8a8f98; 
+    }
+  </style>
+</head>
+<body>
+
+  <h1 class="logo">decidio<span class="blue-dot">.</span></h1>
+  <h2 class="welcome-text">Welcome to Decidio</h2>
+
+  <input type="email" id="email" placeholder="E-Mail" />
+  <input type="password" id="password" placeholder="Password" />
+
+  <button id="loginBtn">Sign In</button>
+  
+  <div class="signup-text">
+    Don't have an account? <button id="signupBtn">Sign Up</button>
+  </div>
+  
+  <div id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

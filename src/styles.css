@@ -7,7 +7,7 @@
 /* The text badge trailing the cursor */
 .decidio-hover-badge {
     position: fixed;
-    pointer-events: auto !important;
+    pointer-events: none;
     cursor: pointer !important;
     z-index: 999999;
     display: none;
@@ -25,8 +25,8 @@
 
 .product-card {
     position: absolute;
-    width: 360px; /* Few pixel difference from whatfont*/
-    height: 310px;
+    width: 350px;
+    height: 300px;
     padding: 16px 18px;
     
     /* Semi-transparent look */
@@ -51,6 +51,10 @@
     transform: translateY(12px);
     transition: opacity .45s ease-out, transform .45s ease-out;
 }
+.product-card.is-loading {
+    opacity: 1;
+    transform: translateY(0);
+}
 .product-card.loaded {
     opacity: 1;
     transform: translateY(0);
@@ -62,7 +66,7 @@
     
     /* Positions the triangle right on the top edge */
     top: -8px; 
-    left: 20px; /* Aligns with JS math offset */
+    left: 20px;
     
     /* Pure CSS Triangle Border Trick */
     border-left: 8px solid transparent;
@@ -74,16 +78,61 @@
     pointer-events: none;
 }
 
+
+
+/* Define the fade-in keyframes */
+@keyframes fadeInTitle {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInFooter {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+/* After 2 seconds, fade in the title */
+.product-card.is-loading .title {
+    animation: fadeInTitle 0.5s ease-out 2s forwards; 
+}
+
+/* After 4 seconds (2s after the title), fade in the footer buttons */
+.product-card.is-loading .footer {
+    animation: fadeInFooter 0.5s ease-out 4s forwards;
+}
+
+/* Safety net: Clear the text immediately the moment a new load starts */
+.product-card.loaded .title,
+.product-card.loaded .footer {
+    opacity: 1;
+    transform: translateY(0);
+    animation: none !important;; /* No waiting, hide them instantly */
+    transition: none !important;;     /* Turn off transitions so they disappear instantly */
+}
+
 /* --------- Card Layout ------------ */
 /* Top right */
 .close-button {
     position: absolute;
-    top: 6px;
-    right: 10px;
+    top: 12px;
+    right: 16px;
+
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.6);
     font-size: 22px;
+
     cursor: pointer;
     padding: 0;
     line-height: 1;
@@ -107,17 +156,22 @@
 }
 
 .title {
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 16px;
+    font-weight: 400;
     margin: 0 0 4px 0;
-    margin: 0;
-    padding-right: 16px; /* Leave room for 'X' button */
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    color: #fff;
+
+    padding-right: 55px; 
+    box-sizing: border-box;
+
+    display: block;
+    max-width: 100%;
+    white-space: nowrap;
     overflow: hidden;
-    color: white !important;
+    text-overflow: ellipsis;
+
+    opacity: 0;
+    transform: translateY(-10px); /* Subtle slide down effect */
 }
 
 .desc {
@@ -140,33 +194,89 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-
     margin-top: 4px;
+
+    opacity: 0;
+    transform: translateY(10px); /* Subtle slide up effect */
 }
 
 .actions {
     display: flex;
-    gap: 6px;
+    gap: 16px;
 }
 
-/* Possible mix with word and symbol? Or just text in the button*/
 .actions .button {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
-    padding: 6px 4px;
-    font-size: 10px;
+    background: transparent;
+    border: none;
+    padding: 4px 0;
+    color: #ffffff;
+
+    font-size: 13px;
     border-radius: 6px;
+
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    white-space: nowrap;
 }
 
+/* Creating the outer circle */
+.circle-plus {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ffffff; 
+    border-radius: 50%;
+    box-sizing: border-box;
+    
+    position: relative; 
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+/* The horizontal bar of the plus */
+.circle-plus::before {
+    content: '';
+    position: absolute;
+    background-color: #ffffff;
+    
+    /* Dimensions of the bar */
+    width: 6px;
+    height: 2px;
+    
+    /* Dead-center positioning calculations */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* The vertical bar of the plus */
+.circle-plus::after {
+    content: '';
+    position: absolute;
+    background-color: #ffffff;
+    
+    /* Dimensions of the bar (swapped width/height) */
+    width: 2px;
+    height: 6px;
+    
+    /* Dead-center positioning calculations */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Subtle hover effect */
 .actions .button:hover {
-    background: rgba(255,255,255,0.14);
+    opacity: 0.8;
 }
 
 .logo {
     align-self: flex-end;
     font-size: 19px;
     font-weight: bold;
-    color: #0066cc;
+    color: #3A6FAC;
     line-height: 1;
     margin-top: -2px;
 }
@@ -179,8 +289,9 @@
 .card-loader {
     position: absolute;
     inset: 0;
-    background: rgba(18, 18, 20); /* Dark tint to mask content underneath */
-    
+    background: rgba(20, 20, 22, 0.65);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     
     /* Centering the spinner and text */
     display: none; /* Hidden by default */
@@ -191,12 +302,19 @@
     border-radius: 12px;
     z-index: 10;
 }
+.product-card.is-loading .card-loader {
+    display: flex;
+}
+/* Ensure the loader completely vanishes when the card is loaded */
+.product-card.loaded .card-loader {
+    display: none !important;
+}
 
 .blade-spinner {
     position: relative;
     width: 40px;
     height: 40px;
-    animation: pulse-spin 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; /* Slightly sped up for snappiness */
+    animation: pulse-spin 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 /* Individual | bars */
@@ -267,17 +385,17 @@
     grid-column: span 3;
 }
 
-/* Row 2, Cell 1 (Price): Explicitly spans 1 column */
+/* Row 2, Cell 1 (Price): spans 1 column */
 .spec-row:nth-child(2) .spec-cell:nth-child(1) {
     grid-column: span 1;
 }
 
-/* Row 2, Cell 2 (Sample Spec): Explicitly spans the remaining 2 column */
+/* Row 2, Cell 2: spans the remaining 2 columns */
 .spec-row:nth-child(2) .spec-cell:nth-child(2) {
     grid-column: span 2;
 }
 
-/* Row 3: All 3 items naturally span 1 column each, */
+/* Row 3: All 3 span 1 column each */
 .spec-row:nth-child(3) .spec-cell {
     grid-column: span 1;
 }
@@ -292,8 +410,8 @@
 }
 
 .fade-key {
-    color: #e25822;
-    font-size: 13px;
+    color: #DE542B;
+    font-size: 12px;
     font-weight: 500;
 
     display: block;
@@ -307,7 +425,7 @@
 
 .fade-value {
     color: #ffffff;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: bold;
 
     display: block;

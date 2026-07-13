@@ -231,12 +231,12 @@ function handleBadgeActivation(productCardElement, targetProductUrl, appendX, ap
   navigator.clipboard.writeText(targetProductUrl).catch(() => {});
 
   // Scrape Card Metadata
-  const productTitle = getTitleFromSchema()
-    ?? productCardElement.querySelector('[itemprop="name"]')?.textContent.trim()
-    ?? (driver.titleSelector ? productCardElement.querySelector(driver.titleSelector)?.textContent.trim() : null)
-    ?? productCardElement.querySelector('img[alt]')?.alt.trim()
-    ?? productCardElement.querySelector('a')?.getAttribute('aria-label')
-    ?? "Unknown Product";
+ const productTitle = getTitleFromSchema()
+   ?? productCardElement.querySelector('[itemprop="name"]')?.textContent.trim()
+   ?? (driver.titleSelector ? productCardElement.querySelector(driver.titleSelector)?.textContent.trim() : null)
+   ?? productCardElement.querySelector('img[alt]')?.alt.trim()
+   ?? productCardElement.querySelector('a')?.getAttribute('aria-label')
+   ?? "Unknown Product";
 
   const price = null;
 

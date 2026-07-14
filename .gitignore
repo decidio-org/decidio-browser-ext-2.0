@@ -5,3 +5,9 @@ node_modules/
 .venv/
 venv/
 env/
+Decidio/
+*.xcuserdata
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+safari-project/

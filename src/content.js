@@ -9,6 +9,8 @@
  * Initialization and DOM (document object model) setup section
  */
 // Main container to hold the extension's UI elements
+
+console.log('decidio content.js injected:', Math.random());
 const overlayRoot = document.createElement('div');
 overlayRoot.id = 'decidio-root';
 document.body.appendChild(overlayRoot);

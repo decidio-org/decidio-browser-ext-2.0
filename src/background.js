@@ -1,59 +1,15 @@
 /**
- * background.js contains code for the icon, listening for messages
- * from content.js
+ * background.js
+ * 
+ * This script manages logic for:
+ * - Handling messages from content scripts and popup scripts. Popup is not in use right now for log-in
+ * - Managing the extension's active state and UI (icon and popup).
  */
 
-importScripts('scraper_utils.js', 'scraper_shopify.js', 'scraper.js');
-
-
-// Listen for messages from content.js or popup.js
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  
-  // Handle the login success message from popup.js
-  if (request.action === "LOGIN_SUCCESS") {
-    // Save state globally
-    chrome.storage.local.set({ isExtensionActive: true });
-
-    // Update the current active tab immediately so it locks into the active state
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        // Disable the popup explicitly for THIS active tab right away
-        chrome.action.setPopup({ tabId: tabs[0].id, popup: "" });
-        updateIcon(tabs[0].id, true);
-        
-        // Notify the content script to spin up the UI environment
-        chrome.tabs.sendMessage(tabs[0].id, { action: "toggle_decidio.", state: true });
-      }
-    });
-    return;
-  }
-
-  // Catch the centralized integration pipeline action
-  if (request.action === "PROCESS_PRODUCT_PIPELINE") {
-    const payload = request.payload;
-
-    // Execute routing, classification, caching, and fallback management
-    orchestrateProductPipeline(payload)
-      .then(canonicalData => {
-        sendResponse({ data: canonicalData });
-      })
-      .catch(error => {
-        console.error("Pipeline Engine Exception:", error);
-        sendResponse({ error: error.message || "Failed processing specification rules." });
-      });
-
-    return true;
-  }
-});
-
-/**
- * =======================
- * EXTENSION ICON SECTION
- * =======================
- */
-
-function updateIcon(tabId, isActive) {
+// Helper to update the extension icon and popup behavior globally or per-tab
+function updateExtensionUI(tabId, isActive) {
   const iconPath = isActive ? "active_logo.png" : "default_logo.png";
+  
   chrome.action.setIcon({
     tabId: tabId,
     path: {
@@ -62,38 +18,80 @@ function updateIcon(tabId, isActive) {
       "128": iconPath
     }
   });
+
+  // If active, disable the popup so onClicked fires. If inactive, show popup.html
+  // chrome.action.setPopup({ 
+  //  tabId: tabId, 
+  //  popup: isActive ? "" : "popup.html" 
+  //});
 }
 
-// This handles the explicit state shift per-tab
+// Listen for messages from content.js or popup.js
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  
+  // Handle login success from popup
+  //if (request.action === "LOGIN_SUCCESS") {
+    //chrome.storage.local.set({ isExtensionActive: true }, () => {
+      //chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        //if (tabs[0]?.id) {
+          //updateExtensionUI(tabs[0].id, true);
+//          chrome.tabs.sendMessage(tabs[0].id, { action: "toggle_decidio.", state: true });
+        //}
+//      });
+    //});
+    //return true;
+  //}
+
+  // Content script asking for the initial state when a page loads
+  if (request.action === "GET_EXTENSION_STATE") {
+    chrome.storage.local.get({ isExtensionActive: false }, (data) => {
+      sendResponse({ isExtensionActive: data.isExtensionActive });
+    });
+    return true;
+  }
+
+  if (request.action === "PRODUCT_IMAGE_PICKED") {
+    const newProduct = {
+      imageUrl: request.imageUrl,
+      productUrl: request.productUrl,
+      timestamp: new Date().toISOString()
+    };
+
+    // Grab current items array from local storage, append the new item, and save it back
+    chrome.storage.local.get({ savedProducts: [] }, (result) => {
+      const currentProducts = result.savedProducts;
+      currentProducts.push(newProduct);
+
+      chrome.storage.local.set({ savedProducts: currentProducts }, () => {
+        console.log("Successfully saved product data mapping:", newProduct);
+
+        chrome.runtime.sendMessage({
+          action: "RENDER_PICKED_PRODUCT",
+          product: newProduct
+        });
+      });
+    });
+  }
+
+});
+
+// Handle Action Button Click (Hotbar Icon)
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return;
 
-  // Check current state from storage
   const data = await chrome.storage.local.get({ isExtensionActive: false });
-  const currentlyActive = data.isExtensionActive;
+  const nextActiveState = !data.isExtensionActive;
 
-  // Swap to the opposite state
-  const nextActiveState = !currentlyActive;
-
-  // Commit state change to storage
+  // Save the new global state
   await chrome.storage.local.set({ isExtensionActive: nextActiveState });
   
-  // Update Icon and Popup per tabId explicitly so Chrome doesn't fallback to defaults
-  if (nextActiveState) {
-    // Turning ON
-    chrome.action.setPopup({ tabId: tab.id, popup: "" });
-    updateIcon(tab.id, true);
-  } else {
-    // Turning OFF
-    chrome.action.setPopup({ tabId: tab.id, popup: "popup.html" });
-    updateIcon(tab.id, false);
-    console.log("Extension deactivated for this session.");
-  }
+  // Update UI for the current tab
+  updateExtensionUI(tab.id, nextActiveState);
 
-  // Send payload to content script
+  // Send message to the current tab to turn ON or OFF completely
   chrome.tabs.sendMessage(tab.id, { action: "toggle_decidio.", state: nextActiveState }, (response) => {
     if (chrome.runtime.lastError) {
-      // If content script isn't loaded yet on activation, inject it
+      // If content script isn't injected yet, inject it
       if (nextActiveState) {
         chrome.scripting.executeScript({
           target: { tabId: tab.id },
@@ -104,18 +102,10 @@ chrome.action.onClicked.addListener(async (tab) => {
   });
 });
 
-// Keep state persistent across tab changes/reloads
+// Keep UI state consistent when tabs update or user switches tabs
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete') {
+  if (changeInfo.status === 'complete' && tabId) {
     const data = await chrome.storage.local.get({ isExtensionActive: false });
-    
-    // Ensure the icon matches the current login state
-    updateIcon(tabId, data.isExtensionActive);
-
-    if (data.isExtensionActive) {
-      chrome.action.setPopup({ tabId: tabId, popup: "" });
-    } else {
-      chrome.action.setPopup({ tabId: tabId, popup: "popup.html" });
-    }
+    updateExtensionUI(tabId, data.isExtensionActive);
   }
 });

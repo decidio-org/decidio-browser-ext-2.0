@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decidio Unified Workspace</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Floating Extension Controller Toggle Button -->
+    <div class="decidio-toggle-anchor" id="decidioToggle" title="Toggle Decidio Panel">
+        <div class="brand-mark">d<span class="blue-dot">.</span></div>
+    </div>
+
+    <!-- Main Workspace Sidebar Panel (Initialized Closed / Hidden) -->
+    <div class="decidio-sidebar is-collapsed" id="decidioSidebarPanel">
+        
+        <!-- Header Section -->
+        <div class="sidebar-header">
+            <div class="brand-logo">decidio<span class="blue-dot">.</span></div>
+        </div>
+
+        <!-- Main Body Content -->
+        <div class="sidebar-body">
+            
+            <!-- LIST WORKSPACE CUSTOM DROPDOWN -->
+            <div class="form-group">
+                <label class="form-label">Lists</label>
+                <div class="custom-dropdown list-dropdown-component">
+                    <div class="dropdown-trigger" tabindex="0">
+                        <span class="selected-value-display">Select a list...</span>
+                        <div class="dropdown-arrow"></div>
+                    </div>
+                    
+                    <!-- TEMPORARY LIST NAMES -->
+                    <div class="dropdown-menu">
+                        <div class="dropdown-options-list">
+                            <button class="dropdown-option create-action-btn" data-value="create-new">
+                                <span class="circle-plus-blue"></span>
+                                Create List
+                            </button>
+                            <button class="dropdown-option" data-value="wishlist">Wishlist</button>
+                            <button class="dropdown-option" data-value="shopping">Shopping</button>
+                            <button class="dropdown-option" data-value="favorites">Favorites</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PRODUCT DESCRIPTION INPUT SECTION -->
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea id="product-description" class="text-input-area"></textarea>
+            </div>
+
+            <!-- SELECT PRODUCTS WORKSPACE SECTION -->
+            <div class="form-group">
+                <label class="form-label">Collect <span class="blue-plus">+</span></label>
+                <div id="products-container" class="products-dotted-container">
+                    <div class="add-product-tile" id="addProductBtn">
+                        <div class="add-product-text">add a product</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Bottom Footer Area -->
+        <div class="sidebar-footer">
+        </div>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,308 +1,355 @@
 /**
- * ===========================
- * Main controller file that sets up state, listens for chrome
- * messages, tracks mouse, and handles event listeners.
- * =========================
+ * The content.js file
+ * 
+ * This file is responsible for managing the content script that runs in the context of web pages. 
+ * It also handles communication between content script and background, as well as the activation/deactivation
+ * of Decidio Picker/Decidio Interaction mode.
  */
 
-/**
- * Initialization and DOM (document object model) setup section
- */
-// Main container to hold the extension's UI elements
+function activateExtensionUI() {
+  console.log("Activating Extension UI...");
+  if (document.getElementById('decidio-extension-root')) return;
 
-console.log('decidio content.js injected:', Math.random());
-const overlayRoot = document.createElement('div');
-overlayRoot.id = 'decidio-root';
-document.body.appendChild(overlayRoot);
+  const extensionRoot = document.createElement('div');
+  extensionRoot.id = 'decidio-extension-root';
 
-// Floating text badge that follows the user's mouse
-const hoverBadge = document.createElement('div');
-hoverBadge.className = 'decidio-hover-badge';
-hoverBadge.innerText = 'decidio.';
-hoverBadge.setAttribute('aria-hidden', 'true');
-document.body.appendChild(hoverBadge);
+  const iframe = document.createElement('iframe');
+  iframe.id = 'decidio-main-frame';
+  iframe.src = chrome.runtime.getURL('index.html'); 
 
-let isExtensionActive = false; // On/off tracker
-let lastClientX = 0;
-let lastClientY = 0;
-let currentTargetCard = null; // Keeps track of the targeted product context matching the badge
+  iframe.style.position = 'fixed';
+  iframe.style.top = '0';
+  iframe.style.right = '-450px'; 
+  iframe.style.width = '430px'; 
+  iframe.style.height = '100vh';
+  iframe.style.border = 'none';
+  iframe.style.zIndex = '2147483647'; 
+  iframe.style.backgroundColor = 'transparent';
+  iframe.style.colorScheme = 'none';
+  iframe.style.transition = 'right 0.3s ease-in-out'; 
 
-// Check storage on page load ---
-chrome.storage.local.get({ isExtensionActive: false }, (data) => {
-  isExtensionActive = data.isExtensionActive;
-  if (isExtensionActive) {
-    console.log("decidio. AUTO-ACTIVATED on page load/navigation");
+  extensionRoot.appendChild(iframe);
+  document.body.appendChild(extensionRoot);
+
+  setTimeout(() => {
+    iframe.style.right = '0px'; 
+  }, 50);
+}
+
+function deactivateExtensionUI() {
+  console.log("Deactivating Extension UI...");
+  if (decidioPickerInstance) {
+    decidioPickerInstance.stop();
+  }
+  const extensionRoot = document.getElementById('decidio-extension-root');
+  if (extensionRoot) {
+    const iframe = document.getElementById('decidio-main-frame');
+    if (iframe) {
+      iframe.style.right = '-450px';
+      setTimeout(() => extensionRoot.remove(), 300); 
+    } else {
+      extensionRoot.remove();
+    }
+  }
+}
+
+chrome.runtime.sendMessage({ action: "GET_EXTENSION_STATE" }, (response) => {
+  if (chrome.runtime.lastError) return; 
+  if (response && response.isExtensionActive) {
+    activateExtensionUI();
   }
 });
 
-// Listen for the message from background.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "toggle_decidio.") {
-    isExtensionActive = request.state;
-
-    if (isExtensionActive) {
-      console.log("decidio. is now ACTIVE");
+    if (request.state === true) {
+      activateExtensionUI();
     } else {
-      console.log("decidio. is now INACTIVE");
-
-      // Remove all active product overlays
-      const existingCards = document.querySelectorAll('.product-card');
-      existingCards.forEach(card => card.remove());
-
-      hideHoverElements();
+      deactivateExtensionUI();
     }
-    sendResponse({ nextState: isExtensionActive });
   }
-  return true;
 });
 
-/**
- * Mouse motion & position section
- */
+{
+    if (!window.hasDecidioPickerRun) {
+        window.hasDecidioPickerRun = true;
 
-// Track mouse movement
-document.addEventListener('mousemove', (e) => {
-  if (!isExtensionActive) return;
+        class DecidioContentPicker {
+            constructor() {
+                this.isActive = false;
+                this.overlay = null;
+                this.badge = null; 
+                this.highlightBox = null; // indicator
+                this.currentTarget = null; 
+                this.stylesId = 'decidio-picker-styles';
+            }
 
-  lastClientX = e.clientX;
-  lastClientY = e.clientY;
+            init() {
+                this.injectStyles();
+                chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+                    if (message.action === "START_DECIDIO_PICKER") {
+                        this.start();
+                    }
+                });
+            }
 
-  evaluateBadgeState(e.target, e.clientX, e.clientY);
-});
-
-// Handle scroll changes and look up what's under the cursor
-document.addEventListener('scroll', () => {
-  if (!isExtensionActive) return;
-
-  // Calculates what element has scrolled beneath the mouse
-  const elementUnderCursor = document.elementFromPoint(lastClientX, lastClientY);
-  if (elementUnderCursor) {
-    evaluateBadgeState(elementUnderCursor, lastClientX, lastClientY);
-  }
-}, { passive: true });
-
-// Checks whether the element beneath the cursor is a "target"
-function evaluateBadgeState(targetElement, clientX, clientY) {
-  // Edge-case for clearing the hover elements when on the product card or extension interface
-  if (
-    targetElement.closest('#decidio-root') || 
-    targetElement.closest('.product-card') ||
-    targetElement.classList.contains('decidio-hover-badge')
-  ) {
-    return;
-  }
-
-  const driver = getActiveDriver();
-  let clickableCard = null;
-
-  if (driver && driver.productItemSelector) {
-    clickableCard = targetElement.closest(driver.productItemSelector);
-  }
-
-  // Fall back to scoring if the strict match isn't there
-  if (!clickableCard && driver && typeof driver.fallbackFinder === 'function') {
-    clickableCard = driver.fallbackFinder(targetElement);
-  }
-
-  // Make sure there is inner text characters
-  const hasText = targetElement.innerText && targetElement.innerText.trim().length > 0;
-  
-  if (clickableCard && hasText) {
-    // Lock the global target reference for extraction synchronization
-    currentTargetCard = clickableCard;
+            injectStyles() {
+                if (document.getElementById(this.stylesId)) return;
+                const style = document.createElement('style');
+                style.id = this.stylesId;
+                style.textContent = `
+                
+                .decidio-overlay {
+                    position: fixed;
+                    top: 0; left: 0;
+                    width: 100vw; height: 100vh;
+                    background: rgba(15, 23, 42, 0.4); 
+                    backdrop-filter: blur(4px);        
+                    -webkit-backdrop-filter: blur(4px);
+                    z-index: 2147483645;              
+                    cursor: crosshair;
+                    opacity: 0;
     
-    // The decidio. badge by the mouse
-    hoverBadge.classList.add('visible');
-    hoverBadge.style.left = `${clientX - 20}px`; 
-    hoverBadge.style.top = `${clientY - 35}px`;
-  } else {
-    hideHoverElements();
-  }
-}
+                    /* Animate the initial fade-in opacity. */
+                    transition: opacity 0.3s ease; 
+                    pointer-events: auto;
+                    clip-path: var(--decidio-cutout, polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%));
+                }
+                .decidio-overlay.active { 
+                    opacity: 1; 
+                }
+                    
+                /* Snapping indicator frame */
+                .decidio-highlight-box {
+                    position: fixed;
+                    z-index: 2147483646;
+                    outline: 3px solid #ffffff;
+                    box-shadow: 0 0 0 4px #007bff, 0 20px 40px rgba(0,0,0,0.4);
+                    pointer-events: none; /* Clicks pass straight through it */
+                    display: none;
+                    border-radius: 4px;
+                }
+                .decidio-highlight-box.show {
+                    display: block;
+                }
 
-function hideHoverElements() {
-  hoverBadge.classList.remove('visible');
-}
+                .decidio-hover-badge {
+                    position: fixed;
+                    z-index: 2147483648; 
+                    display: flex;
+                    align-items: center;
+                    background: rgba(15, 23, 42, 0.9); 
+                    backdrop-filter: blur(4px);
+                    -webkit-backdrop-filter: blur(4px);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: #ffffff;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    font-size: 11px;
+                    font-weight: 600;
+                    padding: 4px 10px;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+                    pointer-events: none; 
+                    transform: translate(12px, 12px); 
+                    opacity: 0;
+                    transition: opacity 0.15s ease;
+                }
 
-/**
- * Dealing with clicks and interaction section
- */
+                .decidio-hover-badge.show {
+                    opacity: 1;
+                }
+                .decidio-blue-dot {
+                    color: #007bff;
+                }
+                `;
+                document.head.appendChild(style);
+            }
 
-// Clean up hover UI when user's cursor exits the web page
-document.addEventListener('mouseleave', () => {
-  hideHoverElements();
-});
+            start() {
+                if (this.isActive) return;
+                this.isActive = true;
 
-// Clicking logic for the overlay cards
-document.body.addEventListener('click', (e) => {
-  if (!isExtensionActive) return;
+                this.overlay = document.createElement('div');
+                this.overlay.className = 'decidio-overlay';
+                document.body.appendChild(this.overlay);
+                setTimeout(() => this.overlay.classList.add('active'), 10);
 
-  // x button on the overlay card
-  if (e.target.classList.contains('close-button')) {
-    e.preventDefault();
-    e.stopPropagation();
+                this.highlightBox = document.createElement('div');
+                this.highlightBox.className = 'decidio-highlight-box';
+                document.body.appendChild(this.highlightBox);
 
-    const cardToClose = e.target.closest('.product-card');
-    if (cardToClose) cardToClose.remove();
-    return;
-  }
+                this.badge = document.createElement('div');
+                this.badge.className = 'decidio-hover-badge';
+                this.badge.innerHTML = 'decidio<span class="decidio-blue-dot">.</span>';
+                document.body.appendChild(this.badge);
 
-  // Bringing the card to the front of the stack
-  const clickedCard = e.target.closest('.product-card');
-  if (clickedCard) {
-    // If they clicked on a add to list or whatever button
-    if (e.target.closest('.actions') || e.target.classList.contains('button')) {
-       return; 
-    }
+                // Track both cursor motion and scroll wheel updates
+                document.addEventListener('mousemove', this.handleMouseMove, true);
+                window.addEventListener('scroll', this.handleScroll, { passive: true, capture: true });
+                document.addEventListener('click', this.handleClick, true);
+            }
+
+            stop() {
+                if (!this.isActive) return;
+                this.isActive = false;
+
+                if (this.overlay) {
+                    this.overlay.classList.remove('active');
+                    setTimeout(() => this.overlay.remove(), 200);
+                }
+                if (this.highlightBox) this.highlightBox.remove();
+                if (this.badge) this.badge.remove();
+
+                this.currentTarget = null;
+                document.removeEventListener('mousemove', this.handleMouseMove, true);
+                window.removeEventListener('scroll', this.handleScroll, true);
+                document.removeEventListener('click', this.handleClick, true);
+            }
+
+            // Image Finder Engine MAY NEED TO BE A SEPERATE FILE LATER TO HAVE AN ACCURATE DETECTION
+            findTargetImage(element) {
+                if (!element) return null;
+
+                // hit
+                if (element.tagName === 'IMG') return element;
+
+                // Look inside the element (if hovered on a modern picture wrapper block)
+                const innerImg = element.querySelector('img');
+                if (innerImg) return innerImg;
+
+                // Look up to parent wrappers or links
+                const parentLink = element.closest('a') || element.closest('[class*="product"]');
+                if (parentLink) {
+                    const linkedImg = parentLink.querySelector('img');
+                    if (linkedImg) return linkedImg;
+                }
+
+                return null;
+            }
+
+            updateHighlight(target) {
+                if (!target || !this.highlightBox || !this.overlay) {
+                    if (this.highlightBox) this.highlightBox.classList.remove('show');
+                    if (this.badge) this.badge.classList.remove('show');
+                    // Reset the overlay back to a standard full screen block
+                    if (this.overlay) this.overlay.style.removeProperty('--decidio-cutout');
+                    return;
+                }
+
+                const rect = target.getBoundingClientRect();
     
-    e.preventDefault();
-    e.stopPropagation();
-    bringToFront(clickedCard);
-    return;
-  }
-
-  // Skip extension's internal UI clicks so they still work perfectly
-  if (e.target.closest('#decidio-root') || e.target.closest('.product-card') || e.target.classList.contains('decidio-hover-badge')) {
-    return; 
-  }
-
-  // Grab the active driver rules
-  const driver = getActiveDriver();
-  let clickedProductCard = null;
-
-  // Use the driver's specific selector to see if a product card was clicked
-  if (driver && driver.productItemSelector) {
-    clickedProductCard = e.target.closest(driver.productItemSelector);
-  }
-
-  // If the strict selector missed it, use heuristic fallback
-  if (!clickedProductCard && driver && typeof driver.fallbackFinder === 'function') {
-    clickedProductCard = driver.fallbackFinder(e.target);
-  }
-
-  // If we successfully matched a product card via the driver...
-  if (clickedProductCard) {
-    console.log("User clicked directly on a driver-verified product card!");
-
-    // Extract the URL using the driver's layout rules
-    let destinationUrl = null;
-
-    // If they clicked directly on or inside a link, grab that first
-    const directLink = e.target.closest('a[href]');
-    if (directLink) {
-      destinationUrl = directLink.href;
-    } else if (driver.titleSelector) {
-      // Otherwise, use the driver's title selector to find the anchor link inside the card
-      const titleAnchor = clickedProductCard.querySelector(driver.titleSelector)?.closest('a') 
-                || clickedProductCard.querySelector(driver.titleSelector)?.querySelector('a');
-      if (titleAnchor) destinationUrl = titleAnchor.href;
-    }
-
-    // Ultimate fallback if the driver's structural link isn't found
-    if (!destinationUrl) {
-      const fallbackAnchor = clickedProductCard.querySelector('a[href]');
-      if (fallbackAnchor) destinationUrl = fallbackAnchor.href;
-    }
-
-    // You now have the exact product URL directly from the driver
-    if (destinationUrl && destinationUrl.startsWith('http')) {
-      console.log(`[Driver Match Success] Grabbed URL: ${destinationUrl}`);
-
-      e.preventDefault(); 
-      e.stopPropagation();
-
-      handleBadgeActivation(clickedProductCard, destinationUrl, e.pageX, e.pageY);
-    }
-  }
-}, true);
-
-
-/**
- * DOM CAPTURE LAYER: Extraction & Pipelines
- */
-function handleBadgeActivation(productCardElement, targetProductUrl, appendX, appendY) {
-  const driver = getActiveDriver() || {};
-
-  // Cap the user at max 5 concurrent open cards
-  const activeCards = document.querySelectorAll('.product-card');
-  if (activeCards.length >= 5) {
-    alert("You've reached the maximum limit of 5 decidio. cards. Close one to add another.");
-    return;
-  }
-
-  navigator.clipboard.writeText(targetProductUrl).catch(() => {});
-
-  // Scrape Card Metadata
- const productTitle = getTitleFromSchema()
-   ?? productCardElement.querySelector('[itemprop="name"]')?.textContent.trim()
-   ?? (driver.titleSelector ? productCardElement.querySelector(driver.titleSelector)?.textContent.trim() : null)
-   ?? productCardElement.querySelector('img[alt]')?.alt.trim()
-   ?? productCardElement.querySelector('a')?.getAttribute('aria-label')
-   ?? "Unknown Product";
-
-  const price = null;
-
-  // Build Request Payload Object
-  const rawScrapePayload = {
-    product_type: "Unknown",
-    name: productTitle,
-    price: price,
-    url: targetProductUrl,
-    raw_specs: {},
-    raw_features: []
-  };
-
-  // UI RENDERING: Instantiate and pin container immediately in loading status mode
-  const card = createExtenCard(productTitle, false);
-  card.classList.add('is-loading'); // Engages loading screen spinner styles
-  document.body.appendChild(card);
-  positionCardSafely(card, appendX - 20, appendY + 15, false);
-  hideHoverElements();
-
-  // Route to pipeline coordinator
-  executeHarmonizationPipeline(card, rawScrapePayload);
-}
-
-/**
- * RECEIVE & RENDER CANONICAL SPEC JSON
- */
-function executeHarmonizationPipeline(cardElement, payload) {
-  const overlayMain = cardElement.querySelector('.overlay-main');
-  const loader = cardElement.querySelector('.card-loader');
-  const descElement = cardElement.querySelector('.desc');
-
-  if (descElement) descElement.style.display = 'none';
-
-  // REQUEST BUILDER: Send payload via background
-  chrome.runtime.sendMessage({ action: "PROCESS_PRODUCT_PIPELINE", payload: payload }, (response) => {
+                // Position the blue outline frame over the target element
+                this.highlightBox.style.left = `${rect.left}px`;
+                this.highlightBox.style.top = `${rect.top}px`;
+                this.highlightBox.style.width = `${rect.width}px`;
+                this.highlightBox.style.height = `${rect.height}px`;
     
-    // Clear Loading Architecture Flags
-    cardElement.classList.remove('is-loading');
-    if (loader) loader.style.display = 'none';
+                // Compute coordinates to dynamically cut a transparent window into the overlay
+                const x1 = rect.left;
+                const y1 = rect.top;
+                const x2 = rect.right;
+                const y2 = rect.bottom;
 
-    if (chrome.runtime.lastError || !response || response.error) {
-      console.error("Decidio error fallback triggered:", chrome.runtime.lastError || response?.error);
-      renderErrorState(overlayMain, response?.error || "Pipeline request failed.");
-      return;
+                // A polygon track that wraps around the viewport screen edge then punches a frame inwards
+                const cutoutPath = `polygon(
+                    0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 
+                    ${x1}px ${y1}px, 
+                    ${x1}px ${y2}px, 
+                    ${x2}px ${y2}px, 
+                    ${x2}px ${y1}px, 
+                    ${x1}px ${y1}px
+                )`;
+    
+                this.overlay.style.setProperty('--decidio-cutout', cutoutPath);
+
+                this.highlightBox.classList.add('show');
+                if (this.badge) this.badge.classList.add('show');
+            }
+
+            handleMouseMove = (e) => {
+                if (!this.isActive) return;
+
+                // Cache the last known physical coordinates of the mouse
+                this.lastMouseX = e.clientX;
+                this.lastMouseY = e.clientY;
+
+                if (this.badge) {
+                    this.badge.style.left = `${e.clientX}px`;
+                    this.badge.style.top = `${e.clientY}px`;
+                }
+
+                this.checkElementAtCursor(e.clientX, e.clientY);
+            }
+
+            handleScroll = () => {
+                if (!this.isActive) return;
+                if (!this.isScrollingTick) {
+                    window.requestAnimationFrame(() => {
+                    // Re-evaluate what image is physically under the mouse right now
+                    this.checkElementAtCursor(this.lastMouseX, this.lastMouseY);
+                    this.isScrollingTick = false;
+                    });
+                    this.isScrollingTick = true;
+                }
+            }
+
+            // Split out the element checking logic so both mousemove and scroll can share it
+            checkElementAtCursor(x, y) {
+                this.overlay.style.pointerEvents = 'none';
+                let elementUnderneath = document.elementFromPoint(x, y);
+                this.overlay.style.pointerEvents = 'auto';
+
+                const targetImg = this.findTargetImage(elementUnderneath);
+
+                if (targetImg) {
+                if (this.currentTarget !== targetImg) {
+                    this.currentTarget = targetImg;
+                }
+                    // Always refresh coordinates to keep it locked during scrolling
+                    this.updateHighlight(this.currentTarget);
+                } else {
+                    if (this.currentTarget !== null) {
+                        this.currentTarget = null;
+                        this.updateHighlight(null);
+                    }
+                }
+            }
+
+            handleClick = (e) => {
+                if (!this.isActive) return;
+                
+                e.preventDefault();
+                e.stopPropagation();
+
+                this.overlay.style.pointerEvents = 'none';
+                let elementUnderneath = document.elementFromPoint(e.clientX, e.clientY);
+                this.overlay.style.pointerEvents = 'auto';
+
+                const target = this.findTargetImage(elementUnderneath);
+
+                if (target) {
+                    const imageUrl = target.currentSrc || target.src;
+                    const parentLink = target.closest('a');
+                    const productUrl = parentLink ? parentLink.href : window.location.href;
+                    
+                    chrome.runtime.sendMessage({
+                        action: "PRODUCT_IMAGE_PICKED",
+                        imageUrl: imageUrl,
+                        productUrl: productUrl
+                    });
+                } else {
+                    chrome.runtime.sendMessage({
+                        action: "DECIDIO_PICKER_CANCELLED"
+                    });
+                }
+
+                this.stop();
+            }
+        }
+        
+        const decidioPicker = new DecidioContentPicker();
+        decidioPicker.init();
+
+        window.decidioPickerInstance = decidioPicker;
     }
-
-    try {
-      const canonicalData = response.data;
-      requestAnimationFrame(() => {
-        renderCanonicalSpecs(cardElement, canonicalData);
-      });
-    } catch (parseError) {
-      console.error("Layout processing exception:", parseError);
-      renderErrorState(overlayMain, "Failed parsing system parameters safely.");
-    }
-  });
-}
-
-function renderErrorState(container, message) {
-  container.innerHTML = `
-    <div class="decidio-error-wrapper" style="padding: 10px; color: #ef4444; font-size: 13px; text-align: center;">
-      <p style="font-weight: bold; margin: 0 0 4px 0;">Harmonization Error</p>
-      <p style="margin: 0; color: #ba9393;">${message}</p>
-    </div>
-  `;
 }

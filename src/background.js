@@ -57,14 +57,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       timestamp: new Date().toISOString()
     };
 
-    // Grab current items array from local storage, append the new item, and save it back
     chrome.storage.local.get({ savedProducts: [] }, (result) => {
       const currentProducts = result.savedProducts;
       currentProducts.push(newProduct);
 
       chrome.storage.local.set({ savedProducts: currentProducts }, () => {
         console.log("Successfully saved product data mapping:", newProduct);
-
+        
+        // Forward back to app.js that a product was added
         chrome.runtime.sendMessage({
           action: "RENDER_PICKED_PRODUCT",
           product: newProduct
@@ -72,7 +72,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     });
   }
-
 });
 
 // Handle Action Button Click (Hotbar Icon)
@@ -82,16 +81,21 @@ chrome.action.onClicked.addListener(async (tab) => {
   const data = await chrome.storage.local.get({ isExtensionActive: false });
   const nextActiveState = !data.isExtensionActive;
 
-  // Save the new global state
-  await chrome.storage.local.set({ isExtensionActive: nextActiveState });
+  const storageUpdates = { isExtensionActive: nextActiveState };
+
+  // If turning OFF, clear out old saved items so we start fresh next time
+  if (!nextActiveState) {
+    storageUpdates.savedProducts = [];
+    console.log("Extension turned off. Clearing product collect box storage.");
+  }
+
+  await chrome.storage.local.set(storageUpdates);
   
   // Update UI for the current tab
   updateExtensionUI(tab.id, nextActiveState);
 
-  // Send message to the current tab to turn ON or OFF completely
   chrome.tabs.sendMessage(tab.id, { action: "toggle_decidio.", state: nextActiveState }, (response) => {
     if (chrome.runtime.lastError) {
-      // If content script isn't injected yet, inject it
       if (nextActiveState) {
         chrome.scripting.executeScript({
           target: { tabId: tab.id },

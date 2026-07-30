@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    //  LOGO BADGE UPDATE FUNCTION
+    //  LOGO BADGE FUNCTION
     // ==========================================
     function updateLogoBadge() {
         if (!productsContainer || !toggleAnchor) return;
@@ -69,20 +69,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     //  UI REFRESH HELPER FUNCTION
     // ==========================================
-    // This wipes the display container and rebuilds it using whatever list is currently in storage.
+    // This wipes the display container and rebuilds it using whatever is currently in storage.
     function syncUIFromStorageArray(savedProducts) {
         if (!productsContainer) return;
         
-        // Find and remove all existing items to avoid double rendering
         const oldTiles = productsContainer.querySelectorAll('.collected-product-tile');
         oldTiles.forEach(tile => tile.remove());
         
-        // Loop through the updated items list and populate them back into the layout
         savedProducts.forEach((prod) => {
-            displaySelectedProduct(prod.imageUrl, prod.productUrl, productsContainer);
+            // Pass prod.productTitle here
+            displaySelectedProduct(prod.imageUrl, prod.productUrl, prod.productTitle || "Product", productsContainer);
         });
         
-        // Make sure the red circle counter updates
         updateLogoBadge();
     }
 
@@ -94,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     //  CROSS-TAB STORAGE EVENT LISTENER
     // ==========================================
-    // This runs silently on all tabs. The exact moment a product is deleted (or added) 
+    // When a product is deleted (or added) 
     // from one tab, this updates the remaining tabs
     chrome.storage.onChanged.addListener((changes, areaName) => {
         if (areaName === 'local' && changes.savedProducts) {
@@ -159,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Listen for messages BACK from the web page picker/background script
+    // Listen for messages BACK from the background script
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.action === "RENDER_PICKED_PRODUCT") {
             if (sidebarPanel) sidebarPanel.classList.remove('is-collapsed');
@@ -181,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (productTile) {
                 const urlToRemove = productTile.getAttribute('data-product-url');
                 
-                // Remove it from the current active DOM layout instantly
+                // Remove it from the current active DOM layout
                 productTile.remove();
                 
                 // Keep UI Continuous
@@ -206,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Helper rendering utility function
-function displaySelectedProduct(imageUrl, productUrl, container) {
+function displaySelectedProduct(imageUrl, productUrl, productTitle, container) {
     const existingTiles = container.querySelectorAll('.collected-product-tile').length;
     const itemNumber = String(existingTiles + 1).padStart(2, '0'); 
 
@@ -216,12 +214,21 @@ function displaySelectedProduct(imageUrl, productUrl, container) {
     
     productTile.style.position = 'relative';
     productTile.style.width = '85px';
-    productTile.style.height = '110px';
-    productTile.style.borderRadius = '8px';
-    productTile.style.overflow = 'hidden';
-    productTile.style.border = '1px solid rgba(255, 255, 255, 0.15)';
-    productTile.style.background = 'rgba(255, 255, 255, 0.08)';
+    // Leave space for the title text underneath
+    productTile.style.height = '140px'; 
+    productTile.style.display = 'flex';
+    productTile.style.flexDirection = 'column';
     productTile.style.boxSizing = 'border-box';
+
+    // Wrap the image in its own container
+    const imgWrapper = document.createElement('div');
+    imgWrapper.style.position = 'relative';
+    imgWrapper.style.width = '85px';
+    imgWrapper.style.height = '110px';
+    imgWrapper.style.borderRadius = '8px';
+    imgWrapper.style.overflow = 'hidden';
+    imgWrapper.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+    imgWrapper.style.background = 'rgba(255, 255, 255, 0.08)';
 
     const imgPreview = document.createElement('img');
     imgPreview.src = imageUrl;
@@ -242,8 +249,24 @@ function displaySelectedProduct(imageUrl, productUrl, container) {
     numberBadge.style.fontWeight = 'bold';
     numberBadge.style.textShadow = '0px 1px 3px rgba(0, 0, 0, 0.8)'; 
 
-    productTile.appendChild(imgPreview);
-    productTile.appendChild(numberBadge);
+    imgWrapper.appendChild(imgPreview);
+    imgWrapper.appendChild(numberBadge);
+
+    // Create the text label container for the title underneath the wrapper
+    const titleLabel = document.createElement('div');
+    titleLabel.className = 'product-tile-title';
+    titleLabel.textContent = productTitle;
+    titleLabel.style.width = '100%';
+    titleLabel.style.fontSize = '11px';
+    titleLabel.style.color = '#e2e8f0';
+    titleLabel.style.marginTop = '4px';
+    titleLabel.style.textAlign = 'center';
+    titleLabel.style.whiteSpace = 'nowrap';
+    titleLabel.style.overflow = 'hidden';
+    titleLabel.style.textOverflow = 'ellipsis'; // Adds '...' if text is too long MAYBE CHANGE THIS???????============
+
+    productTile.appendChild(imgWrapper);
+    productTile.appendChild(titleLabel);
     
     const addBtn = document.getElementById('addProductBtn');
     if (addBtn) addBtn.style.order = '0'; 

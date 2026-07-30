@@ -54,6 +54,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const newProduct = {
       imageUrl: request.imageUrl,
       productUrl: request.productUrl,
+      productTitle: request.productTitle || "Product",
       timestamp: new Date().toISOString()
     };
 
@@ -83,10 +84,10 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   const storageUpdates = { isExtensionActive: nextActiveState };
 
-  // If turning OFF, clear out old saved items so we start fresh next time
+  // If turning OFF, clear out old saved items
   if (!nextActiveState) {
     storageUpdates.savedProducts = [];
-    console.log("Extension turned off. Clearing product collect box storage.");
+    console.log("Extension turned off. Clearing product box storage.");
   }
 
   await chrome.storage.local.set(storageUpdates);
@@ -102,6 +103,28 @@ chrome.action.onClicked.addListener(async (tab) => {
           files: ["content.js"] 
         });
       }
+    }
+  });
+});
+
+// Listen for when the user switches tabs
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const tabId = activeInfo.tabId;
+  
+  // Get the global active state from storage
+  const data = await chrome.storage.local.get({ isExtensionActive: false });
+  
+  // Update the extension icon/UI for new activated tab
+  updateExtensionUI(tabId, data.isExtensionActive);
+
+  // Tell the content script in this tab to sync its UI with the global state
+  chrome.tabs.sendMessage(tabId, { action: "toggle_decidio.", state: data.isExtensionActive }, (response) => {
+    // If the content script isn't running on this tab yet and the extension is active, inject it
+    if (chrome.runtime.lastError && data.isExtensionActive) {
+      chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        files: ["content.js"]
+      });
     }
   });
 });

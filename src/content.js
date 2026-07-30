@@ -1,8 +1,7 @@
 /**
  * The content.js file
  * 
- * This file is responsible for managing the content script that runs in the context of web pages. 
- * It also handles communication between content script and background, as well as the activation/deactivation
+ * This file handles communication between content script and background, as well as the activation/deactivation
  * of Decidio Picker/Decidio Interaction mode.
  */
 
@@ -141,8 +140,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     top: 0; left: 0;
                     width: 100vw; height: 100vh;
                     background: rgba(15, 23, 42, 0.4); 
-                    backdrop-filter: blur(4px);        
-                    -webkit-backdrop-filter: blur(4px);
                     z-index: 2147483645;              
                     cursor: crosshair;
                     opacity: 0;
@@ -335,24 +332,77 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 e.preventDefault();
                 e.stopPropagation();
 
-                let elementUnderneath = document.elementFromPoint(e.clientX, e.clientY);
-                const target = this.findTargetImage(elementUnderneath);
+                const elementsUnderneath = document.elementsFromPoint(e.clientX, e.clientY);
+                
+                let finalImageUrl = null;
+                let finalProductUrl = null;
+                let finalProductTitle = "";
 
-                if (target) {
-                    const imageUrl = target.currentSrc || target.src;
-                    const parentLink = target.closest('a');
-                    const productUrl = parentLink ? parentLink.href : window.location.href;
-                    
+                // Go through the stack of elements under the click coordinates
+                for (const el of elementsUnderneath) {
+                    // Skip extension UI overlays
+                    if (el.closest('#decidio-extension-root') || 
+                        el.classList.contains('decidio-highlight-box') || 
+                        el.classList.contains('decidio-overlay')) {
+                        continue;
+                    }
+
+                    // Look for the image source
+                    if (!finalImageUrl) {
+                        if (el.tagName === 'IMG') {
+                            finalImageUrl = el.currentSrc || el.src;
+                            // Pull title from the image directly if available
+                            finalProductTitle = el.alt || el.title || "";
+                        } else {
+                            const innerImg = el.querySelector('img');
+                            if (innerImg) {
+                                finalImageUrl = innerImg.currentSrc || innerImg.src;
+                                finalProductTitle = innerImg.alt || innerImg.title || "";
+                            }
+                        }
+                    }
+
+                    // Look for the product page link (anchor tag)
+                    if (!finalProductUrl) {
+                        const structuralLink = el.closest('a');
+                        if (structuralLink && structuralLink.href) {
+                            finalProductUrl = structuralLink.href;
+                        }
+                    }
+
+                    // Fallback title search if image attributes are empty
+                    if (!finalProductTitle) {
+                        const heading = el.querySelector('h1, h2, h3, h4, [class*="title"], [class*="name"]');
+                        if (heading) {
+                            finalProductTitle = heading.innerText.trim();
+                        }
+                    }
+
+                    // If we mapped all the parameters, we can stop searching the DOM stack
+                    if (finalImageUrl && finalProductUrl && finalProductTitle) break;
+                }
+
+                // If no explicit anchor link was found in the card stack, fall back to current page
+                // COME BACK TO THIS LATER---------------------------------------------------------------
+                if (!finalProductUrl) {
+                    finalProductUrl = window.location.href;
+                }
+
+                // Only send the message if we successfully captured at least the image data
+                if (finalImageUrl) {
                     chrome.runtime.sendMessage({
                         action: "PRODUCT_IMAGE_PICKED",
-                        imageUrl: imageUrl,
-                        productUrl: productUrl
+                        imageUrl: finalImageUrl,
+                        productUrl: finalProductUrl,
+                        productTitle: finalProductTitle || "Product"
                     });
                 } else {
+                    // If they clicked empty space or something without an image, treat it as a cancel
                     chrome.runtime.sendMessage({
                         action: "DECIDIO_PICKER_CANCELLED"
                     });
                 }
+                
                 this.stop();
             }
         }

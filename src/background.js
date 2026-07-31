@@ -6,9 +6,22 @@
  * - Managing the extension's active state and UI (icon and popup).
  */
 
+
+
+
 // Helper to update the extension icon and popup behavior globally or per-tab
-function updateExtensionUI(tabId, isActive) {
-  const iconPath = isActive ? "active_logo.png" : "default_logo.png";
+const AUTH_KEY = "isLoggedIn";
+const ACTIVE_KEY = "isExtensionActive";
+
+async function updateExtensionUI(tabId, isActive) {
+  const { [AUTH_KEY]: isLoggedIn } = await chrome.storage.local.get(AUTH_KEY);
+
+  // Once logged in, the icon is always a toggle — never a login prompt.
+  chrome.action.setPopup({
+    tabId: tabId,
+    popup: isLoggedIn ? "" : "popup.html"
+  });
+
   
   chrome.action.setIcon({
     tabId: tabId,
@@ -19,29 +32,32 @@ function updateExtensionUI(tabId, isActive) {
     }
   });
 
-  // If active, disable the popup so onClicked fires. If inactive, show popup.html
-  // chrome.action.setPopup({ 
-  //  tabId: tabId, 
-  //  popup: isActive ? "" : "popup.html" 
-  //});
+  //If active, disable the popup so onClicked fires. If inactive, show popup.html
+  chrome.action.setPopup({ 
+   tabId: tabId, 
+   popup: isActive ? "" : "popup.html" 
+  });
 }
 
 // Listen for messages from content.js or popup.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
-  // Handle login success from popup
-  //if (request.action === "LOGIN_SUCCESS") {
-    //chrome.storage.local.set({ isExtensionActive: true }, () => {
-      //chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        //if (tabs[0]?.id) {
-          //updateExtensionUI(tabs[0].id, true);
-//          chrome.tabs.sendMessage(tabs[0].id, { action: "toggle_decidio.", state: true });
-        //}
-//      });
-    //});
-    //return true;
-  //}
+  //Handle login success from popup
+  if (request.action === "LOGIN_SUCCESS") {
+    chrome.storage.local.set({ [AUTH_KEY]: true, [ACTIVE_KEY]: true }, () => {
+      // Global default — applies to every tab, present and future.
+      chrome.action.setPopup({ popup: "" });
+  
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          updateExtensionUI(tabs[0].id, true);
+          chrome.tabs.sendMessage(tabs[0].id, { action: "toggle_decidio", state: true });
+        }
+      });
+      return true;
+    });
 
+  }
   // Content script asking for the initial state when a page loads
   if (request.action === "GET_EXTENSION_STATE") {
     chrome.storage.local.get({ isExtensionActive: false }, (data) => {
@@ -74,6 +90,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
   }
 });
+
+
 
 // Handle Action Button Click (Hotbar Icon)
 chrome.action.onClicked.addListener(async (tab) => {
@@ -136,3 +154,4 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     updateExtensionUI(tabId, data.isExtensionActive);
   }
 });
+

@@ -15,7 +15,6 @@
   ],
   "action": {
     "default_title": "decidio.",
-    "default_popup": "popup.html",
     "default_icon": {
       "128": "default_logo.png"
     }

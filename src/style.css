@@ -436,3 +436,79 @@ body {
     background: rgba(35, 36, 38, 0.4);
     position: relative;
 }
+
+[hidden] { display: none !important; }
+
+.panel-view { width: 100%; }
+
+/* ---- auth view ---- */
+#authView {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 24px 4px;
+  text-align: center;
+}
+
+.auth-welcome {
+  font-size: 20px;
+  font-weight: bold;
+  margin: 0 0 18px 0;
+  color: #fff;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 12px 14px;
+  margin: 0 0 8px 0;
+  box-sizing: border-box;
+  background-color: #2c2c2c;
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+.auth-input::placeholder { color: #8c8c8c; }
+.auth-input:focus { border-color: #3A6FAC; }
+
+.auth-primary-btn {
+  width: 100%;
+  padding: 12px;
+  margin-top: 4px;
+  color: #fff;
+  background: #555;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.auth-primary-btn:hover { background: #3A6FAC; }
+.auth-primary-btn:disabled { opacity: 0.5; cursor: default; }
+
+.auth-signup-text {
+  font-size: 11px;
+  margin-top: 8px;
+  color: #a0a0a0;
+}
+
+.auth-link-btn {
+  background: none;
+  border: none;
+  padding: 10px;
+  margin: 10px;
+  color: #a0a0a0;
+  font-weight: bold;
+  font-size: 11px;
+  cursor: pointer;
+}
+.auth-link-btn:hover { text-decoration: underline; }
+
+.auth-status {
+  font-size: 11px;
+  margin-top: 10px;
+  min-height: 14px;
+  color: #8a8f98;
+}

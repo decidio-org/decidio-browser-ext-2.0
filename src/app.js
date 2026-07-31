@@ -274,3 +274,106 @@ function displaySelectedProduct(imageUrl, productUrl, productTitle, container) {
     productTile.style.order = existingTiles + 1;
     container.appendChild(productTile);
 }
+
+// ==========================================
+    // AUTH: VIEW SWITCHING + LOGIN
+    // ==========================================
+    const API_URL = "https://decidio-api-production.up.railway.app";
+
+    const authView      = document.getElementById('authView');
+    const workspaceView = document.getElementById('workspaceView');
+    const signOutBtn    = document.getElementById('signOutBtn');
+    const statusDiv     = document.getElementById('status');
+    const emailInput    = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn      = document.getElementById('loginBtn');
+    const signupBtn     = document.getElementById('signupBtn');
+
+    function showView(isSignedIn) {
+        authView.hidden      = isSignedIn;
+        workspaceView.hidden = !isSignedIn;
+        signOutBtn.hidden    = !isSignedIn;
+    }
+
+    // Decide which view to render
+    chrome.storage.local.get('jwtToken', ({ jwtToken }) => {
+        showView(Boolean(jwtToken));
+    });
+
+    // React to sign-in / sign-out happening in any tab's panel
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName === 'local' && changes.jwtToken) {
+            showView(Boolean(changes.jwtToken.newValue));
+        }
+    });
+
+    async function authenticateUser(endpoint, email, password) {
+        loginBtn.disabled = true;
+        statusDiv.style.color = "#8a8f98";
+        statusDiv.textContent = "Authenticating...";
+
+        try {
+            const payload = { email, password };
+            if (endpoint.includes('signup')) {
+                payload.handle = email.split('@')[0];
+            }
+
+            const response = await fetch(`${API_URL}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Auth failed with status code: ${response.status}`);
+            }
+
+            const result = await response.json();
+            const token = result.token || result.access_token || result.jwtToken;
+            if (!token) {
+                throw new Error("Signed in, but no token was found in the response.");
+            }
+
+            // This write fires the onChanged listener above, which swaps the view.
+            await chrome.storage.local.set({ jwtToken: token });
+
+            passwordInput.value = '';
+            statusDiv.style.color = "#10b981";
+            statusDiv.textContent = "Signed in.";
+
+            chrome.runtime.sendMessage({ action: "LOGIN_SUCCESS" });
+
+        } catch (err) {
+            console.error("decidio: Auth pipeline failed", err);
+            statusDiv.style.color = "#ef4444";
+            statusDiv.textContent = `Error: ${err.message}`;
+        } finally {
+            loginBtn.disabled = false;
+        }
+    }
+
+    function submitAuth(endpoint) {
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+        if (!email || !password) {
+            statusDiv.style.color = "#ef4444";
+            statusDiv.textContent = "Enter both email and password.";
+            return;
+        }
+        authenticateUser(endpoint, email, password);
+    }
+
+    loginBtn.addEventListener('click',  () => submitAuth('/auth/login'));
+    signupBtn.addEventListener('click', () => submitAuth('/auth/signup'));
+
+    passwordInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitAuth('/auth/login');
+    });
+
+    signOutBtn.addEventListener('click', async () => {
+        await chrome.storage.local.remove('jwtToken');
+        statusDiv.textContent = '';
+        emailInput.value = '';
+        passwordInput.value = '';
+        chrome.runtime.sendMessage({ action: "LOGOUT" });
+    });

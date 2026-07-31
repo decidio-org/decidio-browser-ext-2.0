@@ -9,7 +9,6 @@
 <body>
 
     <!-- Floating Extension Controller Toggle Button -->
-    <div class="decidio-toggle-anchor" id="decidioToggle" title="Toggle Decidio Panel">
         <div class="brand-mark">d<span class="blue-dot">.</span></div>
     </div>
 
@@ -23,51 +22,70 @@
 
         <!-- Main Body Content -->
         <div class="sidebar-body">
-            
-            <!-- LIST WORKSPACE CUSTOM DROPDOWN -->
-            <div class="form-group">
+
+            <!-- ============ AUTH VIEW ============ -->
+            <div id="authView" class="panel-view" hidden>
+              <h2 class="auth-welcome">Welcome to Decidio</h2>
+          
+              <input type="email" id="email" class="auth-input"
+                     placeholder="E-Mail" autocomplete="username" />
+              <input type="password" id="password" class="auth-input"
+                     placeholder="Password" autocomplete="current-password" />
+          
+              <button id="loginBtn" class="auth-primary-btn">Sign In</button>
+          
+              <div class="auth-signup-text">
+                Don't have an account?
+                <button id="signupBtn" class="auth-link-btn">Sign Up</button>
+              </div>
+          
+              <div id="status" class="auth-status"></div>
+            </div>
+          
+            <!-- ============ WORKSPACE VIEW ============ -->
+            <div id="workspaceView" class="panel-view" hidden>
+          
+              <div class="form-group">
                 <label class="form-label">Lists</label>
                 <div class="custom-dropdown list-dropdown-component">
-                    <div class="dropdown-trigger" tabindex="0">
-                        <span class="selected-value-display">Select a list...</span>
-                        <div class="dropdown-arrow"></div>
+                  <div class="dropdown-trigger" tabindex="0">
+                    <span class="selected-value-display">Select a list...</span>
+                    <div class="dropdown-arrow"></div>
+                  </div>
+                  <div class="dropdown-menu">
+                    <div class="dropdown-options-list">
+                      <button class="dropdown-option create-action-btn" data-value="create-new">
+                        <span class="circle-plus-blue"></span>
+                        Create List
+                      </button>
+                      <button class="dropdown-option" data-value="wishlist">Wishlist</button>
+                      <button class="dropdown-option" data-value="shopping">Shopping</button>
+                      <button class="dropdown-option" data-value="favorites">Favorites</button>
                     </div>
-                    
-                    <!-- TEMPORARY LIST NAMES -->
-                    <div class="dropdown-menu">
-                        <div class="dropdown-options-list">
-                            <button class="dropdown-option create-action-btn" data-value="create-new">
-                                <span class="circle-plus-blue"></span>
-                                Create List
-                            </button>
-                            <button class="dropdown-option" data-value="wishlist">Wishlist</button>
-                            <button class="dropdown-option" data-value="shopping">Shopping</button>
-                            <button class="dropdown-option" data-value="favorites">Favorites</button>
-                        </div>
-                    </div>
+                  </div>
                 </div>
-            </div>
-
-            <!-- PRODUCT DESCRIPTION INPUT SECTION -->
-            <div class="form-group">
+              </div>
+          
+              <div class="form-group">
                 <label class="form-label">Description</label>
                 <textarea id="product-description" class="text-input-area"></textarea>
-            </div>
-
-            <!-- SELECT PRODUCTS WORKSPACE SECTION -->
-            <div class="form-group">
+              </div>
+          
+              <div class="form-group">
                 <label class="form-label">Collect <span class="blue-plus">+</span></label>
                 <div id="products-container" class="products-dotted-container">
-                    <div class="add-product-tile" id="addProductBtn">
-                        <div class="add-product-text">add a product</div>
-                    </div>
+                  <div class="add-product-tile" id="addProductBtn">
+                    <div class="add-product-text">add a product</div>
+                  </div>
                 </div>
+              </div>
+          
             </div>
-
-        </div>
+          </div>
 
         <!-- Bottom Footer Area -->
         <div class="sidebar-footer">
+            <button id="signOutBtn" class="auth-link-btn" hidden>Sign out</button>
         </div>
 
     </div>

@@ -82,7 +82,7 @@ chrome.runtime.sendMessage({ action: "GET_EXTENSION_STATE" }, (response) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const iframe = document.getElementById('decidio-main-frame');
 
-    if (request.action === "toggle_decidio.") {
+    if (request.action === "TOGGLE_PANEL") {
         if (request.state === true) {
           activateExtensionUI();
         } else {

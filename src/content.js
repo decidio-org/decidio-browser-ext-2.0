@@ -1,308 +1,414 @@
 /**
- * ===========================
- * Main controller file that sets up state, listens for chrome
- * messages, tracks mouse, and handles event listeners.
- * =========================
+ * The content.js file
+ * 
+ * This file handles communication between content script and background, as well as the activation/deactivation
+ * of Decidio Picker/Decidio Interaction mode.
  */
 
-/**
- * Initialization and DOM (document object model) setup section
- */
-// Main container to hold the extension's UI elements
-
-console.log('decidio content.js injected:', Math.random());
-const overlayRoot = document.createElement('div');
-overlayRoot.id = 'decidio-root';
-document.body.appendChild(overlayRoot);
-
-// Floating text badge that follows the user's mouse
-const hoverBadge = document.createElement('div');
-hoverBadge.className = 'decidio-hover-badge';
-hoverBadge.innerText = 'decidio.';
-hoverBadge.setAttribute('aria-hidden', 'true');
-document.body.appendChild(hoverBadge);
-
-let isExtensionActive = false; // On/off tracker
-let lastClientX = 0;
-let lastClientY = 0;
-let currentTargetCard = null; // Keeps track of the targeted product context matching the badge
-
-// Check storage on page load ---
-chrome.storage.local.get({ isExtensionActive: false }, (data) => {
-  isExtensionActive = data.isExtensionActive;
-  if (isExtensionActive) {
-    console.log("decidio. AUTO-ACTIVATED on page load/navigation");
+// Track the product count in the content script state
+if (typeof window.collectBoxCount === 'undefined') {
+    window.collectBoxCount = 0;
   }
-});
 
-// Listen for the message from background.js
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "toggle_decidio.") {
-    isExtensionActive = request.state;
+function activateExtensionUI() {
+  console.log("Activating Extension UI...");
+  if (document.getElementById('decidio-extension-root')) return;
 
-    if (isExtensionActive) {
-      console.log("decidio. is now ACTIVE");
+  const extensionRoot = document.createElement('div');
+  extensionRoot.id = 'decidio-extension-root';
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'decidio-main-frame';
+  iframe.src = chrome.runtime.getURL('index.html'); 
+
+  iframe.style.position = 'fixed';
+  iframe.style.top = '0';
+  iframe.style.right = '-450px'; 
+  iframe.style.width = '430px'; 
+  iframe.style.height = '100vh';
+  iframe.style.border = 'none';
+  iframe.style.zIndex = '2147483647'; 
+  iframe.style.backgroundColor = 'transparent';
+  iframe.style.colorScheme = 'none';
+  iframe.style.transition = 'right 0.3s ease-in-out'; 
+
+  extensionRoot.appendChild(iframe);
+  document.body.appendChild(extensionRoot);
+
+  setTimeout(() => {
+    iframe.style.right = '0px'; 
+    // Once the iframe loads, pass it the current product count
+    iframe.addEventListener('load', () => {
+      updateIframeProductCount();
+    });
+  }, 50);
+}
+
+function deactivateExtensionUI() {
+  console.log("Deactivating Extension UI...");
+  if (window.decidioPickerInstance) {
+    window.decidioPickerInstance.stop();
+  }
+  const extensionRoot = document.getElementById('decidio-extension-root');
+  if (extensionRoot) {
+    const iframe = document.getElementById('decidio-main-frame');
+    if (iframe) {
+      iframe.style.right = '-450px';
+      setTimeout(() => extensionRoot.remove(), 300); 
     } else {
-      console.log("decidio. is now INACTIVE");
-
-      // Remove all active product overlays
-      const existingCards = document.querySelectorAll('.product-card');
-      existingCards.forEach(card => card.remove());
-
-      hideHoverElements();
+      extensionRoot.remove();
     }
-    sendResponse({ nextState: isExtensionActive });
   }
-  return true;
+}
+
+// Helper function to send the current count into the UI frame
+function updateIframeProductCount() {
+  const iframe = document.getElementById('decidio-main-frame');
+  if (iframe && iframe.contentWindow) {
+    iframe.contentWindow.postMessage({
+      action: "UPDATE_COLLECT_COUNT",
+      count: collectBoxCount
+    }, "*");
+  }
+}
+
+chrome.runtime.sendMessage({ action: "GET_EXTENSION_STATE" }, (response) => {
+  if (chrome.runtime.lastError) return; 
+  if (response && response.isExtensionActive) {
+    activateExtensionUI();
+  }
 });
 
-/**
- * Mouse motion & position section
- */
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    const iframe = document.getElementById('decidio-main-frame');
 
-// Track mouse movement
-document.addEventListener('mousemove', (e) => {
-  if (!isExtensionActive) return;
+    if (request.action === "TOGGLE_PANEL") {
+        if (request.state === true) {
+          activateExtensionUI();
+        } else {
+          deactivateExtensionUI();
+        }
+    }
+    
+    // Listen for when background or iframe updates the total product count
+    if (request.action === "UPDATE_PRODUCT_COUNT") {
+        collectBoxCount = request.count;
+        updateIframeProductCount();
+    }
 
-  lastClientX = e.clientX;
-  lastClientY = e.clientY;
+    if (request.action === "START_DECIDIO_PICKER") {
+        if (iframe) {
+            iframe.style.pointerEvents = 'none'; 
+        }
+        if (window.decidioPickerInstance) {
+            window.decidioPickerInstance.start();
+        }
+    }
 
-  evaluateBadgeState(e.target, e.clientX, e.clientY);
+    if (request.action === "PRODUCT_IMAGE_PICKED" || request.action === "DECIDIO_PICKER_CANCELLED") {
+        if (iframe) {
+            iframe.style.pointerEvents = 'auto';
+        }
+    }
 });
 
-// Handle scroll changes and look up what's under the cursor
-document.addEventListener('scroll', () => {
-  if (!isExtensionActive) return;
+{
+    if (!window.hasDecidioPickerRun) {
+        window.hasDecidioPickerRun = true;
 
-  // Calculates what element has scrolled beneath the mouse
-  const elementUnderCursor = document.elementFromPoint(lastClientX, lastClientY);
-  if (elementUnderCursor) {
-    evaluateBadgeState(elementUnderCursor, lastClientX, lastClientY);
-  }
-}, { passive: true });
+        class DecidioContentPicker {
+            constructor() {
+                this.isActive = false;
+                this.overlay = null;
+                this.badge = null; 
+                this.highlightBox = null; 
+                this.currentTarget = null; 
+                this.stylesId = 'decidio-picker-styles';
+            }
 
-// Checks whether the element beneath the cursor is a "target"
-function evaluateBadgeState(targetElement, clientX, clientY) {
-  // Edge-case for clearing the hover elements when on the product card or extension interface
-  if (
-    targetElement.closest('#decidio-root') || 
-    targetElement.closest('.product-card') ||
-    targetElement.classList.contains('decidio-hover-badge')
-  ) {
-    return;
-  }
+            init() {
+                this.injectStyles();
+            }
 
-  const driver = getActiveDriver();
-  let clickableCard = null;
+            injectStyles() {
+                if (document.getElementById(this.stylesId)) return;
+                const style = document.createElement('style');
+                style.id = this.stylesId;
+                style.textContent = `
+                .decidio-overlay {
+                    position: fixed;
+                    top: 0; left: 0;
+                    width: 100vw; height: 100vh;
+                    background: rgba(15, 23, 42, 0.4); 
+                    z-index: 2147483645;              
+                    cursor: crosshair;
+                    opacity: 0;
+                    transition: opacity 0.3s ease; 
+                    pointer-events: none;
+                    clip-path: var(--decidio-cutout, polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%));
+                }
+                .decidio-overlay.active { 
+                    opacity: 1; 
+                }
+                .decidio-highlight-box {
+                    position: fixed;
+                    z-index: 2147483646;
+                    outline: 3px solid #ffffff;
+                    box-shadow: 0 0 0 4px #3A6FAC, 0 20px 40px rgba(0,0,0,0.4);
+                    pointer-events: none; 
+                    display: none;
+                    border-radius: 4px;
+                }
+                .decidio-highlight-box.show {
+                    display: block;
+                }
+                .decidio-hover-badge {
+                    position: fixed;
+                    z-index: 2147483648; 
+                    display: flex;
+                    align-items: center;
+                    background: rgba(15, 23, 42, 0.9); 
+                    backdrop-filter: blur(4px);
+                    -webkit-backdrop-filter: blur(4px);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: #ffffff;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    font-size: 11px;
+                    font-weight: 600;
+                    padding: 4px 10px;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+                    pointer-events: none; 
+                    transform: translate(12px, 12px); 
+                    opacity: 0;
+                    transition: opacity 0.15s ease;
+                }
+                .decidio-hover-badge.show {
+                    opacity: 1;
+                }
+                .decidio-blue-dot {
+                    color: #3A6FAC;
+                }
+                `;
+                document.head.appendChild(style);
+            }
 
-  if (driver && driver.productItemSelector) {
-    clickableCard = targetElement.closest(driver.productItemSelector);
-  }
+            start() {
+                if (this.isActive) return;
+                this.isActive = true;
 
-  // Fall back to scoring if the strict match isn't there
-  if (!clickableCard && driver && typeof driver.fallbackFinder === 'function') {
-    clickableCard = driver.fallbackFinder(targetElement);
-  }
+                this.overlay = document.createElement('div');
+                this.overlay.className = 'decidio-overlay';
+                document.body.appendChild(this.overlay);
+                setTimeout(() => this.overlay.classList.add('active'), 10);
 
-  // Make sure there is inner text characters
-  const hasText = targetElement.innerText && targetElement.innerText.trim().length > 0;
-  
-  if (clickableCard && hasText) {
-    // Lock the global target reference for extraction synchronization
-    currentTargetCard = clickableCard;
+                this.highlightBox = document.createElement('div');
+                this.highlightBox.className = 'decidio-highlight-box';
+                document.body.appendChild(this.highlightBox);
+
+                this.badge = document.createElement('div');
+                this.badge.className = 'decidio-hover-badge';
+                this.badge.innerHTML = 'decidio<span class="decidio-blue-dot">.</span>';
+                document.body.appendChild(this.badge);
+
+                document.addEventListener('mousemove', this.handleMouseMove, true);
+                window.addEventListener('scroll', this.handleScroll, { passive: true, capture: true });
+                document.addEventListener('click', this.handleClick, true);
+            }
+
+            stop() {
+                if (!this.isActive) return;
+                this.isActive = false;
+
+                if (this.overlay) {
+                    this.overlay.classList.remove('active');
+                    setTimeout(() => this.overlay.remove(), 200);
+                }
+                if (this.highlightBox) this.highlightBox.remove();
+                if (this.badge) this.badge.remove();
+
+                this.currentTarget = null;
+                document.removeEventListener('mousemove', this.handleMouseMove, true);
+                window.removeEventListener('scroll', this.handleScroll, true);
+                document.removeEventListener('click', this.handleClick, true);
+
+                const iframe = document.getElementById('decidio-main-frame');
+                if (iframe) {
+                    iframe.style.pointerEvents = 'auto';
+                }
+            }
+
+            findTargetImage(element) {
+                if (!element) return null;
+                if (element.tagName === 'IMG') return element;
+
+                const innerImg = element.querySelector('img');
+                if (innerImg) return innerImg;
+
+                const parentLink = element.closest('a') || element.closest('[class*="product"]');
+                if (parentLink) {
+                    const linkedImg = parentLink.querySelector('img');
+                    if (linkedImg) return linkedImg;
+                }
+                return null;
+            }
+
+            updateHighlight(target) {
+                if (!target || !this.highlightBox || !this.overlay) {
+                    if (this.highlightBox) this.highlightBox.classList.remove('show');
+                    if (this.badge) this.badge.classList.remove('show');
+                    if (this.overlay) this.overlay.style.removeProperty('--decidio-cutout');
+                    return;
+                }
+
+                const rect = target.getBoundingClientRect();
+                this.highlightBox.style.left = `${rect.left}px`;
+                this.highlightBox.style.top = `${rect.top}px`;
+                this.highlightBox.style.width = `${rect.width}px`;
+                this.highlightBox.style.height = `${rect.height}px`;
     
-    // The decidio. badge by the mouse
-    hoverBadge.classList.add('visible');
-    hoverBadge.style.left = `${clientX - 20}px`; 
-    hoverBadge.style.top = `${clientY - 35}px`;
-  } else {
-    hideHoverElements();
-  }
-}
+                const x1 = rect.left;
+                const y1 = rect.top;
+                const x2 = rect.right;
+                const y2 = rect.bottom;
 
-function hideHoverElements() {
-  hoverBadge.classList.remove('visible');
-}
-
-/**
- * Dealing with clicks and interaction section
- */
-
-// Clean up hover UI when user's cursor exits the web page
-document.addEventListener('mouseleave', () => {
-  hideHoverElements();
-});
-
-// Clicking logic for the overlay cards
-document.body.addEventListener('click', (e) => {
-  if (!isExtensionActive) return;
-
-  // x button on the overlay card
-  if (e.target.classList.contains('close-button')) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const cardToClose = e.target.closest('.product-card');
-    if (cardToClose) cardToClose.remove();
-    return;
-  }
-
-  // Bringing the card to the front of the stack
-  const clickedCard = e.target.closest('.product-card');
-  if (clickedCard) {
-    // If they clicked on a add to list or whatever button
-    if (e.target.closest('.actions') || e.target.classList.contains('button')) {
-       return; 
-    }
+                const cutoutPath = `polygon(
+                    0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 
+                    ${x1}px ${y1}px, 
+                    ${x1}px ${y2}px, 
+                    ${x2}px ${y2}px, 
+                    ${x2}px ${y1}px, 
+                    ${x1}px ${y1}px
+                )`;
     
-    e.preventDefault();
-    e.stopPropagation();
-    bringToFront(clickedCard);
-    return;
-  }
+                this.overlay.style.setProperty('--decidio-cutout', cutoutPath);
+                this.highlightBox.classList.add('show');
+                if (this.badge) this.badge.classList.add('show');
+            }
 
-  // Skip extension's internal UI clicks so they still work perfectly
-  if (e.target.closest('#decidio-root') || e.target.closest('.product-card') || e.target.classList.contains('decidio-hover-badge')) {
-    return; 
-  }
+            handleMouseMove = (e) => {
+                if (!this.isActive) return;
+                this.lastMouseX = e.clientX;
+                this.lastMouseY = e.clientY;
 
-  // Grab the active driver rules
-  const driver = getActiveDriver();
-  let clickedProductCard = null;
+                if (this.badge) {
+                    this.badge.style.left = `${e.clientX}px`;
+                    this.badge.style.top = `${e.clientY}px`;
+                }
+                this.checkElementAtCursor(e.clientX, e.clientY);
+            }
 
-  // Use the driver's specific selector to see if a product card was clicked
-  if (driver && driver.productItemSelector) {
-    clickedProductCard = e.target.closest(driver.productItemSelector);
-  }
+            handleScroll = () => {
+                if (!this.isActive) return;
+                if (!this.isScrollingTick) {
+                    window.requestAnimationFrame(() => {
+                        this.checkElementAtCursor(this.lastMouseX, this.lastMouseY);
+                        this.isScrollingTick = false;
+                    });
+                    this.isScrollingTick = true;
+                }
+            }
 
-  // If the strict selector missed it, use heuristic fallback
-  if (!clickedProductCard && driver && typeof driver.fallbackFinder === 'function') {
-    clickedProductCard = driver.fallbackFinder(e.target);
-  }
+            checkElementAtCursor(x, y) {
+                let elementUnderneath = document.elementFromPoint(x, y);
+                const targetImg = this.findTargetImage(elementUnderneath);
 
-  // If we successfully matched a product card via the driver...
-  if (clickedProductCard) {
-    console.log("User clicked directly on a driver-verified product card!");
+                if (targetImg) {
+                    if (this.currentTarget !== targetImg) {
+                        this.currentTarget = targetImg;
+                    }
+                    this.updateHighlight(this.currentTarget);
+                } else {
+                    if (this.currentTarget !== null) {
+                        this.currentTarget = null;
+                        this.updateHighlight(null);
+                    }
+                }
+            }
 
-    // Extract the URL using the driver's layout rules
-    let destinationUrl = null;
+            handleClick = (e) => {
+                if (!this.isActive) return;
+                
+                e.preventDefault();
+                e.stopPropagation();
 
-    // If they clicked directly on or inside a link, grab that first
-    const directLink = e.target.closest('a[href]');
-    if (directLink) {
-      destinationUrl = directLink.href;
-    } else if (driver.titleSelector) {
-      // Otherwise, use the driver's title selector to find the anchor link inside the card
-      const titleAnchor = clickedProductCard.querySelector(driver.titleSelector)?.closest('a') 
-                || clickedProductCard.querySelector(driver.titleSelector)?.querySelector('a');
-      if (titleAnchor) destinationUrl = titleAnchor.href;
+                const elementsUnderneath = document.elementsFromPoint(e.clientX, e.clientY);
+                
+                let finalImageUrl = null;
+                let finalProductUrl = null;
+                let finalProductTitle = "";
+
+                // Go through the stack of elements under the click coordinates
+                for (const el of elementsUnderneath) {
+                    // Skip extension UI overlays
+                    if (el.closest('#decidio-extension-root') || 
+                        el.classList.contains('decidio-highlight-box') || 
+                        el.classList.contains('decidio-overlay')) {
+                        continue;
+                    }
+
+                    // Look for the image source
+                    if (!finalImageUrl) {
+                        if (el.tagName === 'IMG') {
+                            finalImageUrl = el.currentSrc || el.src;
+                            // Pull title from the image directly if available
+                            finalProductTitle = el.alt || el.title || "";
+                        } else {
+                            const innerImg = el.querySelector('img');
+                            if (innerImg) {
+                                finalImageUrl = innerImg.currentSrc || innerImg.src;
+                                finalProductTitle = innerImg.alt || innerImg.title || "";
+                            }
+                        }
+                    }
+
+                    // Look for the product page link (anchor tag)
+                    if (!finalProductUrl) {
+                        const structuralLink = el.closest('a');
+                        if (structuralLink && structuralLink.href) {
+                            finalProductUrl = structuralLink.href;
+                        }
+                    }
+
+                    // Fallback title search if image attributes are empty
+                    if (!finalProductTitle) {
+                        const heading = el.querySelector('h1, h2, h3, h4, [class*="title"], [class*="name"]');
+                        if (heading) {
+                            finalProductTitle = heading.innerText.trim();
+                        }
+                    }
+
+                    // If we mapped all the parameters, we can stop searching the DOM stack
+                    if (finalImageUrl && finalProductUrl && finalProductTitle) break;
+                }
+
+                // If no explicit anchor link was found in the card stack, fall back to current page
+                // COME BACK TO THIS LATER---------------------------------------------------------------
+                if (!finalProductUrl) {
+                    finalProductUrl = window.location.href;
+                }
+
+                // Only send the message if we successfully captured at least the image data
+                if (finalImageUrl) {
+                    chrome.runtime.sendMessage({
+                        action: "PRODUCT_IMAGE_PICKED",
+                        imageUrl: finalImageUrl,
+                        productUrl: finalProductUrl,
+                        productTitle: finalProductTitle || "Product"
+                    });
+                } else {
+                    // If they clicked empty space or something without an image, treat it as a cancel
+                    chrome.runtime.sendMessage({
+                        action: "DECIDIO_PICKER_CANCELLED"
+                    });
+                }
+                
+                this.stop();
+            }
+        }
+        
+        const decidioPicker = new DecidioContentPicker();
+        decidioPicker.init();
+        window.decidioPickerInstance = decidioPicker;
     }
-
-    // Ultimate fallback if the driver's structural link isn't found
-    if (!destinationUrl) {
-      const fallbackAnchor = clickedProductCard.querySelector('a[href]');
-      if (fallbackAnchor) destinationUrl = fallbackAnchor.href;
-    }
-
-    // You now have the exact product URL directly from the driver
-    if (destinationUrl && destinationUrl.startsWith('http')) {
-      console.log(`[Driver Match Success] Grabbed URL: ${destinationUrl}`);
-
-      e.preventDefault(); 
-      e.stopPropagation();
-
-      handleBadgeActivation(clickedProductCard, destinationUrl, e.pageX, e.pageY);
-    }
-  }
-}, true);
-
-
-/**
- * DOM CAPTURE LAYER: Extraction & Pipelines
- */
-function handleBadgeActivation(productCardElement, targetProductUrl, appendX, appendY) {
-  const driver = getActiveDriver() || {};
-
-  // Cap the user at max 5 concurrent open cards
-  const activeCards = document.querySelectorAll('.product-card');
-  if (activeCards.length >= 5) {
-    alert("You've reached the maximum limit of 5 decidio. cards. Close one to add another.");
-    return;
-  }
-
-  navigator.clipboard.writeText(targetProductUrl).catch(() => {});
-
-  // Scrape Card Metadata
- const productTitle = getTitleFromSchema()
-   ?? productCardElement.querySelector('[itemprop="name"]')?.textContent.trim()
-   ?? (driver.titleSelector ? productCardElement.querySelector(driver.titleSelector)?.textContent.trim() : null)
-   ?? productCardElement.querySelector('img[alt]')?.alt.trim()
-   ?? productCardElement.querySelector('a')?.getAttribute('aria-label')
-   ?? "Unknown Product";
-
-  const price = null;
-
-  // Build Request Payload Object
-  const rawScrapePayload = {
-    product_type: "Unknown",
-    name: productTitle,
-    price: price,
-    url: targetProductUrl,
-    raw_specs: {},
-    raw_features: []
-  };
-
-  // UI RENDERING: Instantiate and pin container immediately in loading status mode
-  const card = createExtenCard(productTitle, false);
-  card.classList.add('is-loading'); // Engages loading screen spinner styles
-  document.body.appendChild(card);
-  positionCardSafely(card, appendX - 20, appendY + 15, false);
-  hideHoverElements();
-
-  // Route to pipeline coordinator
-  executeHarmonizationPipeline(card, rawScrapePayload);
-}
-
-/**
- * RECEIVE & RENDER CANONICAL SPEC JSON
- */
-function executeHarmonizationPipeline(cardElement, payload) {
-  const overlayMain = cardElement.querySelector('.overlay-main');
-  const loader = cardElement.querySelector('.card-loader');
-  const descElement = cardElement.querySelector('.desc');
-
-  if (descElement) descElement.style.display = 'none';
-
-  // REQUEST BUILDER: Send payload via background
-  chrome.runtime.sendMessage({ action: "PROCESS_PRODUCT_PIPELINE", payload: payload }, (response) => {
-    
-    // Clear Loading Architecture Flags
-    cardElement.classList.remove('is-loading');
-    if (loader) loader.style.display = 'none';
-
-    if (chrome.runtime.lastError || !response || response.error) {
-      console.error("Decidio error fallback triggered:", chrome.runtime.lastError || response?.error);
-      renderErrorState(overlayMain, response?.error || "Pipeline request failed.");
-      return;
-    }
-
-    try {
-      const canonicalData = response.data;
-      requestAnimationFrame(() => {
-        renderCanonicalSpecs(cardElement, canonicalData);
-      });
-    } catch (parseError) {
-      console.error("Layout processing exception:", parseError);
-      renderErrorState(overlayMain, "Failed parsing system parameters safely.");
-    }
-  });
-}
-
-function renderErrorState(container, message) {
-  container.innerHTML = `
-    <div class="decidio-error-wrapper" style="padding: 10px; color: #ef4444; font-size: 13px; text-align: center;">
-      <p style="font-weight: bold; margin: 0 0 4px 0;">Harmonization Error</p>
-      <p style="margin: 0; color: #ba9393;">${message}</p>
-    </div>
-  `;
 }

@@ -65,7 +65,6 @@ const SITE_DRIVERS = {
     allowedZones: 'a, button, img',
 
     isProductPage: () => {
-      
       const hasBuyButton = document.querySelector('button[class*="add-to-cart"], #add-to-cart-button');
       return hasBuyButton !== null;
     },

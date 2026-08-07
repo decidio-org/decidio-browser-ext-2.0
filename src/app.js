@@ -1,276 +1,260 @@
 /**
  * app.js
  * 
- * This script manages the extension's popup UI, including the sidebar panel, product collection tiles, number badge,
- * and interaction with the content script. 
+ * Manages the iframe UI: sidebar panel visibility, tile rendering, tile removal,
+ * dropdowns, mode toggles, and triggering the picker on the active tab.
  */
+
 document.addEventListener('DOMContentLoaded', () => {
-    // ==========================================
-    // DOM REFERENCES
-    // ==========================================
-    const toggleAnchor = document.getElementById('decidioToggle');
-    const sidebarPanel = document.getElementById('decidioSidebarPanel');
-    const addProductBtn = document.getElementById('addProductBtn');
-    const productsContainer = document.getElementById('products-container');
 
-    if (sidebarPanel) {
-        sidebarPanel.classList.remove('is-collapsed');
+  const toggleAnchor = document.getElementById('decidioToggle');
+  const sidebarPanel = document.getElementById('decidioSidebarPanel');
+  const addProductBtn = document.getElementById('addProductBtn');
+  const productsContainer = document.getElementById('products-container');
+  const singleModeBtn = document.getElementById('modeSingleBtn');
+  const multiModeBtn = document.getElementById('modeMultiBtn');
+  const dropdowns = document.querySelectorAll('.list-dropdown-component');
+
+  let currentSelectionMode = 'single';
+
+  /* --------------------------------------------------------------------------
+     SIDEBAR PANEL INITIALIZATION
+     -------------------------------------------------------------------------- */
+
+  if (sidebarPanel) {
+    sidebarPanel.classList.remove('is-collapsed');
+  }
+
+  if (toggleAnchor && sidebarPanel) {
+    toggleAnchor.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sidebarPanel.classList.toggle('is-collapsed');
+    });
+  }
+
+  /* --------------------------------------------------------------------------
+     STORAGE & TILE RENDERING
+     -------------------------------------------------------------------------- */
+
+  function updateLogoBadge(countOverride) {
+    if (!toggleAnchor) return;
+
+    let totalProducts = 0;
+    if (typeof countOverride === 'number') {
+      totalProducts = countOverride;
+    } else if (productsContainer) {
+      totalProducts = productsContainer.querySelectorAll('.collected-product-tile').length;
     }
 
-    if (toggleAnchor && sidebarPanel) {
-        toggleAnchor.addEventListener('click', (e) => {
-            e.stopPropagation();
-            sidebarPanel.classList.toggle('is-collapsed');
+    renderBadgeCount(toggleAnchor, totalProducts);
+  }
+
+  function syncUIFromStorageArray(savedProducts) {
+    if (!productsContainer) return;
+
+    const oldTiles = productsContainer.querySelectorAll('.collected-product-tile');
+    oldTiles.forEach(tile => tile.remove());
+
+    const reversedProducts = [...savedProducts].reverse();
+    reversedProducts.forEach((prod) => {
+      displaySelectedProduct(prod.imageUrl, prod.productUrl, prod.productTitle || "Product", productsContainer);
+    });
+
+    updateLogoBadge(savedProducts.length);
+  }
+
+  // Initial UI load from storage
+  chrome.storage.local.get({ savedProducts: [] }, (result) => {
+    syncUIFromStorageArray(result.savedProducts);
+  });
+
+  // Auto-sync UI whenever extension storage changes
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.savedProducts) {
+      const updatedProductsList = changes.savedProducts.newValue || [];
+      syncUIFromStorageArray(updatedProductsList);
+    }
+  });
+
+  // Tile deletion handler
+  if (productsContainer) {
+    productsContainer.addEventListener('click', (event) => {
+      const productTile = event.target.closest('.collected-product-tile');
+      
+      if (productTile) {
+        const urlToRemove = productTile.getAttribute('data-product-url');
+        productTile.remove();
+
+        const remainingTiles = productsContainer.querySelectorAll('.collected-product-tile');
+        remainingTiles.forEach((tile, index) => {
+          tile.style.order = index + 1;
+          const badge = tile.querySelector('.product-tile-number');
+          if (badge) badge.textContent = String(index + 1).padStart(2, '0');
         });
-    }
 
-    // ==========================================
-    //  LOGO BADGE FUNCTION
-    // ==========================================
-    function updateLogoBadge() {
-        if (!productsContainer || !toggleAnchor) return;
-        
-        const totalProducts = productsContainer.querySelectorAll('.collected-product-tile').length;
-        let badge = toggleAnchor.querySelector('.decidio-badge-count');
-        
-        if (totalProducts > 0) {
-            if (!badge) {
-                badge = document.createElement('span');
-                badge.className = 'decidio-badge-count';
-                badge.style.cssText = `
-                    position: absolute;
-                    top: -10px;
-                    right: -10px;
-                    background-color: #B8363D;
-                    color: #ffffff;
-                    border-radius: 50%;
-                    font-size: 13px;
-                    font-weight: bold;
-                    width: 22px;
-                    height: 22px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-                    z-index: 10;
-                `;
-                
-                if (window.getComputedStyle(toggleAnchor).position === 'static') {
-                    toggleAnchor.style.position = 'relative';
-                }
-                toggleAnchor.appendChild(badge);
-            }
-            badge.textContent = totalProducts;
-        } else if (badge) {
-            badge.remove();
-        }
-    }
-
-    // ==========================================
-    //  UI REFRESH HELPER FUNCTION
-    // ==========================================
-    // This wipes the display container and rebuilds it using whatever is currently in storage.
-    function syncUIFromStorageArray(savedProducts) {
-        if (!productsContainer) return;
-        
-        const oldTiles = productsContainer.querySelectorAll('.collected-product-tile');
-        oldTiles.forEach(tile => tile.remove());
-        
-        savedProducts.forEach((prod) => {
-            // Pass prod.productTitle here
-            displaySelectedProduct(prod.imageUrl, prod.productUrl, prod.productTitle || "Product", productsContainer);
-        });
-        
         updateLogoBadge();
+
+        chrome.storage.local.get({ savedProducts: [] }, (result) => {
+          const updatedList = result.savedProducts.filter(p => p.productUrl !== urlToRemove);
+          chrome.storage.local.set({ savedProducts: updatedList });
+        });
+      }
+    });
+  }
+
+  /* --------------------------------------------------------------------------
+     UI COMPONENTS (DROPDOWNS & MODE SWITCHER)
+     -------------------------------------------------------------------------- */
+
+  dropdowns.forEach(dropdown => {
+    const trigger = dropdown.querySelector('.dropdown-trigger');
+    const options = dropdown.querySelectorAll('.dropdown-option');
+    const display = dropdown.querySelector('.selected-value-display');
+
+    if (!trigger || !display) return;
+
+    function openDropdown() {
+      dropdown.classList.remove('is-closing');
+      dropdown.classList.add('is-active');
     }
 
-    // Load any existing saved products out of memory storage when sidebar renders
-    chrome.storage.local.get({ savedProducts: [] }, (result) => {
-        syncUIFromStorageArray(result.savedProducts);
-    });
-
-    // ==========================================
-    //  CROSS-TAB STORAGE EVENT LISTENER
-    // ==========================================
-    // When a product is deleted (or added) 
-    // from one tab, this updates the remaining tabs
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-        if (areaName === 'local' && changes.savedProducts) {
-            const updatedProductsList = changes.savedProducts.newValue || [];
-            syncUIFromStorageArray(updatedProductsList);
-        }
-    });
-
-    // ==========================================
-    // WORKSPACE CUSTOM DROPDOWN LOGIC
-    // ==========================================
-    const dropdowns = document.querySelectorAll('.list-dropdown-component');
-    dropdowns.forEach(dropdown => {
-        const trigger = dropdown.querySelector('.dropdown-trigger');
-        const options = dropdown.querySelectorAll('.dropdown-option');
-        const display = dropdown.querySelector('.selected-value-display');
-
-        if (!trigger || !display) return;
-
-        function openDropdown() {
-            dropdown.classList.remove('is-closing');
-            dropdown.classList.add('is-active');
-        }
-
-        function closeDropdown() {
-            dropdown.classList.add('is-closing');
-            dropdown.classList.remove('is-active');
-            setTimeout(() => { dropdown.classList.remove('is-closing'); }, 450); 
-        }
-
-        trigger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dropdown.classList.contains('is-active') ? closeDropdown() : openDropdown();
-        });
-
-        options.forEach(option => {
-            option.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const value = option.getAttribute('data-value');
-                display.innerText = value === 'create-new' ? "Create List +" : option.innerText;
-                closeDropdown();
-            });
-        });
-
-        document.addEventListener('click', () => {
-            if (dropdown.classList.contains('is-active')) closeDropdown();
-        });
-    });
-
-    // ==========================================
-    // DECIDIO INTERACTION MODE PICKER
-    // ==========================================
-    if (addProductBtn) {
-        addProductBtn.addEventListener('click', async () => {
-            if (sidebarPanel) sidebarPanel.classList.add('is-collapsed');
-            if (toggleAnchor) toggleAnchor.style.display = 'none'; 
-
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (tab) {
-                chrome.tabs.sendMessage(tab.id, { action: "START_DECIDIO_PICKER" });
-            }
-        });
+    function closeDropdown() {
+      dropdown.classList.add('is-closing');
+      dropdown.classList.remove('is-active');
+      setTimeout(() => { dropdown.classList.remove('is-closing'); }, 450); 
     }
 
-    // Listen for messages BACK from the background script
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.action === "RENDER_PICKED_PRODUCT") {
-            if (sidebarPanel) sidebarPanel.classList.remove('is-collapsed');
-            if (toggleAnchor) toggleAnchor.style.display = '';
-        }
-        else if (message.action === "DECIDIO_PICKER_CANCELLED") {
-            if (sidebarPanel) sidebarPanel.classList.remove('is-collapsed');
-            if (toggleAnchor) toggleAnchor.style.display = '';
-        }
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.contains('is-active') ? closeDropdown() : openDropdown();
     });
 
-    // ==========================================
-    // PRODUCT DESELECT / REMOVAL LOGIC
-    // ==========================================
-    if (productsContainer) {
-        productsContainer.addEventListener('click', (event) => {
-            const productTile = event.target.closest('.collected-product-tile');
-            
-            if (productTile) {
-                const urlToRemove = productTile.getAttribute('data-product-url');
-                
-                // Remove it from the current active DOM layout
-                productTile.remove();
-                
-                // Keep UI Continuous
-                const remainingTiles = productsContainer.querySelectorAll('.collected-product-tile');
-                remainingTiles.forEach((tile, index) => {
-                    tile.style.order = index + 1;
-                    const badge = tile.querySelector('.product-tile-number');
-                    if (badge) badge.textContent = String(index + 1).padStart(2, '0');
-                });
+    options.forEach(option => {
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const value = option.getAttribute('data-value');
+        display.innerText = value === 'create-new' ? "Create List +" : option.innerText;
+        closeDropdown();
+      });
+    });
 
-                updateLogoBadge();
+    document.addEventListener('click', () => {
+      if (dropdown.classList.contains('is-active')) closeDropdown();
+    });
+  });
 
-                // Clean out data from local storage. 
-                // Saving this updates chrome.storage.local, which helps with cross-tab syncing
-                chrome.storage.local.get({ savedProducts: [] }, (result) => {
-                    const updatedList = result.savedProducts.filter(p => p.productUrl !== urlToRemove);
-                    chrome.storage.local.set({ savedProducts: updatedList });
-                });
-            }
+  if (singleModeBtn && multiModeBtn) {
+    singleModeBtn.addEventListener('click', () => {
+      currentSelectionMode = 'single';
+      singleModeBtn.classList.add('active');
+      multiModeBtn.classList.remove('active');
+    });
+
+    multiModeBtn.addEventListener('click', () => {
+      currentSelectionMode = 'multi';
+      multiModeBtn.classList.add('active');
+      singleModeBtn.classList.remove('active');
+    });
+  }
+
+  /* --------------------------------------------------------------------------
+     TRIGGER PICKER IN ACTIVE TAB & MESSAGE LISTENERS
+     -------------------------------------------------------------------------- */
+
+  if (addProductBtn) {
+    addProductBtn.addEventListener('click', async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab) {
+        chrome.tabs.sendMessage(tab.id, { 
+          action: "START_DECIDIO_PICKER",
+          mode: currentSelectionMode 
         });
+      }
+    });
+  }
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === "RENDER_PICKED_PRODUCT" || message.action === "DECIDIO_PICKER_CANCELLED") {
+      if (sidebarPanel) sidebarPanel.classList.remove('is-collapsed');
+      if (toggleAnchor) toggleAnchor.style.display = '';
     }
+  });
+
 });
+/* --------------------------------------------------------------------------
+   DOM TILE RENDER HELPER
+   -------------------------------------------------------------------------- */
 
-// Helper rendering utility function
 function displaySelectedProduct(imageUrl, productUrl, productTitle, container) {
-    const existingTiles = container.querySelectorAll('.collected-product-tile').length;
-    const itemNumber = String(existingTiles + 1).padStart(2, '0'); 
+  const existingTiles = container.querySelectorAll('.collected-product-tile').length;
+  const itemNumber = String(existingTiles + 1).padStart(2, '0'); 
 
-    const productTile = document.createElement('div');
-    productTile.className = 'collected-product-tile';
-    productTile.setAttribute('data-product-url', productUrl);
-    
-    productTile.style.position = 'relative';
-    productTile.style.width = '85px';
-    // Leave space for the title text underneath
-    productTile.style.height = '140px'; 
-    productTile.style.display = 'flex';
-    productTile.style.flexDirection = 'column';
-    productTile.style.boxSizing = 'border-box';
+  const productTile = document.createElement('div');
+  productTile.className = 'collected-product-tile';
+  productTile.setAttribute('data-product-url', productUrl);
+  
+  // Scaled up tile width and height
+  productTile.style.position = 'relative';
+  productTile.style.width = '120px';
+  productTile.style.height = '180px'; 
+  productTile.style.display = 'flex';
+  productTile.style.flexDirection = 'column';
+  productTile.style.boxSizing = 'border-box';
+  productTile.style.flexShrink = '0';
 
-    // Wrap the image in its own container
-    const imgWrapper = document.createElement('div');
-    imgWrapper.style.position = 'relative';
-    imgWrapper.style.width = '85px';
-    imgWrapper.style.height = '110px';
-    imgWrapper.style.borderRadius = '8px';
-    imgWrapper.style.overflow = 'hidden';
-    imgWrapper.style.border = '1px solid rgba(255, 255, 255, 0.15)';
-    imgWrapper.style.background = 'rgba(255, 255, 255, 0.08)';
+  const imgWrapper = document.createElement('div');
+  imgWrapper.style.position = 'relative';
+  imgWrapper.style.width = '120px';
+  imgWrapper.style.height = '140px';
+  imgWrapper.style.borderRadius = '8px';
+  imgWrapper.style.overflow = 'hidden';
+  imgWrapper.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+  imgWrapper.style.background = 'rgba(255, 255, 255, 0.08)';
 
-    const imgPreview = document.createElement('img');
-    imgPreview.src = imageUrl;
-    imgPreview.style.width = '100%';
-    imgPreview.style.height = '100%';
-    imgPreview.style.objectFit = 'cover';
-    imgPreview.style.display = 'block';
+  const imgPreview = document.createElement('img');
+  imgPreview.src = imageUrl;
+  imgPreview.style.width = '100%';
+  imgPreview.style.height = '100%';
+  imgPreview.style.objectFit = 'cover';
+  imgPreview.style.display = 'block';
 
-    const numberBadge = document.createElement('div');
-    numberBadge.className = 'product-tile-number';
-    numberBadge.textContent = itemNumber;
-    
-    numberBadge.style.position = 'absolute';
-    numberBadge.style.bottom = '6px';
-    numberBadge.style.right = '8px';
-    numberBadge.style.color = '#ffffff';
-    numberBadge.style.fontSize = '12px';
-    numberBadge.style.fontWeight = 'bold';
-    numberBadge.style.textShadow = '0px 1px 3px rgba(0, 0, 0, 0.8)'; 
+  const numberBadge = document.createElement('div');
+  numberBadge.className = 'product-tile-number';
+  numberBadge.textContent = itemNumber;
+  
+  numberBadge.style.position = 'absolute';
+  numberBadge.style.bottom = '6px';
+  numberBadge.style.right = '8px';
+  numberBadge.style.color = '#ffffff';
+  numberBadge.style.fontSize = '12px';
+  numberBadge.style.fontWeight = 'bold';
+  numberBadge.style.textShadow = '0px 1px 3px rgba(0, 0, 0, 0.8)'; 
 
-    imgWrapper.appendChild(imgPreview);
-    imgWrapper.appendChild(numberBadge);
+  imgWrapper.appendChild(imgPreview);
+  imgWrapper.appendChild(numberBadge);
 
-    // Create the text label container for the title underneath the wrapper
-    const titleLabel = document.createElement('div');
-    titleLabel.className = 'product-tile-title';
-    titleLabel.textContent = productTitle;
-    titleLabel.style.width = '100%';
-    titleLabel.style.fontSize = '11px';
-    titleLabel.style.color = '#e2e8f0';
-    titleLabel.style.marginTop = '4px';
-    titleLabel.style.textAlign = 'center';
-    titleLabel.style.whiteSpace = 'nowrap';
-    titleLabel.style.overflow = 'hidden';
-    titleLabel.style.textOverflow = 'ellipsis'; // Adds '...' if text is too long MAYBE CHANGE THIS???????============
+  const titleLabel = document.createElement('div');
+  titleLabel.className = 'product-tile-title';
+  titleLabel.textContent = productTitle;
+  titleLabel.style.width = '100%';
+  titleLabel.style.fontSize = '13px';
+  titleLabel.style.lineHeight = '1.2';
+  titleLabel.style.color = '#e2e8f0';
+  titleLabel.style.marginTop = '6px';
+  titleLabel.style.textAlign = 'center';
+  
+  // Allows title to wrap up to 2 lines before truncating
+  titleLabel.style.display = '-webkit-box';
+  titleLabel.style['-webkit-line-clamp'] = '2';
+  titleLabel.style['-webkit-box-orient'] = 'vertical';
+  titleLabel.style.overflow = 'hidden';
 
-    productTile.appendChild(imgWrapper);
-    productTile.appendChild(titleLabel);
-    
-    const addBtn = document.getElementById('addProductBtn');
-    if (addBtn) addBtn.style.order = '0'; 
-    
-    productTile.style.order = existingTiles + 1;
-    container.appendChild(productTile);
+  productTile.appendChild(imgWrapper);
+  productTile.appendChild(titleLabel);
+  
+  const addBtn = document.getElementById('addProductBtn');
+  if (addBtn) addBtn.style.order = '0'; 
+  
+  productTile.style.order = existingTiles + 1;
+  container.appendChild(productTile);
 }

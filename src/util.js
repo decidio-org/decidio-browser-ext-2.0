@@ -1,38 +1,53 @@
 /**
- * =========================================
- * Utility Helpers
- * =========================================
+ * util.js
+ * 
+ * Contains any shared utility functions used across extension
  */
 
 /**
- * Keep cards strictly within the visible viewport bounds. This prevents the cards
- * from being unreachable.
+ * This function renders or removes a numeric badge on the decidio
+ * toggle button
  */
-function positionCardSafely(card, targetX, targetY, isFixedMode = false) {
-  const cardWidth = 280;
-  const cardHeight = 280;
-  const padding = 16;     // Safe boundary padding from viewport edges
+function renderBadgeCount(targetElement, count) {
+  if (!targetElement) return;
 
-  let maxX, maxY;
+  let badge = targetElement.querySelector('.decidio-badge-count');
 
-  if (isFixedMode) {
-    // Lock inside the visible browser window boundaries
-    card.style.position = 'fixed';
-    maxX = window.innerWidth - cardWidth - padding;
-    maxY = window.innerHeight - cardHeight - padding;
-  } else {
-    // Lock inside the entire scrollable document content height/width
-    card.style.position = 'absolute';
-    maxX = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - cardWidth - padding;
-    maxY = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) - cardHeight - padding;
+  if (count > 0) {
+    const currentPos = window.getComputedStyle(targetElement).position;
+    if (currentPos === 'static') {
+      targetElement.style.position = 'relative';
+    }
+    targetElement.style.overflow = 'visible';
+
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'decidio-badge-count';
+      badge.style.cssText = `
+        position: absolute;
+        top: -10px;
+        right: -10px;
+        background-color: #B8363D;
+        color: #ffffff;
+        border-radius: 50%;
+        font-size: 13px;
+        font-weight: 800;
+        min-width: 26px;
+        height: 26px;
+        padding: 0 4px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2147483647;
+        pointer-events: none;
+        line-height: 1;
+        font-family: Arial, sans-serif;
+      `;
+      targetElement.appendChild(badge);
+    }
+    badge.textContent = String(count);
+  } else if (badge) {
+    badge.remove();
   }
-
-  // Clamp coordinates safely within layout extremes
-  let safeX = Math.max(padding, Math.min(targetX, maxX));
-  let safeY = Math.max(padding, Math.min(targetY, maxY));
-
-  card.style.left = `${safeX}px`;
-  card.style.top = `${safeY}px`;
-  card.style.right = 'auto';  
-  card.style.bottom = 'auto';
 }

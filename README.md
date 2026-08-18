@@ -8,13 +8,11 @@ The extension has an icon for when it is on/off. Once on, the toggle and the sid
 
 ## Features
 
-* **decidio. toggle button** - The square button on the upper right hand side of the screen. This button allows the user to toggle the side panel in or out. In Decidio Interaction Mode (Picker/DIM), you can click the toggle to cancel the action.
-*     Once products are being selected, the total number of products will be shown inside a red circle, much like how notifications look on mobile devices.
+* **decidio. toggle button** - The square button on the upper right hand side of the screen. This button allows the user to toggle the side panel in or out. In Decidio Interaction Mode (Picker/DIM), you can click the toggle to cancel the action. Once products are being selected, the total number of products will be shown inside a red circle, much like how notifications look on mobile devices.
 * **decidio side panel** - This is the body of the extension where the rest of the features reside in
 * **LISTS section** - Contains a button with a sliding animation to show the option to create a list (not functional)
 * **COLLECT section** - Contains an "add" button which triggers DIM. There is also the "SINGLE" and "MULTI" buttons which allows the user to select one or multiple products.
-* **Decidio Interaction Mode (DIM)** - Upon activation, a semi-transparent overlay goes on top of the screen. The toggle will remain in the same spot. Hovering over a product will "highlight" the image of the product and the hover-badge will appear to show this is a product the user can click on. After the user clicks on a product, it will appear in the "COLLECT" section with a number.
-*     If the user is using the "MULTI" selection, they can click the "Finish" button, which will transfer all of their "picks" into the "COLLECT" section. The pill which contains the finish button also includes the number of items being selected.
+* **Decidio Interaction Mode (DIM)** - Upon activation, a semi-transparent overlay goes on top of the screen. The toggle will remain in the same spot. Hovering over a product will "highlight" the image of the product and the hover-badge will appear to show this is a product the user can click on. After the user clicks on a product, it will appear in the "COLLECT" section with a number. If the user is using the "MULTI" selection, they can click the "Finish" button, which will transfer all of their "picks" into the "COLLECT" section. The pill which contains the finish button also includes the number of items being selected.
 * **Add button** - (not fully functional) add to list that is specified in the "LISTS" section
 
 ## Testing

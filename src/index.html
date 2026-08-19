@@ -7,13 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <!-- Floating Extension Controller Toggle Button -->
-    <div class="decidio-toggle-anchor" id="decidioToggle" title="Toggle Decidio Panel">
-        <div class="brand-mark">d<span class="blue-dot">.</span></div>
-    </div>
-
-    <!-- Main Workspace Sidebar Panel (Initialized Closed / Hidden) -->
+    <!-- Main Sidebar Panel -->
     <div class="decidio-sidebar is-collapsed" id="decidioSidebarPanel">
         
         <!-- Header Section -->
@@ -24,7 +18,7 @@
         <!-- Main Body Content -->
         <div class="sidebar-body">
             
-            <!-- LIST WORKSPACE CUSTOM DROPDOWN -->
+            <!-- LIST DROPDOWN -->
             <div class="form-group">
                 <label class="form-label">Lists</label>
                 <div class="custom-dropdown list-dropdown-component">
@@ -48,18 +42,19 @@
                 </div>
             </div>
 
-            <!-- PRODUCT DESCRIPTION INPUT SECTION -->
-            <div class="form-group">
-                <label class="form-label">Description</label>
-                <textarea id="product-description" class="text-input-area"></textarea>
-            </div>
-
             <!-- SELECT PRODUCTS WORKSPACE SECTION -->
             <div class="form-group">
-                <label class="form-label">Collect <span class="blue-plus">+</span></label>
+                <div class="collect-header-row">
+                    <label class="form-label">Collect <span class="blue-plus">+</span></label>
+                    <!-- Segmented Mode Controller -->
+                    <div class="selection-mode-toggle" id="modeToggleContainer">
+                        <button class="mode-btn active" id="modeSingleBtn" title="Single Select">Single</button>
+                        <button class="mode-btn" id="modeMultiBtn" title="Multi Select">Multi</button>
+                    </div>
+                </div>
                 <div id="products-container" class="products-dotted-container">
                     <div class="add-product-tile" id="addProductBtn">
-                        <div class="add-product-text">add a product</div>
+                        <span class="circle-plus-blue"></span>
                     </div>
                 </div>
             </div>
@@ -68,10 +63,15 @@
 
         <!-- Bottom Footer Area -->
         <div class="sidebar-footer">
+            <button class="add-to-list-btn" id="addToListBtn">
+                <span class="btn-circle-plus"></span>
+                <span>Add to List</span>
+            </button>
         </div>
 
     </div>
 
+    <script src="util.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

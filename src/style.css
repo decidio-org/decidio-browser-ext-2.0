@@ -1,27 +1,33 @@
 /* ==========================================================================
-   GLOBAL VARIABLES
+   GLOBAL VARIABLES & DESIGN TOKENS
    ========================================================================== */
 :root {
+    /* Glassmorphism background colors and blur intensity */
     --bg-glass: rgba(45, 46, 48, 0.75);
     --bg-blur: 20px;
     
+    /* Typography color palette */
     --text-primary: #ffffff;
     --text-secondary: rgba(255, 255, 255, 0.7);
     --text-muted: rgba(255, 255, 255, 0.4);
     
+    /* Form control background and border tokens */
     --input-bg: rgba(255, 255, 255, 0.1);
     --input-border: rgba(255, 255, 255, 0.15);
     --input-focus: rgba(255, 255, 255, 0.3);
     
-    --accent-blue: #3b82f6;
+    /* Brand accent color */
+    --accent-blue: #3A6FAC;
 }
 
+/* Global CSS reset for predictable box sizing and margin normalization */
 *, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
+/* Page wrapper settings to ensure transparent overlay rendering */
 html, body {
     width: 100%;
     height: 100%;
@@ -29,6 +35,7 @@ html, body {
     overflow: hidden;
 }
 
+/* Decorative accent dot inline element */
 .blue-dot {
     color: var(--accent-blue);
     margin-left: 0.5px;
@@ -43,6 +50,7 @@ html, body {
     height: calc(100vh - 108px);
     width: 380px;
     
+    /* Frosted glass backdrop styling */
     background: var(--bg-glass);
     backdrop-filter: blur(var(--bg-blur));
     -webkit-backdrop-filter: blur(var(--bg-blur));
@@ -54,13 +62,14 @@ html, body {
     overflow: hidden;
 }
 
-/* Collapsed visual layout */
+/* Collapsed visual state - translates panel off-screen and hides from click events */
 .decidio-sidebar.is-collapsed {
     opacity: 0;
     transform: translateX(440px) scale(0.95);
     pointer-events: none;
 }
 
+/* Top bar containing branding and panel header controls */
 .sidebar-header {
     padding: 24px 24px 12px 24px;
     display: flex;
@@ -74,24 +83,30 @@ html, body {
     color: var(--text-primary);
 }
 
+/* Scrollable main body section */
 .sidebar-body {
     flex: 1;
     overflow-y: auto;
     padding: 12px 24px 24px 24px;
     position: relative;
+    /* Hide scrollbars */
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
 
+/* Hide WebKit scrollbars for Chrome and Safari*/
 .sidebar-body::-webkit-scrollbar {
     display: none;
 }
 
+/* Form input spacing container */
 .form-group {
+    margin-top: 12px;
     margin-bottom: 20px;
     position: relative;
 }
 
+/* Standard uppercase form field labels */
 .form-label {
     display: flex;
     align-items: center;
@@ -103,6 +118,7 @@ html, body {
     margin-bottom: 8px;
 }
 
+/* Decorative plus glyph next to field labels */
 .blue-plus {
     color: var(--accent-blue);
     font-weight: 800;
@@ -120,6 +136,7 @@ html, body {
     z-index: 1000;
 }
 
+/* Clickable select trigger button */
 .dropdown-trigger {
     width: 100%;
     padding: 12px 14px;
@@ -139,6 +156,7 @@ html, body {
     border-color: var(--input-focus);
 }
 
+/* CSS CSS-triangle arrow indicator */
 .dropdown-arrow {
     width: 0;
     height: 0;
@@ -148,6 +166,7 @@ html, body {
     transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
+/* Absolute positioned popup menu container (collapsed by default) */
 .dropdown-menu {
     position: absolute;
     top: calc(100% + 6px);
@@ -167,6 +186,7 @@ html, body {
     pointer-events: none;
 }
 
+/* Open dropdown animation state */
 .custom-dropdown.is-active .dropdown-menu {
     max-height: 250px;
     opacity: 1;
@@ -174,10 +194,12 @@ html, body {
     pointer-events: auto;
 }
 
+/* Rotate arrow 180deg when menu opens */
 .custom-dropdown.is-active .dropdown-arrow {
     transform: rotate(180deg);
 }
 
+/* Scrollable container inside the open dropdown */
 .dropdown-options-list {
     max-height: 244px;
     overflow-y: auto;
@@ -187,6 +209,7 @@ html, body {
     display: none;
 }
 
+/* Individual dropdown menu item */
 .dropdown-option {
     width: 100%;
     padding: 12px 14px;
@@ -208,16 +231,19 @@ html, body {
     background: rgba(255, 255, 255, 0.05);
 }
 
+/* Reveal transition when dropdown becomes active */
 .custom-dropdown.is-active .dropdown-option {
     opacity: 1;
     transform: translateY(0);
 }
 
+/* Staggered entrance animations for dropdown items */
 .custom-dropdown.is-active .dropdown-option:nth-child(1) { transition-delay: 0.05s; }
 .custom-dropdown.is-active .dropdown-option:nth-child(2) { transition-delay: 0.12s; }
 .custom-dropdown.is-active .dropdown-option:nth-child(3) { transition-delay: 0.19s; }
 .custom-dropdown.is-active .dropdown-option:nth-child(4) { transition-delay: 0.26s; }
 
+/* Exit animation styles for closing state */
 .custom-dropdown.is-closing .dropdown-option {
     opacity: 0;
     transform: translateY(-10px);
@@ -228,6 +254,7 @@ html, body {
 .custom-dropdown.is-closing .dropdown-option:nth-child(2) { transition-delay: 0.08s; }
 .custom-dropdown.is-closing .dropdown-option:nth-child(1) { transition-delay: 0.12s; }
 
+/* Special styling for "Create New List/Item" action button at top of dropdown */
 .dropdown-option.create-action-btn {
     color: var(--accent-blue);
     font-weight: 600;
@@ -238,6 +265,7 @@ html, body {
     background: rgba(59, 130, 246, 0.09);
 }
 
+/* Small 16px circular icon with CSS-rendered '+' sign */
 .circle-plus-blue {
     width: 16px;
     height: 16px;
@@ -248,6 +276,7 @@ html, body {
     flex-shrink: 0;
 }
 
+/* Pseudo-elements constructing the horizontal & vertical crosshairs of the plus icon */
 .circle-plus-blue::before, .circle-plus-blue::after {
     content: '';
     position: absolute;
@@ -256,32 +285,14 @@ html, body {
     left: 50%;
     transform: translate(-50%, -50%);
 }
-.circle-plus-blue::before { width: 7px; height: 1.5px; }
-.circle-plus-blue::after { width: 1.5px; height: 7px; }
+.circle-plus-blue::before { width: 7px; height: 1.5px; } /* Horizontal bar */
+.circle-plus-blue::after { width: 1.5px; height: 7px; }  /* Vertical bar */
 
 /* ==========================================================================
-   INPUTS & PRODUCTS CONTAINER
+   PRODUCTS CONTAINER & HORIZONTAL CAROUSEL
    ========================================================================== */
-.text-input-area {
-    width: 100%;
-    height: 50px;
-    padding: 10px 14px;
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
-    border-radius: 10px;
-    color: var(--text-primary);
-    font-size: 14px;
-    font-family: inherit;
-    outline: none;
-    resize: none;
-    transition: all 0.2s ease;
-}
 
-.text-input-area:focus {
-    border-color: var(--input-focus);
-    background: rgba(255, 255, 255, 0.15);
-}
-
+/* Dashed horizontal scrolling box holding collected products */
 .products-dotted-container {
     width: 100%;
     border: 2px dashed rgba(255, 255, 255, 0.15);
@@ -291,18 +302,19 @@ html, body {
     
     /* Horizontal Carousel Layout */
     display: flex;
-    flex-wrap: nowrap; /* Prevent items from wrapping to a second row */
-    align-items: flex-start;
+    flex-wrap: nowrap; /* Keep items on a single horizontal axis */
+    justify-content: flex-start;
+    align-items: center;
     gap: 16px;
     
     min-height: 220px; 
     
-    /* Horizontal scrolling controls */
+    /* Horizontal scrolling behavior */
     overflow-x: auto;
     overflow-y: hidden;
     scroll-behavior: smooth;
     
-    /* Hide scrollbars visually while keeping scrolling functional */
+    /* Hide scrollbars visually while maintaining scrollability */
     scrollbar-width: none; 
     -ms-overflow-style: none;
 }
@@ -311,38 +323,52 @@ html, body {
     display: none;
 }
 
+/* Add product tile button (rendered at end of carousel) */
 .add-product-tile {
     flex-shrink: 0;
-    width: 120px;
-    height: 140px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
+    width: 60px;               /* Fixed square dimension */
+    height: 60px;              
+    background: transparent;   
+    border: none;              
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s ease;
-    padding: 8px;
-    order: 999; 
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    padding: 0;
+    order: 999;                /* Ensures this tile always stays at the end */
 }
 
 .add-product-tile:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.4);
+    background: transparent;   
+    transform: scale(1.1);      /* Smooth zoom on hover */
+    opacity: 0.9;
 }
 
-.add-product-text {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    text-align: center;
-    line-height: 1.3;
-    text-transform: capitalize;
-    user-select: none;
+.add-product-tile:active {
+    transform: scale(0.95);     /* Shrink on click */
 }
 
-/* Style the item number badge */
+/* Scaled-up 44px version of the blue circle plus icon inside the add tile */
+.add-product-tile .circle-plus-blue {
+    width: 44px;         
+    height: 44px;        
+    border-width: 5px;   
+}
+
+/* Scaled horizontal bar for larger plus icon */
+.add-product-tile .circle-plus-blue::before {
+    width: 18px;         
+    height: 5px;         
+}
+
+/* Scaled vertical bar for larger plus icon */
+.add-product-tile .circle-plus-blue::after {
+    width: 5px;          
+    height: 18px;        
+}
+
 .product-tile-number {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     letter-spacing: 0.5px;
@@ -352,40 +378,51 @@ html, body {
    PRODUCT REMOVAL/DESELECT FEATURE
    ========================================================================== */
 
-/* Target items rendered inside the container */
+/* Individual product tile items rendered inside the dotted carousel */
 .products-dotted-container .collected-product-tile {
-    flex-shrink: 0; /* Prevents tiles from shrinking inside carousel */
+    flex-shrink: 0; /* Prevent tiles from compressing */
     position: relative;
     cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+
+    width: 120px;  
+    height: 140px; 
+    padding: 8px;
+    box-sizing: border-box;
+
     transition: filter 0.25s cubic-bezier(0.25, 1, 0.5, 1), 
                 transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-/* Dim on hover */
+/* Darken and shrink product tile on hover */
 .products-dotted-container .collected-product-tile:hover {
     filter: brightness(0.35);
-    transform: scale(0.97); /* Subtle pull-back animation when hovered */
+    transform: scale(0.97); 
 }
 
-/* Slight spring-back push effect when clicked */
+/* Click feedback scaling */
 .products-dotted-container .collected-product-tile:active {
     transform: scale(0.93);
 }
 
-/* Header row layout adjustment */
+/* Header flexbox row containing field label and toggle controls */
 .collect-header-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    margin-top: 30px;
     margin-bottom: 8px;
 }
 
-/* Override form-label bottom margin when inside header row */
+/* Override standard label margin inside header row */
 .collect-header-row .form-label {
     margin-bottom: 0;
 }
 
-/* Pill Toggle Container */
+/* Mode switcher container pill */
 .selection-mode-toggle {
     display: flex;
     background: rgba(255, 255, 255, 0.06);
@@ -394,6 +431,7 @@ html, body {
     border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* Individual mode select button */
 .mode-btn {
     background: transparent;
     border: none;
@@ -412,12 +450,13 @@ html, body {
     color: var(--text-secondary);
 }
 
+/* Active mode button state */
 .mode-btn.active {
     background: var(--text-primary);
     color: #1c1d1f;
 }
 
-/* Floating Finish Selection UI injected onto page during multi-pick */
+/* Floating overlay pill injected onto webpage during multi-select picker mode */
 .decidio-floating-finish-pill {
     position: fixed;
     top: 24px;
@@ -435,11 +474,13 @@ html, body {
     animation: pillSlideIn 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
+/* Entrance animation for the floating selection pill */
 @keyframes pillSlideIn {
     from { transform: translateY(-20px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
 }
 
+/* Selected item count badge inside floating pill */
 .decidio-pill-count {
     background: var(--accent-blue);
     color: white;
@@ -449,6 +490,7 @@ html, body {
     border-radius: 12px;
 }
 
+/* Action button inside floating pill */
 .decidio-pill-btn {
     background: var(--text-primary);
     color: #000;
@@ -462,8 +504,80 @@ html, body {
 }
 .decidio-pill-btn:hover { opacity: 0.9; }
 
+/* ==========================================================================
+   FOOTER AREA & PRIMARY BUTTON
+   ========================================================================== */
+
 .sidebar-footer {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(35, 36, 38, 0.4);
+    background: transparent;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Main primary action button */
+.add-to-list-btn {
+    width: 100%;
+    height: 44px;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Hover state: Fills button background with brand accent color */
+.add-to-list-btn:hover {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    box-shadow: 0 4px 16px rgba(58, 111, 172, 0.4);
+    transform: translateY(-1px);
+}
+
+.add-to-list-btn:active {
+    transform: translateY(0);
+}
+
+/* Circular plus icon embedded inside primary button */
+.btn-circle-plus {
+    width: 20px;
+    height: 20px;
+    border: 2.5px solid var(--text-primary);
+    border-radius: 50%;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: border-color 0.25s ease;
+}
+
+/* Pseudo-elements for button plus icon crosshairs */
+.btn-circle-plus::before,
+.btn-circle-plus::after {
+    content: '';
+    position: absolute;
+    background-color: var(--text-primary);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: background-color 0.25s ease;
+}
+
+.btn-circle-plus::before {
+    width: 8px;
+    height: 2.5px;
+}
+
+.btn-circle-plus::after {
+    width: 2.5px;
+    height: 8px;
 }

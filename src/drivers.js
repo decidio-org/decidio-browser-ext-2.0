@@ -1,25 +1,136 @@
+/* ==========================================================================
+   SCHEMA & METADATA HELPERS
+   ========================================================================== */
+
+/**
+ * Parses JSON-LD scripts on the page to extract structured Product schema titles.
+ * @returns {string|null} Clean product name if found, otherwise null.
+ */
 function getTitleFromSchema() {
   const schemas = document.querySelectorAll('script[type="application/ld+json"]');
   for (const schema of schemas) {
     try {
       const data = JSON.parse(schema.textContent);
-      if (data['@type'] === 'Product' && data.name) return data.name;
-      if (data['@graph']) {
-        const product = data['@graph'].find(n => n['@type'] === 'Product');
-        if (product?.name) return product.name;
+      // Handle array roots, graph objects, or single entity schemas
+      const items = Array.isArray(data) ? data : (data['@graph'] ? data['@graph'] : [data]);
+      for (const item of items) {
+        if ((item['@type'] === 'Product' || item['@type'] === 'IndividualProduct') && item.name) {
+          return typeof item.name === 'string' ? item.name : item.name.name;
+        }
       }
-    } catch {}
+    } catch {} // Ignore malformed JSON-LD scripts
   }
   return null;
 }
 
-// Test to see if molding the extension to the format of certain sites can improve issues with the cards being selectable in areas it shouldn't be
+/**
+ * Extracts product/page title from OpenGraph or Twitter meta tags.
+ * @returns {string|null} Meta title content if available.
+ */
+function getMetaTitle() {
+  const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
+  if (ogTitle) return ogTitle;
+  const twitterTitle = document.querySelector('meta[name="twitter:title"]')?.getAttribute('content');
+  if (twitterTitle) return twitterTitle;
+  return null;
+}
+
+/**
+ * Extracts and cleans document.title by stripping store brand suffixes/prefixes.
+ * Example: "Item Name - Store.com" -> "Item Name"
+ * @returns {string} Sanitized document title.
+ */
+function getCleanedDocumentTitle() {
+  let title = document.title || '';
+  // Split on common delimiters like "|", "–", "-", or ":"
+  title = title.split(/\s+[\|–—\-\:]\s+/)[0].trim();
+  title = title.replace(/^Amazon\.com\s*:\s*/i, '');
+  return title;
+}
+
+/**
+ * Sanitizes candidate text strings by filtering out call-to-actions, stock statuses, and prices.
+ * @param {string} text - Raw string candidate to evaluate.
+ * @returns {string|null} Valid title string or null if text matches noise patterns.
+ */
+function cleanTitleText(text) {
+  if (!text) return null;
+  let cleaned = text.replace(/\s+/g, ' ').trim();
+  
+  // Filter out non-title action text (buttons, stock status, ratings)
+  const stopWords = /^(add to cart|buy now|quick view|view details|select options|shop now|in stock|out of stock|add to wish list|\d+(\.\d+)?\s*(stars|reviews)?)$/i;
+  if (stopWords.test(cleaned)) return null;
+  
+  // Filter out standalone price values ($19.99, £50, etc.)
+  if (/^[\$\s?€£¥]\s?\d+(?:[\.,]\d{2})?$/.test(cleaned)) return null;
+
+  return cleaned.length > 1 ? cleaned : null;
+}
+
+/**
+ * Attempts to pull a meaningful title string from an image's alt/title/aria attributes.
+ * @param {HTMLImageElement} img - Target image node.
+ * @returns {string|null} Clean title or null if generic/missing.
+ */
+function getImageAltTitle(img) {
+  if (!img) return null;
+  const candidate = img.alt || img.title || img.getAttribute('aria-label');
+  if (!candidate) return null;
+  
+  const text = candidate.trim();
+  const genericWords = /^(product|image|photo|thumbnail|picture|item|logo|\d+)$/i;
+  if (genericWords.test(text) || text.length < 3) return null;
+  
+  return cleanTitleText(text);
+}
+
+/* ==========================================================================
+   SMART CONTAINER TEXT FALLBACK
+   ========================================================================== */
+
+/**
+ * Scans leaf DOM nodes within a container card to discover deeply nested text content
+ * matching character lengths typical of product titles.
+ * @param {HTMLElement} container - Card/wrapper DOM node.
+ * @returns {string|null} Highest confidence title string found in leaf nodes.
+ */
+function getSmartContainerText(container) {
+  let bestText = null;
+  const elements = container.querySelectorAll('*');
+
+  for (const el of elements) {
+    // Skip irrelevant structure, script, and interaction elements
+    if (['SCRIPT','STYLE','NOSCRIPT','SVG','BUTTON','INPUT','OPTION','LABEL','NAV','HEADER'].includes(el.tagName)) continue;
+    
+    // Evaluate leaf nodes only (elements with no child HTML element nodes)
+    if (el.children.length > 0) continue;
+
+    const text = cleanTitleText(el.innerText || el.textContent);
+    if (!text) continue;
+
+    // Filter within ideal title length thresholds (5 to 140 chars)
+    if (text.length >= 5 && text.length <= 140) {
+      if (!bestText || text.length > bestText.length) {
+        bestText = text;
+      }
+    }
+  }
+
+  return bestText;
+}
+
+/* ==========================================================================
+   SITE & ARCHETYPE DRIVERS
+   ========================================================================== */
+
+/**
+ * Domain-specific configuration drivers for targeted title & card extraction.
+ */
 const SITE_DRIVERS = {
   "amazon": {
-    // May need some change??
     productItemSelector: '.s-result-item[data-component-type="s-search-result"]',
-    titleSelector: 'h2 a span',
-    isProductPage: () => document.getElementById('dp') !== null,
+    titleSelector: 'h2 a span, h2 span, h2 a',
+    isProductPage: () => document.getElementById('dp') !== null || document.getElementById('ppd') !== null,
     productPageTitleSelector: '#productTitle',
   },
   
@@ -28,11 +139,12 @@ const SITE_DRIVERS = {
     titleSelector: 'address',
     isProductPage: () => window.location.href.includes('/homedetails/'),
   },
+
   "generic": { 
     fallbackFinder: (clickedElement) => {
       return findProductContainer(clickedElement);
     },
-    // productItemSelector: '.product-card-container,[class*="product-card"], [class*="product-item"], [class*="grid-item"]',
+
     productItemSelector: [
       'section[class*="product"]',
       'ul[class*="product"] > li',
@@ -43,52 +155,59 @@ const SITE_DRIVERS = {
       '[class*="grid-item"]'
     ].join(','),
 
-    // titleSelector: 'h2, h3, .title, [class*="title"], [class*="name"]',
-
     titleSelector: [
-      'h1',   // product page titles
-      'h2',   // most grid cards
-      'h3',   // nested card titles
-      '[itemprop="name"]',      // schema.org markup
-      '[aria-label*="product"]', // aria-labeled titles
-      'figcaption'              // image-first cards
+      '[class*="title" i]',
+      '[class*="name" i]',
+      '[class*="heading" i]',
+      '[id*="title" i]',
+      '[id*="name" i]',
+      'h2',
+      'h3',
+      'h4',
+      'h1',
+      '[itemprop="name"]',
+      'a[href*="/product/"]',
+      'a[href*="/item/"]',
+      'a[href*="/p/"]',
+      'figcaption'
     ].join(','),
-
-
-// FOR PRICE EXTRACTION IF WE NEED IT
-//     <data value="29.99">$29.99</data>   <!-- semantic price -->
-// <ins>$29.99</ins>                    <!-- sale price -->
-// <del>$39.99</del>                    <!-- original price -->
-// [itemprop="price"]                   <!-- schema.org -->
-// [aria-label*="price"]
 
     allowedZones: 'a, button, img',
 
+    // Heuristic detection to identify if current page is a Product Detail Page (PDP)
     isProductPage: () => {
+      if (typeof getTitleFromSchema === 'function' && getTitleFromSchema()) return true;
+
+      // Check for buy/add-to-cart button presence
+      const hasBuyButton = document.querySelector(
+        '#add-to-cart-button, #buy-now-button, button[id*="add-to-cart"], button[class*="add-to-cart" i], button[name="add"]'
+      );
       
-      const hasBuyButton = document.querySelector('button[class*="add-to-cart"], #add-to-cart-button');
-      return hasBuyButton !== null;
+      // Check for primary title structures
+      const hasProductTitle = document.querySelector('#productTitle, h1[class*="product" i], h1[class*="title" i]');
+
+      return hasBuyButton !== null || hasProductTitle !== null;
     },
-    productPageTitleSelector: 'h1',
+
+    productPageTitleSelector: '[itemprop="name"], h1, h2.product-title',
   }
 };
 
-
+/**
+ * Category-based archetype configurations (e.g., real estate listings vs. e-commerce)
+ */
 const ARCHETYPE_DRIVERS = {
   realestate: {
     productItemSelector: [
-      // Semantic
       'article[class*="card"]',
       'li[class*="card"]',
       'li[class*="result"]',
       'li[class*="listing"]',
-      // Common patterns across sites
       '[class*="property-card"]',
       '[class*="listing-card"]',
       '[class*="home-card"]',
       '[class*="result-card"]',
       '[class*="MapHome"]',
-      // Data attributes (more stable than class names)
       '[data-test*="card"]',
       '[data-testid*="card"]',
       '[data-listing-id]',
@@ -96,22 +215,19 @@ const ARCHETYPE_DRIVERS = {
     ].join(','),
 
     titleSelector: [
-      // Most reliable — semantic address element
       'address',
-      // Data attributes (stable across deployments)
       '[data-test*="addr"]',
       '[data-testid*="addr"]',
       '[data-test*="street"]',
-      // Common class patterns (case-insensitive via JS, not CSS)
       '[class*="address"]',
       '[class*="Address"]',
       '[class*="street"]',
       '[class*="Street"]',
     ].join(','),
 
+    // Checks URL patterns and page features (galleries, property specs) for Real Estate PDPs
     isProductPage: () => {
       const url = window.location.href;
-      // URL patterns common to property detail pages
       const detailPatterns = [
         /\/homedetails\//,
         /\/homes?\/.*\/home\//,
@@ -123,7 +239,6 @@ const ARCHETYPE_DRIVERS = {
       ];
       if (detailPatterns.some(p => p.test(url))) return true;
 
-      // DOM signals for a property detail page
       const hasGallery = document.querySelector('[class*="gallery"], [class*="Gallery"], [class*="photo-carousel"]') !== null;
       const hasFactsSection = document.querySelector('[class*="facts"], [class*="Facts"], [class*="details-section"]') !== null;
       const hasContactForm = document.querySelector('form[class*="contact"], form[class*="Contact"], button[class*="tour"]') !== null;
@@ -139,17 +254,115 @@ const ARCHETYPE_DRIVERS = {
       '[data-test*="addr"]',
     ].join(','),
 
-    // Custom title extractor for real estate — called before the generic chain
     extractTitle: (container) => extractRealEstateTitle(container),
   }
 };
 
+/* ==========================================================================
+   OPTIMIZED TITLE EXTRACTION PIPELINE
+   ========================================================================== */
+
+/**
+ * Main execution pipeline for title resolution:
+ * 1. Checks Product Detail Page (PDP) schemas, selectors, and h1 nodes.
+ * 2. Checks Container-scoped targets (selectors, links, img alt, leaf nodes).
+ * 3. Falls back to global page metadata / document title.
+ * 
+ * @param {HTMLImageElement|HTMLElement} targetImg - Clicked element or thumbnail image node.
+ * @param {HTMLElement} [container] - Enclosing product card container.
+ * @returns {string} Best resolved title text.
+ */
+function extractTitle(targetImg, container) {
+  const driver = getActiveDriver();
+  const isProduct = driver.isProductPage ? driver.isProductPage() : false;
+
+  // -------------------------------------------------------------
+  // STRATEGY 1: PRODUCT DETAIL PAGE (PDP)
+  // -------------------------------------------------------------
+  if (isProduct) {
+    const schemaTitle = getTitleFromSchema();
+    if (schemaTitle) return schemaTitle.trim();
+
+    if (driver.productPageTitleSelector) {
+      const el = document.querySelector(driver.productPageTitleSelector);
+      const text = cleanTitleText(el?.innerText || el?.textContent);
+      if (text) return text;
+    }
+
+    // Secondary PDP check: find h1 outside standard header/nav layouts
+    const h1s = document.querySelectorAll('h1');
+    for (const h1 of h1s) {
+      if (!h1.closest('header, nav, .breadcrumb, [class*="breadcrumb"]')) {
+        const text = cleanTitleText(h1.innerText || h1.textContent);
+        if (text) return text;
+      }
+    }
+
+    const metaTitle = getMetaTitle();
+    if (metaTitle) return cleanTitleText(metaTitle);
+  }
+
+  // -------------------------------------------------------------
+  // STRATEGY 2: PRODUCT CARD / LIST ITEM (Container-Scoped)
+  // -------------------------------------------------------------
+  const targetContainer = container && container !== document.body ? container : null;
+
+  if (targetContainer) {
+    if (driver.extractTitle) {
+      const customTitle = driver.extractTitle(targetContainer);
+      if (customTitle) return customTitle;
+    }
+
+    const selector = driver.titleSelector || SITE_DRIVERS.generic.titleSelector;
+    const candidates = targetContainer.querySelectorAll(selector);
+
+    for (const el of candidates) {
+      if (el.closest('header, nav, .price, [class*="price"], [class*="badge"], [class*="rating"]')) continue;
+      const text = cleanTitleText(el.innerText || el.textContent);
+      if (text) return text;
+    }
+
+    // Secondary pass: Check all anchor links inside the card
+    const links = targetContainer.querySelectorAll('a[href]');
+    for (const a of links) {
+      if (a.closest('.price, [class*="price"]')) continue;
+      const text = cleanTitleText(a.innerText || a.textContent);
+      if (text && text.length > 3) return text;
+    }
+
+    // Tertiary pass: Image alt / title attributes
+    const imgAlt = getImageAltTitle(targetImg) || getImageAltTitle(targetContainer.querySelector('img'));
+    if (imgAlt) return imgAlt;
+
+    // Quaternary pass: Leaf node text scanner fallback
+    const cardText = getSmartContainerText(targetContainer);
+    if (cardText) return cardText;
+  }
+
+  // -------------------------------------------------------------
+  // STRATEGY 3: GLOBAL FALLBACK
+  // -------------------------------------------------------------
+  const directImgAlt = getImageAltTitle(targetImg);
+  if (directImgAlt) return directImgAlt;
+
+  const globalMeta = getMetaTitle();
+  if (globalMeta) return cleanTitleText(globalMeta);
+
+  return getCleanedDocumentTitle();
+}
+
+/* ==========================================================================
+   UTILITY & SEARCH ENGINE FUNCTIONS
+   ========================================================================== */
+
+/**
+ * Detects whether the current site represents a real estate platform vs generic e-commerce.
+ * @returns {string} 'realestate' or 'generic'
+ */
 function detectSiteArchetype() {
   const host = window.location.hostname;
   const text = document.body.innerText.toLowerCase();
-  const url = window.location.href;
 
-  // Known real estate domains (extend as needed)
   const realEstateDomains = [
     'zillow', 'redfin', 'realtor', 'trulia', 'homes.com',
     'coldwellbanker', 'century21', 'compass', 'movoto',
@@ -157,7 +370,7 @@ function detectSiteArchetype() {
   ];
   if (realEstateDomains.some(d => host.includes(d))) return 'realestate';
 
-  // Structural signals for unknown real estate sites
+  // Heuristic scoring based on real estate keywords and DOM structure
   const hasAddressTag = document.querySelector('address') !== null;
   const hasBedBath = /\b\d+\s*(bd|ba|bed|bath|bedroom|bathroom|sqft|sq\.?\s?ft)/i.test(text);
   const hasPricePerMonth = /\$[\d,]+\s*\/\s*(mo|month)/i.test(text);
@@ -174,64 +387,43 @@ function detectSiteArchetype() {
   if (score >= 4) return 'realestate';
   return 'generic';
 }
-// Helper function to figure out which site rules to apply
+
+/**
+ * Retrieves active driver config based on domain matching or page archetype heuristics.
+ * @returns {Object} Site driver configuration object.
+ */
 function getActiveDriver() {
   const host = window.location.hostname;
 
   if (host.includes('amazon')) return SITE_DRIVERS.amazon;
-  // if (host.includes('zillow')) return SITE_DRIVERS.zillow;
 
-  // Archetype detection for everything else
   const archetype = detectSiteArchetype();
   if (archetype === 'realestate') return ARCHETYPE_DRIVERS.realestate;
   
-  // Falls back to global commerce rules for every other website on the web
   return SITE_DRIVERS.generic;
 }
 
 /**
- * Last-resort title heuristic: finds the longest non-price text string
- * inside a container that's plausibly a product name.
+ * Cleans street address strings extracted from real estate cards.
+ * @param {string} raw - Unsanitized address text.
+ * @returns {string|null} Formatted street address or null.
  */
- function getLongestTextNode(container) {
-  const pricePattern = /^[\$€£¥]?\s?\d+[\.,]?\d*$|^\d+[\.,]\d{2}$/;
-  let best = null;
-
-  container.querySelectorAll('*').forEach(el => {
-    if (['SCRIPT','STYLE','NOSCRIPT'].includes(el.tagName)) return;
-    const text = (el.childNodes[0]?.textContent ?? '').trim(); // direct text only, no children
-    if (!text || pricePattern.test(text)) return;
-    if (text.length > 10 && (!best || text.length > best.length)) {
-      best = text;
-    }
-  });
-
-  return best;
-}
-
-
-/**
- * Strips city/state/zip suffixes from an address string,
- * returning just the street line.
- */
- function cleanAddressText(raw) {
+function cleanAddressText(raw) {
   if (!raw) return null;
-  // Take only the first line if multi-line
   const first = raw.split(/[\n,|]/)[0].trim();
-  // Must look like a street address: starts with a number
   if (/^\d+\s+\w/.test(first) && first.length > 5) return first;
-  // Or return the whole thing trimmed if it's short enough to be an address
   const full = raw.trim().replace(/\s+/g, ' ');
   if (full.length < 80) return full;
   return null;
 }
 
 /**
- * Walks text nodes looking for strings that match US/CA address patterns.
+ * Uses TreeWalker to traverse text nodes matching standard street address regex patterns.
+ * @param {HTMLElement} container - Card container element.
+ * @returns {string|null} First matching street address string.
  */
 function findAddressPattern(container) {
   const addressPattern = /^\d+\s[\w\s]+(?:st|ave|rd|blvd|dr|ln|ct|pl|way|cir|terr?|pkwy|hwy)\b/i;
-
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const text = walker.currentNode.textContent.trim();
@@ -241,16 +433,14 @@ function findAddressPattern(container) {
 }
 
 /**
- * Extracts a clean street address from a real estate card.
- * Tries semantic/attribute selectors first, then falls back to
- * pattern-matching text nodes for address-shaped strings.
+ * Real Estate title extractor looking for <address> tags, data attributes, address classes, or regex patterns.
+ * @param {HTMLElement} container - Card wrapper element.
+ * @returns {string|null} Resolved property address title.
  */
- function extractRealEstateTitle(container) {
-  // 1. Semantic address element
+function extractRealEstateTitle(container) {
   const addressEl = container.querySelector('address');
   if (addressEl) return cleanAddressText(addressEl.textContent);
 
-  // 2. Data attribute selectors (stable)
   const dataSelectors = [
     '[data-test*="addr"]', '[data-testid*="addr"]',
     '[data-test*="street"]', '[data-testid*="street"]',
@@ -260,118 +450,90 @@ function findAddressPattern(container) {
     if (el) return cleanAddressText(el.textContent);
   }
 
-  // 3. Class name patterns (case-insensitive JS match — more reliable than CSS [class*=])
   const allEls = container.querySelectorAll('*');
   for (const el of allEls) {
     const cls = el.className?.toString().toLowerCase() ?? '';
     if (
       (cls.includes('address') || cls.includes('street')) &&
-      !cls.includes('city') && !cls.includes('state') // avoid city/state-only spans
+      !cls.includes('city') && !cls.includes('state')
     ) {
       const text = cleanAddressText(el.textContent);
       if (text) return text;
     }
   }
 
-  // 4. Pattern-match for address-shaped strings in any text node
   return findAddressPattern(container);
 }
 
-// New Code Section
-
 /**
- * Heuristic Scoring Engine
- * 
- * This part of the extension acts as a "fallback" system. Instead of relying on
- * hardcoded class names that can break if a website updates its layout, the extension
- * uses a system based on scoring.
- * When a cuser clicks an item, we climb up the DOM tree and score elements based on
- * the presence of an e-commerce product card (image, link, price, etc.). This 
- * guarantees better accuracy across unmapped or updated sites (especially sites that 
- * are as complex as Zillow).
- */
-
-/**
- * Rates an element's likelihood of being an e-commerce product card.
+ * Evaluates candidate DOM nodes against scoring criteria to determine if they are product cards.
+ * @param {HTMLElement} el - Candidate parent container.
+ * @param {HTMLElement} clickedEl - Element originally clicked by user.
+ * @returns {number} Confidence score (0 to 100+).
  */
 function scoreProductCard(el, clickedEl) {
   if (!el || !clickedEl) return 0;
-
   let score = 0;
 
-  // Image checks (Optimized for overlays/siblings)
+  // Bonus for containing or directly referencing the clicked target element
   const containerImg = el.querySelector("img");
   if (containerImg) {
-    // Check if clicked element IS the image, CONTAINS the image, 
-    // or is a close sibling/overlay sharing the same parent
     const isExactImage = containerImg.contains(clickedEl) || clickedEl.closest('img') === containerImg;
     const isImageSibling = clickedEl.parentElement && clickedEl.parentElement.querySelector('img') === containerImg;
 
     if (isExactImage || isImageSibling) {
-      score += 35; // Bumped up from 25 to favor image clicks strongly
+      score += 35;
     } else {
       score += 15;
     }
   }
   
-  // 2. Link check
-  if (el.querySelector("a[href]")) {
-    score += 25;
-  }
+  if (el.querySelector("a[href]")) score += 25;
 
-  // Smart Filter/Form Penalty 
-  // ONLY penalize if the element is an explicit filter sidebar or form container, 
-  // not just because it contains a single <label> or input.
+  // Penalty for sidebar filter panels or input-heavy forms
   const isFilterStructure = el.matches('aside, form, .sidebar, .filters');
   const hasTooManyInputs = el.querySelectorAll('input').length > 3;
-  if (isFilterStructure || hasTooManyInputs) {
-      score -= 40; 
-  }
+  if (isFilterStructure || hasTooManyInputs) score -= 40; 
 
-  // Text Content & Price Checks
+  // Content indicators (prices, specs, review ratings)
   const text = el.innerText || "";
-  
-  // Regex adjustments to catch price formats cleanly
   if (/[\$\s?€£¥]\s?\d+(?:[\.,]\d{2})?/.test(text)) score += 40;
-  
-  // Real estate tracking (For Zillow support)
   if (/\b(bd|ba|sqft|home|house|address)\b/i.test(text)) score += 30; 
   if (/star|review|rating/i.test(text)) score += 10;
 
+  // Word count heuristic to penalize full page containers vs single product cards
   const wordCount = text.trim().split(/\s+/).length;
-  if (wordCount >= 3 && wordCount <= 60) score += 15; // typical product card copy
-  if (wordCount > 100) score -= 20; // probably a paragraph block, not a card
-
+  if (wordCount >= 3 && wordCount <= 60) score += 15;
+  if (wordCount > 100) score -= 20;
 
   return score;
 }
 
 /**
- * Climbs the DOM tree starting from a user click to find the
- * product card wrapper.
+ * Walks up the DOM tree from the target element to locate the highest-scoring product card container.
+ * @param {HTMLElement} startEl - Clicked target DOM node.
+ * @returns {HTMLElement|null} Best matching card container or null.
  */
 function findProductContainer(startEl) {
   let current = startEl;
   let bestCandidate = null;
   let highestScore = 0;
 
-  // Climb up the DOM tree
   while (current && current !== document.body) {
-      const currentScore = scoreProductCard(current, startEl);
-      
-      // Capturing the peak score
-      if (currentScore >= 55 && currentScore >= highestScore) {
-          highestScore = currentScore;
-          bestCandidate = current;
-      }
-      
-      // Relaxed boundaries for modern high-res grid items
-      if (current.offsetWidth > 600 || current.offsetHeight > 700) {
-        console.log("Geometric boundary reached. Stopping DOM climb.");
-        break;
-      }
-      
-      current = current.parentElement;
+    const currentScore = scoreProductCard(current, startEl);
+    
+    // Threshold score of 55 required to qualify as a product card
+    if (currentScore >= 55 && currentScore >= highestScore) {
+      highestScore = currentScore;
+      bestCandidate = current;
+    }
+    
+    // Stop climbing if container dimensions exceed typical card size limits
+    if (current.offsetWidth > 600 || current.offsetHeight > 700) {
+      break;
+    }
+    
+    current = current.parentElement;
   }
 
   return bestCandidate;

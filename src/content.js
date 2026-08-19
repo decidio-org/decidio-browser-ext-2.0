@@ -1,414 +1,129 @@
+/* ==========================================================================
+   MAIN CONTENT SCRIPT
+   ========================================================================== */
 /**
- * The content.js file
+ * Main Content Script
  * 
- * This file handles communication between content script and background, as well as the activation/deactivation
- * of Decidio Picker/Decidio Interaction mode.
+ * Handles state management, UI mounting, multi-tab synchronization,
+ * and message passing between the background worker and injected UI/Picker.
  */
+(function () {
+  // Guard against redundant script injections on the same web page
+  if (window.decidioContentScriptInjected) return;
+  window.decidioContentScriptInjected = true;
 
-// Track the product count in the content script state
-if (typeof window.collectBoxCount === 'undefined') {
-    window.collectBoxCount = 0;
-  }
+  // Initialize content picker instance on global scope for cross-script access
+  window.decidioPickerInstance = new DecidioContentPicker();
 
-function activateExtensionUI() {
-  console.log("Activating Extension UI...");
-  if (document.getElementById('decidio-extension-root')) return;
+  /**
+   * Synchronizes host page UI elements (sidebar and floating button) with active extension state.
+   * 
+   * @param {boolean} isOn - Whether the extension is currently toggled on.
+   */
+  function setExtensionState(isOn) {
+    const extensionRoot = document.getElementById('decidio-extension-root');
+    const toggleBtn = document.getElementById('decidio-toggle-btn');
 
-  const extensionRoot = document.createElement('div');
-  extensionRoot.id = 'decidio-extension-root';
-
-  const iframe = document.createElement('iframe');
-  iframe.id = 'decidio-main-frame';
-  iframe.src = chrome.runtime.getURL('index.html'); 
-
-  iframe.style.position = 'fixed';
-  iframe.style.top = '0';
-  iframe.style.right = '-450px'; 
-  iframe.style.width = '430px'; 
-  iframe.style.height = '100vh';
-  iframe.style.border = 'none';
-  iframe.style.zIndex = '2147483647'; 
-  iframe.style.backgroundColor = 'transparent';
-  iframe.style.colorScheme = 'none';
-  iframe.style.transition = 'right 0.3s ease-in-out'; 
-
-  extensionRoot.appendChild(iframe);
-  document.body.appendChild(extensionRoot);
-
-  setTimeout(() => {
-    iframe.style.right = '0px'; 
-    // Once the iframe loads, pass it the current product count
-    iframe.addEventListener('load', () => {
-      updateIframeProductCount();
-    });
-  }, 50);
-}
-
-function deactivateExtensionUI() {
-  console.log("Deactivating Extension UI...");
-  if (window.decidioPickerInstance) {
-    window.decidioPickerInstance.stop();
-  }
-  const extensionRoot = document.getElementById('decidio-extension-root');
-  if (extensionRoot) {
-    const iframe = document.getElementById('decidio-main-frame');
-    if (iframe) {
-      iframe.style.right = '-450px';
-      setTimeout(() => extensionRoot.remove(), 300); 
+    if (isOn) {
+      if (!toggleBtn) createFloatingToggleButton();
+      if (!extensionRoot) activateExtensionUI();
     } else {
-      extensionRoot.remove();
+      deactivateExtensionUI();
+      removeFloatingToggleButton();
+      window.decidioPickerInstance.stop(); // Abort active element picking sessions
     }
   }
-}
 
-// Helper function to send the current count into the UI frame
-function updateIframeProductCount() {
-  const iframe = document.getElementById('decidio-main-frame');
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.postMessage({
-      action: "UPDATE_COLLECT_COUNT",
-      count: collectBoxCount
-    }, "*");
-  }
-}
+  /* --------------------------------------------------------------------------
+     BACKGROUND & RUNTIME MESSAGE HANDLERS
+     -------------------------------------------------------------------------- */
 
-chrome.runtime.sendMessage({ action: "GET_EXTENSION_STATE" }, (response) => {
-  if (chrome.runtime.lastError) return; 
-  if (response && response.isExtensionActive) {
-    activateExtensionUI();
-  }
-});
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    const iframe = document.getElementById('decidio-main-frame');
-
-    if (request.action === "TOGGLE_PANEL") {
-        if (request.state === true) {
-          activateExtensionUI();
-        } else {
-          deactivateExtensionUI();
-        }
-    }
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     
-    // Listen for when background or iframe updates the total product count
-    if (request.action === "UPDATE_PRODUCT_COUNT") {
-        collectBoxCount = request.count;
-        updateIframeProductCount();
+    // Toggle extension active state on icon click or shortcut
+    if (request.action === "TOGGLE_DECIDIO_EXTENSION") {
+      chrome.storage.local.get({ isExtensionOn: false }, (result) => {
+        const newState = !result.isExtensionOn;
+        chrome.storage.local.set({ isExtensionOn: newState });
+        setExtensionState(newState);
+        sendResponse({ status: "toggled", state: newState });
+      });
+      return true; // Keep message channel open for async response
     }
 
+    // Explicitly sync current UI state requested by caller
+    if (request.action === "SYNC_EXTENSION_STATE") {
+      setExtensionState(request.isOn);
+      sendResponse({ status: "synced" });
+    }
+
+    // Turn off extension UI and clean up DOM injections
+    if (request.action === "DEACTIVATE_DECIDIO_EXTENSION") {
+      chrome.storage.local.set({ isExtensionOn: false });
+      setExtensionState(false);
+      sendResponse({ status: "deactivated" });
+    }
+
+    // Launch interactive DOM element/product picker
     if (request.action === "START_DECIDIO_PICKER") {
-        if (iframe) {
-            iframe.style.pointerEvents = 'none'; 
-        }
-        if (window.decidioPickerInstance) {
-            window.decidioPickerInstance.start();
-        }
+      const mode = request.mode || 'single';
+      window.decidioPickerInstance.start(mode);
+      sendResponse({ status: "picker_started" });
     }
 
-    if (request.action === "PRODUCT_IMAGE_PICKED" || request.action === "DECIDIO_PICKER_CANCELLED") {
-        if (iframe) {
-            iframe.style.pointerEvents = 'auto';
-        }
+    // Halt active DOM picking session
+    if (request.action === "STOP_DECIDIO_PICKER") {
+      window.decidioPickerInstance.stop();
+      sendResponse({ status: "picker_stopped" });
     }
-});
 
-{
-    if (!window.hasDecidioPickerRun) {
-        window.hasDecidioPickerRun = true;
+    return true;
+  });
 
-        class DecidioContentPicker {
-            constructor() {
-                this.isActive = false;
-                this.overlay = null;
-                this.badge = null; 
-                this.highlightBox = null; 
-                this.currentTarget = null; 
-                this.stylesId = 'decidio-picker-styles';
-            }
+  /* --------------------------------------------------------------------------
+     INITIALIZATION & MULTI-TAB SYNCING
+     -------------------------------------------------------------------------- */
 
-            init() {
-                this.injectStyles();
-            }
-
-            injectStyles() {
-                if (document.getElementById(this.stylesId)) return;
-                const style = document.createElement('style');
-                style.id = this.stylesId;
-                style.textContent = `
-                .decidio-overlay {
-                    position: fixed;
-                    top: 0; left: 0;
-                    width: 100vw; height: 100vh;
-                    background: rgba(15, 23, 42, 0.4); 
-                    z-index: 2147483645;              
-                    cursor: crosshair;
-                    opacity: 0;
-                    transition: opacity 0.3s ease; 
-                    pointer-events: none;
-                    clip-path: var(--decidio-cutout, polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%));
-                }
-                .decidio-overlay.active { 
-                    opacity: 1; 
-                }
-                .decidio-highlight-box {
-                    position: fixed;
-                    z-index: 2147483646;
-                    outline: 3px solid #ffffff;
-                    box-shadow: 0 0 0 4px #3A6FAC, 0 20px 40px rgba(0,0,0,0.4);
-                    pointer-events: none; 
-                    display: none;
-                    border-radius: 4px;
-                }
-                .decidio-highlight-box.show {
-                    display: block;
-                }
-                .decidio-hover-badge {
-                    position: fixed;
-                    z-index: 2147483648; 
-                    display: flex;
-                    align-items: center;
-                    background: rgba(15, 23, 42, 0.9); 
-                    backdrop-filter: blur(4px);
-                    -webkit-backdrop-filter: blur(4px);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    color: #ffffff;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                    font-size: 11px;
-                    font-weight: 600;
-                    padding: 4px 10px;
-                    border-radius: 12px;
-                    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-                    pointer-events: none; 
-                    transform: translate(12px, 12px); 
-                    opacity: 0;
-                    transition: opacity 0.15s ease;
-                }
-                .decidio-hover-badge.show {
-                    opacity: 1;
-                }
-                .decidio-blue-dot {
-                    color: #3A6FAC;
-                }
-                `;
-                document.head.appendChild(style);
-            }
-
-            start() {
-                if (this.isActive) return;
-                this.isActive = true;
-
-                this.overlay = document.createElement('div');
-                this.overlay.className = 'decidio-overlay';
-                document.body.appendChild(this.overlay);
-                setTimeout(() => this.overlay.classList.add('active'), 10);
-
-                this.highlightBox = document.createElement('div');
-                this.highlightBox.className = 'decidio-highlight-box';
-                document.body.appendChild(this.highlightBox);
-
-                this.badge = document.createElement('div');
-                this.badge.className = 'decidio-hover-badge';
-                this.badge.innerHTML = 'decidio<span class="decidio-blue-dot">.</span>';
-                document.body.appendChild(this.badge);
-
-                document.addEventListener('mousemove', this.handleMouseMove, true);
-                window.addEventListener('scroll', this.handleScroll, { passive: true, capture: true });
-                document.addEventListener('click', this.handleClick, true);
-            }
-
-            stop() {
-                if (!this.isActive) return;
-                this.isActive = false;
-
-                if (this.overlay) {
-                    this.overlay.classList.remove('active');
-                    setTimeout(() => this.overlay.remove(), 200);
-                }
-                if (this.highlightBox) this.highlightBox.remove();
-                if (this.badge) this.badge.remove();
-
-                this.currentTarget = null;
-                document.removeEventListener('mousemove', this.handleMouseMove, true);
-                window.removeEventListener('scroll', this.handleScroll, true);
-                document.removeEventListener('click', this.handleClick, true);
-
-                const iframe = document.getElementById('decidio-main-frame');
-                if (iframe) {
-                    iframe.style.pointerEvents = 'auto';
-                }
-            }
-
-            findTargetImage(element) {
-                if (!element) return null;
-                if (element.tagName === 'IMG') return element;
-
-                const innerImg = element.querySelector('img');
-                if (innerImg) return innerImg;
-
-                const parentLink = element.closest('a') || element.closest('[class*="product"]');
-                if (parentLink) {
-                    const linkedImg = parentLink.querySelector('img');
-                    if (linkedImg) return linkedImg;
-                }
-                return null;
-            }
-
-            updateHighlight(target) {
-                if (!target || !this.highlightBox || !this.overlay) {
-                    if (this.highlightBox) this.highlightBox.classList.remove('show');
-                    if (this.badge) this.badge.classList.remove('show');
-                    if (this.overlay) this.overlay.style.removeProperty('--decidio-cutout');
-                    return;
-                }
-
-                const rect = target.getBoundingClientRect();
-                this.highlightBox.style.left = `${rect.left}px`;
-                this.highlightBox.style.top = `${rect.top}px`;
-                this.highlightBox.style.width = `${rect.width}px`;
-                this.highlightBox.style.height = `${rect.height}px`;
-    
-                const x1 = rect.left;
-                const y1 = rect.top;
-                const x2 = rect.right;
-                const y2 = rect.bottom;
-
-                const cutoutPath = `polygon(
-                    0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 
-                    ${x1}px ${y1}px, 
-                    ${x1}px ${y2}px, 
-                    ${x2}px ${y2}px, 
-                    ${x2}px ${y1}px, 
-                    ${x1}px ${y1}px
-                )`;
-    
-                this.overlay.style.setProperty('--decidio-cutout', cutoutPath);
-                this.highlightBox.classList.add('show');
-                if (this.badge) this.badge.classList.add('show');
-            }
-
-            handleMouseMove = (e) => {
-                if (!this.isActive) return;
-                this.lastMouseX = e.clientX;
-                this.lastMouseY = e.clientY;
-
-                if (this.badge) {
-                    this.badge.style.left = `${e.clientX}px`;
-                    this.badge.style.top = `${e.clientY}px`;
-                }
-                this.checkElementAtCursor(e.clientX, e.clientY);
-            }
-
-            handleScroll = () => {
-                if (!this.isActive) return;
-                if (!this.isScrollingTick) {
-                    window.requestAnimationFrame(() => {
-                        this.checkElementAtCursor(this.lastMouseX, this.lastMouseY);
-                        this.isScrollingTick = false;
-                    });
-                    this.isScrollingTick = true;
-                }
-            }
-
-            checkElementAtCursor(x, y) {
-                let elementUnderneath = document.elementFromPoint(x, y);
-                const targetImg = this.findTargetImage(elementUnderneath);
-
-                if (targetImg) {
-                    if (this.currentTarget !== targetImg) {
-                        this.currentTarget = targetImg;
-                    }
-                    this.updateHighlight(this.currentTarget);
-                } else {
-                    if (this.currentTarget !== null) {
-                        this.currentTarget = null;
-                        this.updateHighlight(null);
-                    }
-                }
-            }
-
-            handleClick = (e) => {
-                if (!this.isActive) return;
-                
-                e.preventDefault();
-                e.stopPropagation();
-
-                const elementsUnderneath = document.elementsFromPoint(e.clientX, e.clientY);
-                
-                let finalImageUrl = null;
-                let finalProductUrl = null;
-                let finalProductTitle = "";
-
-                // Go through the stack of elements under the click coordinates
-                for (const el of elementsUnderneath) {
-                    // Skip extension UI overlays
-                    if (el.closest('#decidio-extension-root') || 
-                        el.classList.contains('decidio-highlight-box') || 
-                        el.classList.contains('decidio-overlay')) {
-                        continue;
-                    }
-
-                    // Look for the image source
-                    if (!finalImageUrl) {
-                        if (el.tagName === 'IMG') {
-                            finalImageUrl = el.currentSrc || el.src;
-                            // Pull title from the image directly if available
-                            finalProductTitle = el.alt || el.title || "";
-                        } else {
-                            const innerImg = el.querySelector('img');
-                            if (innerImg) {
-                                finalImageUrl = innerImg.currentSrc || innerImg.src;
-                                finalProductTitle = innerImg.alt || innerImg.title || "";
-                            }
-                        }
-                    }
-
-                    // Look for the product page link (anchor tag)
-                    if (!finalProductUrl) {
-                        const structuralLink = el.closest('a');
-                        if (structuralLink && structuralLink.href) {
-                            finalProductUrl = structuralLink.href;
-                        }
-                    }
-
-                    // Fallback title search if image attributes are empty
-                    if (!finalProductTitle) {
-                        const heading = el.querySelector('h1, h2, h3, h4, [class*="title"], [class*="name"]');
-                        if (heading) {
-                            finalProductTitle = heading.innerText.trim();
-                        }
-                    }
-
-                    // If we mapped all the parameters, we can stop searching the DOM stack
-                    if (finalImageUrl && finalProductUrl && finalProductTitle) break;
-                }
-
-                // If no explicit anchor link was found in the card stack, fall back to current page
-                // COME BACK TO THIS LATER---------------------------------------------------------------
-                if (!finalProductUrl) {
-                    finalProductUrl = window.location.href;
-                }
-
-                // Only send the message if we successfully captured at least the image data
-                if (finalImageUrl) {
-                    chrome.runtime.sendMessage({
-                        action: "PRODUCT_IMAGE_PICKED",
-                        imageUrl: finalImageUrl,
-                        productUrl: finalProductUrl,
-                        productTitle: finalProductTitle || "Product"
-                    });
-                } else {
-                    // If they clicked empty space or something without an image, treat it as a cancel
-                    chrome.runtime.sendMessage({
-                        action: "DECIDIO_PICKER_CANCELLED"
-                    });
-                }
-                
-                this.stop();
-            }
-        }
-        
-        const decidioPicker = new DecidioContentPicker();
-        decidioPicker.init();
-        window.decidioPickerInstance = decidioPicker;
+  // On script load/page mount, restore existing user session state from storage
+  chrome.storage.local.get({ isExtensionOn: false, savedProducts: [] }, (result) => {
+    if (result.isExtensionOn) {
+      setExtensionState(true);
     }
-}
+    updateFloatingToggleBadge(result.savedProducts.length);
+  });
+
+  // Listen for storage changes to mirror state and product data across open browser tabs
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') return;
+
+    // Synchronize UI ON/OFF visibility when changed in another tab or background
+    if (changes.isExtensionOn) {
+      setExtensionState(changes.isExtensionOn.newValue);
+    }
+
+    // Update floating badge count and trigger UI refresh when products collection updates
+    if (changes.savedProducts) {
+      const updatedProducts = changes.savedProducts.newValue || [];
+      updateFloatingToggleBadge(updatedProducts.length);
+
+      // Invoke global re-render function if ui.js script is attached
+      if (typeof window.renderCollectedProducts === 'function') {
+        window.renderCollectedProducts(updatedProducts);
+      }
+    }
+  });
+
+  /* --------------------------------------------------------------------------
+     POSTMESSAGE LISTENER (IFRAME TO HOST PAGE COMMUNICATION)
+     -------------------------------------------------------------------------- */
+
+  // Listen for layout commands dispatched from embedded iframe UI
+  window.addEventListener('message', (event) => {
+    if (event.data?.action === 'DECIDIO_MINIMIZE_SIDEBAR') {
+      minimizeSidebar();
+    }
+    if (event.data?.action === 'DECIDIO_RESTORE_SIDEBAR') {
+      restoreSidebar();
+    }
+  });
+})();

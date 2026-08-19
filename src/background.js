@@ -1,125 +1,155 @@
 /**
  * background.js
- *
- * This script manages logic for:
- * - Handling messages from the content script and the panel (app.js)
- * - Managing the extension's active state and toolbar icon
- *
- * Auth lives entirely in the panel now. There is no popup, so no popup is ever
- * registered — which is what lets chrome.action.onClicked fire on every click.
+ * 
+ * Extension Service Worker handling icon state, storage updates,
+ * and communication between app.js and content.js.
  */
 
- const ACTIVE_KEY = "isExtensionActive";
- const TOGGLE_MSG = "TOGGLE_PANEL";
- 
- /**
-  * The toolbar icon reflects one thing only: whether the panel is open.
-  * It says nothing about sign-in state — the panel decides what to render.
-  */
- function updateExtensionUI(tabId, isActive) {
-   const iconPath = isActive ? "active_logo.PNG" : "default_logo.png";
-   chrome.action.setIcon({
-     tabId: tabId,
-     path: { "16": iconPath, "48": iconPath, "128": iconPath }
-   });
- }
- 
- /**
-  * Push panel state to a tab. If the content script isn't loaded there yet,
-  * inject it — but only when we're turning the panel on.
-  */
- function syncTab(tabId, isActive) {
-   chrome.tabs.sendMessage(tabId, { action: TOGGLE_MSG, state: isActive }, () => {
-     if (chrome.runtime.lastError && isActive) {
-       chrome.scripting.executeScript({
-         target: { tabId: tabId },
-         files: ["content.js"]
-       });
-     }
-   });
- }
- 
- // ============================================================
- // MESSAGES
- // ============================================================
- 
- chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
- 
-   // Content script asking for initial state when a page loads
-   if (request.action === "GET_EXTENSION_STATE") {
-     chrome.storage.local.get({ [ACTIVE_KEY]: false }, (data) => {
-       sendResponse({ isExtensionActive: data[ACTIVE_KEY] });
-     });
-     return true;
-   }
- 
-   // Panel signed in. Nothing to do here — app.js writes jwtToken, and its own
-   // chrome.storage.onChanged listener swaps the view. Kept as a hook.
-   if (request.action === "LOGIN_SUCCESS") {
-     console.log("decidio: signed in");
-   }
- 
-   // Panel signed out. Collected products belong to the account, so clear them.
-   // Deliberately does NOT touch isExtensionActive — the panel stays open and
-   // swaps to the login view in place.
-   if (request.action === "LOGOUT") {
-     chrome.storage.local.set({ savedProducts: [] });
-   }
- 
-   if (request.action === "PRODUCT_IMAGE_PICKED") {
-     const newProduct = {
-       imageUrl: request.imageUrl,
-       productUrl: request.productUrl,
-       productTitle: request.productTitle || "Product",
-       timestamp: new Date().toISOString()
-     };
- 
-     chrome.storage.local.get({ savedProducts: [] }, (result) => {
-       const currentProducts = result.savedProducts;
-       currentProducts.push(newProduct);
- 
-       chrome.storage.local.set({ savedProducts: currentProducts }, () => {
-         console.log("decidio: saved product", newProduct);
-         chrome.runtime.sendMessage({
-           action: "RENDER_PICKED_PRODUCT",
-           product: newProduct
-         });
-       });
-     });
-   }
- });
- 
- // ============================================================
- // TOOLBAR ICON CLICK
- // ============================================================
- 
- chrome.action.onClicked.addListener(async (tab) => {
-   if (!tab.id) return;
- 
-   const data = await chrome.storage.local.get({ [ACTIVE_KEY]: false });
-   const nextActiveState = !data[ACTIVE_KEY];
- 
-   await chrome.storage.local.set({ [ACTIVE_KEY]: nextActiveState });
- 
-   updateExtensionUI(tab.id, nextActiveState);
-   syncTab(tab.id, nextActiveState);
- });
- 
- // ============================================================
- // TAB LIFECYCLE
- // ============================================================
- 
- chrome.tabs.onActivated.addListener(async (activeInfo) => {
-   const tabId = activeInfo.tabId;
-   const data = await chrome.storage.local.get({ [ACTIVE_KEY]: false });
- 
-   updateExtensionUI(tabId, data[ACTIVE_KEY]);
-   syncTab(tabId, data[ACTIVE_KEY]);
- });
- 
- chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-   if (changeInfo.status === 'complete' && tabId) {
-     const data = await chrome.storage.local.get({ [ACTIVE_KEY]: false });
-     updateExtensionUI(tabId, data[ACTIVE_KEY]);
-   }
- });
+/**
+ * Updates the extension toolbar icon dynamically based on active state.
+ * 
+ * @param {number} tabId - Target tab ID to update.
+ * @param {boolean} isActive - Whether the extension is currently active.
+ */
+function updateExtensionUI(tabId, isActive) {
+  if (!tabId) return;
+  const iconPath = isActive ? "images/active_logo.png" : "images/default_logo.png";
+  
+  // Set toolbar action icon dynamically across supported densities
+  chrome.action.setIcon({
+    tabId: tabId,
+    path: {
+      "16": iconPath,
+      "48": iconPath,
+      "128": iconPath
+    }
+  }).catch(() => {}); // Suppress errors if the tab closes before icon update finishes
+}
+
+/**
+ * Broadcasts runtime messages to extension views (popups/iframes) safely.
+ * Swallows errors when no receiver is actively listening.
+ * 
+ * @param {Object} message - Payload message object to broadcast.
+ */
+function safeRuntimeSendMessage(message) {
+  chrome.runtime.sendMessage(message).catch(() => {
+    // Expected benign error when sidebar iframe/popup is not currently open/mounted
+  });
+}
+
+/**
+ * Safely sends a message to a specific tab's content script wrapper.
+ * 
+ * @param {number} tabId - Target browser tab ID.
+ * @param {Object} message - Message object payload.
+ * @param {Function} [callback] - Optional response and error handler.
+ */
+function safeTabSendMessage(tabId, message, callback) {
+  if (!tabId) return;
+  chrome.tabs.sendMessage(tabId, message, (response) => {
+    const err = chrome.runtime.lastError;
+    if (callback) callback(response, err);
+  });
+}
+
+/* --------------------------------------------------------------------------
+   MESSAGE HANDLERS (CONTENT SCRIPT & APP UI COMMUNICATION)
+   -------------------------------------------------------------------------- */
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+
+  // Return the active/inactive state stored in chrome.storage.local
+  if (request.action === "GET_EXTENSION_STATE") {
+    chrome.storage.local.get({ isExtensionActive: false }, (data) => {
+      sendResponse({ isExtensionActive: data.isExtensionActive });
+    });
+    return true; // Keeps message channel open for asynchronous sendResponse call
+  }
+  
+  // Save a single picked product to local storage and trigger UI re-render
+  if (request.action === "PRODUCT_IMAGE_PICKED") {
+    chrome.storage.local.get({ savedProducts: [] }, (result) => {
+      const updatedList = [...result.savedProducts, {
+        imageUrl: request.imageUrl,
+        productUrl: request.productUrl,
+        productTitle: request.productTitle
+      }];
+      chrome.storage.local.set({ savedProducts: updatedList }, () => {
+        safeRuntimeSendMessage({ action: "RENDER_PICKED_PRODUCT" });
+      });
+    });
+  } 
+  // Save multiple picked products in batch to storage and trigger UI re-render
+  else if (request.action === "PRODUCT_IMAGES_BATCH_PICKED") {
+    chrome.storage.local.get({ savedProducts: [] }, (result) => {
+      const itemsToAppend = request.items || request.products || [];
+      const updatedList = [...result.savedProducts, ...itemsToAppend];
+      chrome.storage.local.set({ savedProducts: updatedList }, () => {
+        safeRuntimeSendMessage({ action: "RENDER_PICKED_PRODUCT" });
+      });
+    });
+  }
+});
+
+/* --------------------------------------------------------------------------
+   TOOLBAR ACTION & TAB LIFECYCLE LISTENERS
+   -------------------------------------------------------------------------- */
+
+// Handles browser action icon clicks to toggle extension state on/off
+chrome.action.onClicked.addListener(async (tab) => {
+  // Guard against system, browser extension store, and blank internal pages
+  if (!tab || !tab.id || tab.url?.startsWith("chrome://") || tab.url?.startsWith("edge://")) return;
+
+  const data = await chrome.storage.local.get({ isExtensionActive: false });
+  const nextActiveState = !data.isExtensionActive;
+
+  const storageUpdates = { isExtensionActive: nextActiveState };
+
+  // Clear accumulated list data whenever extension is toggled OFF
+  if (!nextActiveState) {
+    storageUpdates.savedProducts = [];
+    console.log("Extension turned off. Clearing product collect box storage.");
+  }
+
+  await chrome.storage.local.set(storageUpdates);
+  
+  updateExtensionUI(tab.id, nextActiveState);
+
+  const targetAction = nextActiveState ? "TOGGLE_DECIDIO_EXTENSION" : "DEACTIVATE_DECIDIO_EXTENSION";
+
+  // Dispatch activation signal to content script with fallback script injection
+  safeTabSendMessage(tab.id, { action: targetAction }, (response, error) => {
+    if (error && nextActiveState) {
+      // If content script is unattached on this tab, inject dynamically
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["content.js"] 
+      }, () => {
+        if (!chrome.runtime.lastError) {
+          safeTabSendMessage(tab.id, { action: targetAction });
+        }
+      });
+    }
+  });
+});
+
+// Sync icon and UI state when active browser tab changes
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const tabId = activeInfo.tabId;
+  const data = await chrome.storage.local.get({ isExtensionActive: false });
+  
+  updateExtensionUI(tabId, data.isExtensionActive);
+
+  if (!data.isExtensionActive) {
+    safeTabSendMessage(tabId, { action: "DEACTIVATE_DECIDIO_EXTENSION" });
+  }
+});
+
+// Refresh icon state when target tab finishes page navigation/reload
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tabId && tab.url && !tab.url.startsWith("chrome://") && !tab.url.startsWith("edge://")) {
+    const data = await chrome.storage.local.get({ isExtensionActive: false });
+    updateExtensionUI(tabId, data.isExtensionActive);
+  }
+});

@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "Decidio",
+  "version": "3.0",
+  "description": "Overlays product and listing information on shopping and real estate pages.",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://decidio-api-production.up.railway.app/*",
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "decidio.",
+    "default_icon": {
+      "128": "images/default_logo.png"
+    }
+  },
+  "icons": {
+    "128": "images/default_logo.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "util.js",
+        "requests.js",
+        "drivers.js",
+        "productPageExtract.js",
+        "picker.js",
+        "ui.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "index.html",
+        "style.css",
+        "app.js",
+        "images/default_logo.png",
+        "images/active_logo.png"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

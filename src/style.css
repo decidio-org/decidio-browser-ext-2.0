@@ -581,3 +581,199 @@ html, body {
     width: 2.5px;
     height: 8px;
 }
+/* ==========================================================================
+   VIEW SWITCHING (AUTH vs WORKSPACE)
+   ========================================================================== */
+
+   .workspace-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.auth-view {
+    display: none;
+}
+
+.decidio-sidebar.is-auth .workspace-view {
+    display: none;
+}
+
+.decidio-sidebar.is-auth .auth-view {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
+    padding: 8px 28px 36px 28px;
+    scrollbar-width: none;
+}
+
+.auth-view::-webkit-scrollbar { display: none; }
+
+.auth-inner {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Centered wordmark */
+.auth-logo {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: var(--text-primary);
+    text-align: center;
+    margin-bottom: 34px;
+}
+
+/* Inline validation / API error message */
+.auth-error {
+    display: none;
+    font-size: 13px;
+    line-height: 1.35;
+    color: #ff8080;
+    background: rgba(255, 80, 80, 0.08);
+    border: 1px solid rgba(255, 80, 80, 0.25);
+    border-radius: 10px;
+    padding: 9px 12px;
+    margin-bottom: 14px;
+}
+
+.auth-error.is-visible { display: block; }
+
+/* Text fields */
+.auth-input {
+    width: 100%;
+    height: 56px;
+    padding: 0 18px;
+    margin-bottom: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.auth-input::placeholder { color: rgba(255, 255, 255, 0.45); }
+
+.auth-input:focus {
+    border-color: rgba(255, 255, 255, 0.45);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+/* Primary submit */
+.auth-submit-btn {
+    width: 100%;
+    height: 56px;
+    margin-top: 2px;
+    background: #4a7cf7;
+    border: none;
+    border-radius: 12px;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.15s ease, opacity 0.2s ease;
+}
+
+.auth-submit-btn:hover { background: #3d6ee8; }
+.auth-submit-btn:active { transform: scale(0.99); }
+
+.auth-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+    transform: none;
+}
+
+/* "Forgot your password?" style text button */
+.auth-link-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.75);
+    font-family: inherit;
+    font-size: 15px;
+    cursor: pointer;
+    padding: 14px 0 2px 0;
+    text-align: center;
+    transition: color 0.2s ease;
+}
+
+.auth-link-btn:hover { color: var(--text-primary); }
+
+/* "or" separator */
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 22px 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 15px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+/* Google / Apple buttons */
+.auth-social-btn {
+    width: 100%;
+    height: 56px;
+    margin-bottom: 12px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.auth-social-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.auth-social-btn svg { flex-shrink: 0; }
+
+/* Bottom login/signup switcher */
+.auth-footer {
+    margin-top: 18px;
+    text-align: center;
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.auth-switch-btn {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0 0 0 4px;
+}
+
+.auth-switch-btn:hover { text-decoration: underline; }
+
+/* Mode-specific field visibility */
+.auth-signup-only { display: none; }
+.decidio-sidebar.is-signup .auth-signup-only { display: block; }
+.decidio-sidebar.is-signup .auth-login-only { display: none; }

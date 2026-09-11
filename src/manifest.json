@@ -7,7 +7,8 @@
     "tabs",
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "identity"
   ],
   "host_permissions": [
     "https://decidio-api-production.up.railway.app/*",
@@ -27,7 +28,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "js": [
         "util.js",
         "requests.js",
@@ -47,9 +50,19 @@
         "style.css",
         "app.js",
         "images/default_logo.png",
-        "images/active_logo.png"
+        "images/active_logo.png",
+        "decidio-theme.css",
+        "fonts/NHaasGroteskDSStd-95Blk.woff2",
+        "fonts/SFProDisplay-Regular.woff2",
+        "fonts/SFProDisplay-Medium.woff2",
+        "fonts/SFProDisplay-Semibold.woff2",
+        "fonts/SFProDisplay-Heavy.woff2",
+        "fonts/NHaasGroteskDSStd-75Bd.woff2",
+        "fonts/NHaasGroteskDSStd-65Md.woff2"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

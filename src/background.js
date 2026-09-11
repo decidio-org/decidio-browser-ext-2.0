@@ -1,9 +1,26 @@
 /**
  * background.js
- * 
+ *
  * Extension Service Worker handling icon state, storage updates,
  * and communication between app.js and content.js.
  */
+
+/**
+ * The content-script bundle, in dependency order — must stay identical to
+ * manifest.json's content_scripts[0].js. content.js is last because it is the
+ * only one that RUNS anything on load (it constructs DecidioContentPicker from
+ * picker.js and calls ui.js's globals); the others only declare. Injecting a
+ * subset leaves those references undefined.
+ */
+const CONTENT_SCRIPT_FILES = [
+  "util.js",
+  "requests.js",
+  "drivers.js",
+  "productPageExtract.js",
+  "picker.js",
+  "ui.js",
+  "content.js"
+];
 
 /**
  * Updates the extension toolbar icon dynamically based on active state.
@@ -70,7 +87,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Save a single picked product to local storage and trigger UI re-render
   if (request.action === "PRODUCT_IMAGE_PICKED") {
     chrome.storage.local.get({ savedProducts: [] }, (result) => {
-      const updatedList = [...result.savedProducts, {
+      const existing = result.savedProducts || [];
+
+      const updatedList = [...existing, {
         imageUrl: request.imageUrl,
         productUrl: request.productUrl,
         productTitle: request.productTitle
@@ -83,8 +102,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Save multiple picked products in batch to storage and trigger UI re-render
   else if (request.action === "PRODUCT_IMAGES_BATCH_PICKED") {
     chrome.storage.local.get({ savedProducts: [] }, (result) => {
-      const itemsToAppend = request.items || request.products || [];
-      const updatedList = [...result.savedProducts, ...itemsToAppend];
+      const existing = result.savedProducts || [];
+      const incoming = request.items || request.products || [];
+
+      const updatedList = [...existing, ...incoming];
       chrome.storage.local.set({ savedProducts: updatedList }, () => {
         safeRuntimeSendMessage({ action: "RENDER_PICKED_PRODUCT" });
       });
@@ -106,11 +127,11 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   const storageUpdates = { isExtensionActive: nextActiveState };
 
-  // Clear accumulated list data whenever extension is toggled OFF
-  if (!nextActiveState) {
-    storageUpdates.savedProducts = [];
-    console.log("Extension turned off. Clearing product collect box storage.");
-  }
+  // Collected items deliberately SURVIVE a toggle-off. They used to be wiped
+  // here, so collecting a few things and closing the panel silently discarded
+  // them — indistinguishable from a bug, and the opposite of what a collect
+  // box is for. Clearing is now an explicit user action, not a side effect of
+  // hiding the UI.
 
   await chrome.storage.local.set(storageUpdates);
   
@@ -121,10 +142,15 @@ chrome.action.onClicked.addListener(async (tab) => {
   // Dispatch activation signal to content script with fallback script injection
   safeTabSendMessage(tab.id, { action: targetAction }, (response, error) => {
     if (error && nextActiveState) {
-      // If content script is unattached on this tab, inject dynamically
+      // If content script is unattached on this tab, inject dynamically.
+      // ALL of them, in the manifest's own order — not content.js alone.
+      // content.js constructs DecidioContentPicker at load and calls into
+      // ui.js's globals, so injecting it by itself threw "DecidioContentPicker
+      // is not defined" and left the panel dead. Hits any tab that was already
+      // open when the extension was installed or reloaded.
       chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ["content.js"] 
+        files: CONTENT_SCRIPT_FILES
       }, () => {
         if (!chrome.runtime.lastError) {
           safeTabSendMessage(tab.id, { action: targetAction });

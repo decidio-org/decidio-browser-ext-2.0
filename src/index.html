@@ -5,14 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Decidio Unified Workspace</title>
     <link rel="stylesheet" href="style.css">
+    <!-- After style.css on purpose: decidio-theme.css matches the auth screen to
+         the iOS app's LoginView, overriding that file's rules without editing it. -->
+    <link rel="stylesheet" href="decidio-theme.css">
 </head>
 <body>
     <!-- Main Sidebar Panel -->
     <div class="decidio-sidebar is-collapsed" id="decidioSidebarPanel">
 
         <!-- Header Section (shared by both views) -->
+        <!-- Three-part row, same shape as MyCollectionsHeader: back control
+             hard left, wordmark centred, matching-width spacer right so the
+             centre stays optically centred rather than shifted by the button. -->
         <div class="sidebar-header">
+            <button class="sidebar-minimize" id="sidebarMinimizeBtn"
+                    aria-label="Back" title="Back">
+                <!-- chevron.backward, white -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <polyline points="15,5 8,12 15,19"/>
+                </svg>
+            </button>
             <div class="brand-logo">decidio<span class="blue-dot">.</span></div>
+            <span class="sidebar-header-spacer" aria-hidden="true"></span>
         </div>
 
         <!-- ==================================================================
@@ -20,9 +34,11 @@
              ================================================================== -->
         <div class="auth-view" id="authView">
             <div class="auth-inner">
-                <div class="auth-logo">decidio<span class="blue-dot">.</span></div>
-
-                <div class="auth-error" id="authError"></div>
+                <!-- The wordmark that sat here is gone: the headline below already
+                     says "Decidio", so the two stacked as the brand name twice in
+                     a row. The headline carries the accent period instead. -->
+                <h1 class="auth-heading">Welcome
+to Decidio<span class="blue-dot">.</span></h1>
 
                 <input type="email" class="auth-input" id="authEmail"
                        placeholder="Email" autocomplete="email" spellcheck="false">
@@ -32,6 +48,27 @@
 
                 <input type="password" class="auth-input auth-signup-only" id="authConfirm"
                        placeholder="Confirm password" autocomplete="new-password">
+
+                <!-- Invite gate, signup only. See INVITE_CODES in app.js — the
+                     codes are checked in the browser, so this is an onboarding
+                     flow for a closed beta, NOT a security control. -->
+                <input type="text" class="auth-input auth-signup-only" id="authInvite"
+                       placeholder="Invitation code" autocomplete="off" spellcheck="false">
+
+                <!-- Shown when the code is rejected. Everything else in the form
+                     is hidden at that point (see .is-waitlist), leaving just the
+                     email field above and this — one thing to do, not a form with
+                     a message bolted onto it. -->
+                <div class="auth-waitlist" id="authWaitlist">
+                    <div class="auth-waitlist-title">Decidio is invite only</div>
+                    <div class="auth-waitlist-body" id="authWaitlistBody">Leave your email and we'll send you a code when a place opens up.</div>
+                    <button class="auth-waitlist-btn" id="authWaitlistBtn">Join the waiting list</button>
+                    <button class="auth-waitlist-back" id="authWaitlistBack">I have a code</button>
+                </div>
+
+                <!-- Below the fields, above the button — the order LoginView
+                     uses. It sat above the fields here before. -->
+                <div class="auth-error" id="authError"></div>
 
                 <button class="auth-submit-btn" id="authSubmitBtn">Sign in</button>
 
@@ -60,6 +97,13 @@
                     <span id="authSwitchLabel">No account?</span>
                     <button class="auth-switch-btn" id="authSwitchBtn">Sign up</button>
                 </div>
+
+                <!-- Signup only. Previously the waiting list was reachable ONLY by
+                     submitting a code and having it rejected, which meant someone
+                     without a code had to fail first to find out what to do. -->
+                <button class="auth-waitlist-link auth-signup-only" id="authNoCodeBtn">
+                    No invitation code?
+                </button>
             </div>
         </div>
 
@@ -87,11 +131,30 @@
                                     <span class="circle-plus-blue"></span>
                                     Create List
                                 </button>
-                                <button class="dropdown-option" data-value="wishlist">Wishlist</button>
-                                <button class="dropdown-option" data-value="shopping">Shopping</button>
-                                <button class="dropdown-option" data-value="favorites">Favorites</button>
+                                <!-- Options are rendered at load; see renderListOptions() in app.js. -->
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Inline name field for a new list. Replaces window.prompt(),
+                         which renders as a native browser dialog with Chrome's own
+                         chrome — no Decidio type, colour or shape anywhere in it. -->
+                    <div class="create-list-row" id="createListRow">
+                        <input type="text" class="create-list-input" id="createListInput"
+                               placeholder="Name your list" autocomplete="off" spellcheck="false">
+                        <button class="create-list-confirm" id="createListConfirm"
+                                aria-label="Create list" title="Create list">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <polyline points="4,12.5 9.5,18 20,6"/>
+                            </svg>
+                        </button>
+                        <button class="create-list-cancel" id="createListCancel"
+                                aria-label="Cancel" title="Cancel">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
 
@@ -105,7 +168,17 @@
                             <button class="mode-btn" id="modeMultiBtn" title="Multi Select">Multi</button>
                         </div>
                     </div>
-                    <div id="products-container" class="products-dotted-container">
+                    <!-- Carousel / List switch. Two ways of viewing the SAME
+                         collected items: the original horizontal carousel, and
+                         a vertical stack in the AR Identify page's row format
+                         where every item is visible at once. Same carousel
+                         idiom as the Single/Multi control above it. -->
+                    <div class="collect-view-toggle" id="collectViewToggle">
+                        <button class="view-btn active" id="viewCarouselBtn" title="Carousel">Carousel</button>
+                        <button class="view-btn" id="viewListBtn" title="List">List</button>
+                    </div>
+
+                    <div id="products-container" class="products-dotted-container is-view-carousel">
                         <div class="add-product-tile" id="addProductBtn">
                             <span class="circle-plus-blue"></span>
                         </div>
@@ -116,9 +189,18 @@
 
             <!-- Bottom Footer Area -->
             <div class="sidebar-footer">
-                <button class="add-to-list-btn" id="addToListBtn">
-                    <span class="btn-circle-plus"></span>
-                    <span>Add to List</span>
+                <!-- Identical to the AR flow's own bottom action (ARScanView.swift:591):
+                     a bare plus.circle glyph, 40pt bold white, centred — no plate,
+                     no label. Drawn as SVG because SF Symbols cannot be
+                     redistributed for web use; the shape is the outlined circle
+                     with a centred cross, kept as plus.circle rather than a
+                     bare "+". -->
+                <button class="add-to-list-btn" id="addToListBtn" aria-label="Add to List" title="Add to List">
+                    <svg class="btn-plus-circle" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9.25"/>
+                        <line x1="12" y1="7.6" x2="12" y2="16.4"/>
+                        <line x1="7.6" y1="12" x2="16.4" y2="12"/>
+                    </svg>
                 </button>
             </div>
 

@@ -1,0 +1,1376 @@
+/* ==========================================================================
+   decidio-theme.css — matches the extension's auth screen to the iOS app's
+   LoginView (DecidioUX/Networking/LoginView.swift).
+
+   Loaded AFTER style.css so these rules win without that file being edited.
+
+   Fonts are the app's own (DecidioUX/Fonts/), subset to Latin + common
+   punctuation and converted to woff2 — the source SF Pro .otf files are
+   ~4.4MB each, far too heavy to ship in an extension. 13MB -> 68KB.
+   ========================================================================== */
+
+@font-face {
+    font-family: "NHaasGroteskDSStd";
+    src: url("fonts/NHaasGroteskDSStd-65Md.woff2") format("woff2");
+    font-weight: 500; font-style: normal; font-display: block;
+}
+@font-face {
+    font-family: "NHaasGroteskDSStd";
+    src: url("fonts/NHaasGroteskDSStd-75Bd.woff2") format("woff2");
+    font-weight: 700; font-style: normal; font-display: block;
+}
+@font-face {
+    font-family: "NHaasGroteskDSStd";
+    src: url("fonts/NHaasGroteskDSStd-95Blk.woff2") format("woff2");
+    font-weight: 900;
+    font-style: normal;
+    font-display: block;   /* block, not swap: the wordmark and headline are
+                              the identity here — a flash of a fallback face
+                              at these sizes is worse than a beat of nothing */
+}
+@font-face {
+    font-family: "SFProDisplay";
+    src: url("fonts/SFProDisplay-Regular.woff2") format("woff2");
+    font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+    font-family: "SFProDisplay";
+    src: url("fonts/SFProDisplay-Medium.woff2") format("woff2");
+    font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+    font-family: "SFProDisplay";
+    src: url("fonts/SFProDisplay-Semibold.woff2") format("woff2");
+    font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+    font-family: "SFProDisplay";
+    src: url("fonts/SFProDisplay-Heavy.woff2") format("woff2");
+    font-weight: 800; font-style: normal; font-display: swap;
+}
+
+:root {
+    /* Exact values from DecidioUX/Assets.xcassets/*.colorset */
+    --decidio-navy:   #1E2675;
+    --decidio-blue:   #476DA7;
+    --decidio-purple: #803065;
+    --decidio-red:    #A94041;
+    --decidio-green:  #608F52;
+    --decidio-orange: #CD5D38;
+    --decidio-yellow: #EB9448;
+}
+
+/* --------------------------------------------------------------------------
+   LoginView is a full-bleed Color.black screen, not a frosted panel — so the
+   sidebar drops its glass treatment entirely while the auth view is up, and
+   gets it back the moment the workspace returns.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar.is-auth {
+    background: #000000;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: rgba(255, 255, 255, 0.12);
+
+    /* Hug the form instead of running the full height of the viewport. The
+       panel is normally calc(100vh - 108px) because the workspace view fills
+       it, but the auth form is only ~400px — leaving the rest as a large empty
+       black column below the button. max-height keeps it scrollable if a
+       short window would otherwise clip it. */
+    height: auto;
+    max-height: calc(100vh - 108px);
+}
+
+/* The panel's shared header carries its own "decidio." wordmark for the
+   workspace view. The auth view draws a centred one of its own (.auth-logo,
+   matching LoginView's), so with both mounted the wordmark rendered TWICE —
+   once top-left, once centred below it. Hidden here rather than removed from
+   index.html, since the workspace view still needs it. */
+.decidio-sidebar.is-auth .sidebar-header {
+    display: none;
+}
+
+/* Top-aligned like the app's VStack, not vertically centered, and on the
+   app's own 24pt side padding. */
+.decidio-sidebar.is-auth .auth-view {
+    align-items: flex-start;
+    justify-content: flex-start;
+    /* flex: 0 0 auto overrides style.css's `flex: 1` — that made this view
+       stretch to fill the panel, which would defeat the height:auto above. */
+    flex: 0 0 auto;
+    padding: 8px 24px 24px 24px;
+}
+
+.auth-inner {
+    font-family: "SFProDisplay", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ---------- Wordmark — 45pt NHaas Black, accent period ---------------------
+   The app has a back chevron to its left and centers this over the whole row;
+   with nothing to go back to here, the row is just the centered wordmark.
+   -------------------------------------------------------------------------- */
+.auth-logo {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 900;
+    /* 28, against the app's 45. Scaled for a 380px side panel rather than a
+       phone screen — but the RATIO to the headline below is kept at the app's
+       (~1.6x), since that hierarchy is what makes the screen read as Decidio's.
+       Scaling both down uniformly flattened it and lost the effect. */
+    font-size: 28px;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    color: #FFFFFF;
+    text-align: center;
+    margin-bottom: 0;
+}
+
+.auth-logo .blue-dot { color: var(--decidio-blue); }
+
+/* ---------- "Welcome to Decidio" -----------------------------------------
+   44px against the app's 72 — the hero of the screen, as it is there, at
+   ~1.6x the wordmark above it. The app has a whole phone screen to spend here;
+   this shares a 380px panel with the form, so the type is scaled to its
+   container rather than copied literally, but the proportions are the app's.
+   -------------------------------------------------------------------------- */
+.auth-heading {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 900;
+    font-size: 44px;
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+    color: #FFFFFF;
+    text-align: left;
+    margin: 22px 0 22px 0;
+    white-space: pre-line;
+}
+
+/* ---------- Fields --------------------------------------------------------
+   The app's treatment at a tighter scale: 12pt corners, white@8% fill,
+   hairline white@15% stroke, 16pt medium text, placeholder at white@35%.
+   -------------------------------------------------------------------------- */
+.auth-input {
+    height: 46px;               /* app: 52 */
+    padding: 0 16px;
+    margin-bottom: 10px;        /* app: 14 */
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    color: #FFFFFF;
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    caret-color: #FFFFFF;
+}
+
+.auth-input::placeholder { color: rgba(255, 255, 255, 0.35); }
+
+/* The app draws no focus treatment — the field is static. Kept a faint one so
+   keyboard users can still tell where they are, which the app gets for free
+   from the system caret/keyboard and a browser input does not. */
+.auth-input:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.30);
+}
+
+/* ---------- Error ---------------------------------------------------------
+   Plain centered Decidio Red text, not a bordered alert box.
+   -------------------------------------------------------------------------- */
+.auth-error {
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 12px 0 0 0;
+    margin-bottom: 0;
+    color: var(--decidio-red);
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+}
+
+/* ---------- Submit --------------------------------------------------------
+   White fill, black label — inverted from the extension's blue button.
+   -------------------------------------------------------------------------- */
+.auth-submit-btn {
+    height: 46px;
+    margin-top: 14px;           /* app: Spacer(24) */
+    background: #FFFFFF;
+    border: none;
+    border-radius: 12px;
+    color: #000000;
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.auth-submit-btn:hover { background: #F2F2F2; }
+
+.auth-submit-btn:disabled {
+    opacity: 0.5;               /* app: .opacity(0.5) when disabled */
+    background: #FFFFFF;
+}
+
+/* ---------- Sign in / Sign up switch -------------------------------------- */
+.auth-footer {
+    margin-top: 12px;           /* app: 18 */
+    justify-content: center;
+    text-align: center;
+}
+
+.auth-footer,
+.auth-switch-btn {
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.auth-switch-btn { text-decoration: none; }
+.auth-switch-btn:hover { color: #FFFFFF; text-decoration: none; }
+
+/* ---------- Removed to match the app --------------------------------------
+   LoginView.swift is email + password only — its own header comment notes the
+   live decidio-api exposes nothing else, and these buttons only raise a
+   "Social login is coming soon" message here. Hidden rather than deleted so
+   restoring them is a one-line change if the API ever grows the endpoints.
+   -------------------------------------------------------------------------- */
+.auth-divider,
+.auth-social-btn { display: none; }
+
+/* Revealed only when app.js has confirmed BOTH that the backend advertises the
+   provider (GET /auth/providers) and that an OAuth client ID is configured —
+   see applyAvailableProviders(). Gating on the server's own answer means a
+   button never appears before the flow behind it can actually succeed.
+   Apple stays hidden regardless: there is no client implementation for it. */
+.decidio-sidebar.is-social-enabled .auth-divider,
+.decidio-sidebar.is-social-enabled #authGoogleBtn { display: flex; }
+
+.decidio-sidebar.is-social-enabled .auth-divider { display: block; }
+
+/* ==========================================================================
+   WORKSPACE ("collection") VIEW — the AR flow's purple page, verbatim
+   --------------------------------------------------------------------------
+   ARIdentifyPage (ARScanView.swift) is a flat Decidio Purple field with:
+     - a large NHaasGroteskDSStd-75Bd title, white, at 20pt side padding
+     - rows separated by Divider().frame(height: 0.75).overlay(Color.white)
+     - NOTHING sitting on a translucent plate
+   The only tinted plate in the whole flow is the detected-label capsule
+   (black@45%), and that lives over live camera on the scan page, not here —
+   so every background fill behind a control is removed rather than restyled.
+
+   Scoped to :not(.is-auth) so the sign-in screen keeps its black LoginView
+   treatment — different surfaces in the app too.
+   ========================================================================== */
+
+.decidio-sidebar:not(.is-auth) {
+    background: var(--decidio-purple);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: none;
+    border-radius: 0;
+}
+
+/* Flat field: strip every plate, tint, dashed outline and rounded corner that
+   the frosted-panel design used. This is the "remove the opacity zones" pass —
+   a single rule so nothing is missed piecemeal. */
+.decidio-sidebar:not(.is-auth) .dropdown-trigger,
+.decidio-sidebar:not(.is-auth) .dropdown-menu,
+.decidio-sidebar:not(.is-auth) .selection-mode-toggle,
+.decidio-sidebar:not(.is-auth) .mode-btn,
+.decidio-sidebar:not(.is-auth) .products-dotted-container,
+.decidio-sidebar:not(.is-auth) .add-product-tile,
+.decidio-sidebar:not(.is-auth) .add-to-list-btn,
+.decidio-sidebar:not(.is-auth) .collected-product-tile {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* Page title — ARIdentifyPage's own: NHaas 75 Bold, white, 20pt sides.
+   40px rather than the app's 72: that is set for a full phone screen, and
+   "Collect" at 72 would not fit a 380px panel. */
+.decidio-sidebar:not(.is-auth) .brand-logo {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 700;
+    font-size: 40px;
+    letter-spacing: -0.01em;
+    color: #FFFFFF;
+}
+.decidio-sidebar:not(.is-auth) .brand-logo .blue-dot {
+    /* White on colour, as the AR pages do — Decidio Blue is near-invisible
+       against this purple. */
+    color: #FFFFFF;
+}
+.decidio-sidebar:not(.is-auth) .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 16px 12px 16px;
+}
+/* Equal-width flanks so the wordmark sits optically centred, not pushed off by
+   the back control's width — the same three-part balance MyCollectionsHeader
+   gets from its trailing Color.clear.frame(width: 44). */
+.decidio-sidebar:not(.is-auth) .sidebar-minimize,
+.decidio-sidebar:not(.is-auth) .sidebar-header-spacer {
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+}
+.decidio-sidebar:not(.is-auth) .brand-logo {
+    flex: 1 1 auto;
+    text-align: center;
+}
+
+/* Section labels, on the same hairline rule the AR list uses between rows:
+   0.75px solid white, inset to the content edge. */
+.decidio-sidebar:not(.is-auth) .form-label {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    color: #FFFFFF;
+}
+.decidio-sidebar:not(.is-auth) .form-group {
+    border-top: 0.75px solid #FFFFFF;
+    padding-top: 14px;
+    margin-top: 14px;
+}
+.decidio-sidebar:not(.is-auth) .blue-plus { color: #FFFFFF; }
+
+/* Values and options: plain white text on the field, no wells. */
+.decidio-sidebar:not(.is-auth) .selected-value-display,
+.decidio-sidebar:not(.is-auth) .dropdown-option {
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    color: #FFFFFF;
+}
+.decidio-sidebar:not(.is-auth) .dropdown-option:hover {
+    background: transparent;
+    text-decoration: underline;
+}
+
+/* Single / Multi in the carousel's own idiom (HomeView.categoryChip): text
+   only, active at full white, inactive at white@45%, no plate behind either. */
+.decidio-sidebar:not(.is-auth) .mode-btn {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 900;
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.45);
+    padding: 0 6px;
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .mode-btn.active {
+    color: #FFFFFF;
+}
+/* The carousel's own bullet separator, at its white@30%. */
+.decidio-sidebar:not(.is-auth) .mode-btn + .mode-btn::before {
+    content: "•";
+    color: rgba(255, 255, 255, 0.3);
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 800;
+    margin-right: 10px;
+    margin-left: 4px;
+}
+
+/* Collect area: no dashed well, just the add affordance on the field. */
+.decidio-sidebar:not(.is-auth) .add-product-tile {
+    color: #FFFFFF;
+    opacity: 0.75;
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .add-product-tile:hover { opacity: 1; }
+
+/* Item numbers — the app's treatment exactly: zero-padded two digits in
+   SFProDisplay-Heavy at 16pt, white (MyCollectionsList.swift:180-182). The
+   markup already emitted "01"/"02"; only the face was wrong. */
+.decidio-sidebar:not(.is-auth) .product-tile-number,
+.product-tile-number {
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: 0;
+    color: #FFFFFF;
+}
+.decidio-sidebar:not(.is-auth) .product-tile-title {
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 500;
+    color: #FFFFFF;
+}
+
+/* Primary action: underlined white text, as ARIdentifyPage's own Back control
+   is — not a filled button, which would reintroduce a plate. */
+.decidio-sidebar:not(.is-auth) .add-to-list-btn {
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    color: #FFFFFF;
+    height: 48px;
+    border-top: 0.75px solid #FFFFFF;
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .add-to-list-btn:hover { text-decoration: underline; }
+
+/* ==========================================================================
+   COLLECTED ITEMS — two views over the same DOM
+   --------------------------------------------------------------------------
+   .is-view-carousel  the original horizontal strip of cards
+   .is-view-list      ARIdentifyPage's vertical rows, every item visible at once
+
+   Both drive the SAME elements; only layout differs, so switching never
+   re-renders, drops or reorders anything.
+   ========================================================================== */
+
+/* The switch itself, in the carousel idiom the mode control already uses. */
+.decidio-sidebar:not(.is-auth) .collect-view-toggle {
+    display: flex;
+    align-items: center;
+    margin: 10px 0 12px 0;
+}
+.decidio-sidebar:not(.is-auth) .view-btn {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 900;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.45);
+    background: transparent;
+    border: none;
+    padding: 0 6px;
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .view-btn.active { color: #FFFFFF; }
+.decidio-sidebar:not(.is-auth) .view-btn + .view-btn::before {
+    content: "\2022";
+    color: rgba(255, 255, 255, 0.3);
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 800;
+    margin-right: 10px;
+    margin-left: 4px;
+}
+
+/* Shared container reset — the frosted well and dashed outline are gone in
+   both views; only the flow direction differs below. */
+.decidio-sidebar:not(.is-auth) .products-dotted-container {
+    padding: 0;
+    min-height: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    scrollbar-width: none;
+}
+.decidio-sidebar:not(.is-auth) .products-dotted-container::-webkit-scrollbar { display: none; }
+
+/* ---------- Carousel view ------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .products-dotted-container.is-view-carousel {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .collected-product-tile {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 120px;
+    flex-shrink: 0;
+    padding: 0;
+    gap: 6px;
+    border-bottom: none;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .collected-product-thumb {
+    width: 120px;
+    height: 140px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .product-tile-title {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* ---------- List view — ARIdentifyPage rows ------------------------------- */
+/* Row geometry verbatim from ARScanView.swift:738: 70x50 thumbnail, 16pt gap,
+   16/12 padding, white 0.75px rule beneath each row. */
+.decidio-sidebar:not(.is-auth) .products-dotted-container.is-view-list {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;                    /* rows are separated by their own rule */
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 320px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    padding: 12px 16px;
+    border-bottom: 0.75px solid #FFFFFF;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-thumb {
+    width: 70px;
+    height: 50px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---------- Shared row/card internals ------------------------------------- */
+.decidio-sidebar:not(.is-auth) .collected-product-tile {
+    display: flex;
+    height: auto;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+.decidio-sidebar:not(.is-auth) .collected-product-tile:hover {
+    opacity: 0.6;
+    filter: none;
+    transform: none;
+}
+.decidio-sidebar:not(.is-auth) .collected-product-thumb {
+    flex: 0 0 auto;
+    overflow: hidden;          /* AR: .clipped() */
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+.decidio-sidebar:not(.is-auth) .collected-product-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;         /* AR: .scaledToFill() */
+    display: block;
+}
+.decidio-sidebar:not(.is-auth) .collected-product-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;              /* lets the title actually truncate */
+    flex: 1 1 auto;
+}
+/* First word emphasised — AR: NHaasGroteskDSStd-75Bd, white */
+.decidio-sidebar:not(.is-auth) .product-tile-brand {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 1.25;
+    color: #FFFFFF;
+}
+/* Full title — AR: NHaasGroteskDSStd-65Med, white */
+.decidio-sidebar:not(.is-auth) .product-tile-title {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 500;
+    font-size: 15px;
+    line-height: 1.25;
+    color: #FFFFFF;
+    text-align: left;
+}
+
+/* ---------- Index number, under the picture -------------------------------
+   The app's own treatment (%02d in SFProDisplay-Heavy, white) placed directly
+   beneath the image and flush with its left edge, rather than floated over the
+   corner of it as a chip. Lives in the thumbnail column, so it stays under the
+   picture in the carousel and the list alike.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .collected-product-thumb-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    flex: 0 0 auto;
+    gap: 4px;
+}
+.decidio-sidebar:not(.is-auth) .product-tile-number {
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 800;
+    font-size: 16px;
+    line-height: 1;
+    letter-spacing: 0;
+    color: #FFFFFF;
+    /* Flat text, not the floating chip this used to be — no plate, blur or
+       border, matching every other number in the app. */
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    backdrop-filter: none;
+    position: static;
+}
+
+/* ---------- Bottom action — the AR flow's plus.circle ---------------------
+   ARScanView.swift:591 is a bare plus.circle at 40pt bold white, centred, with
+   40pt of space beneath and nothing else: no plate, no label, no rule. An
+   earlier pass here inverted it to a white plate with a purple "Add to List"
+   label to raise contrast; that read as a different product. A 40px white glyph
+   on the purple field is legible on its own, which is why the app can do this.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .sidebar-footer {
+    display: flex;
+    justify-content: center;
+    padding: 0 0 40px 0;      /* AR: .padding(.bottom, 40) */
+    background: transparent;
+    border: none;
+}
+.decidio-sidebar:not(.is-auth) .add-to-list-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: auto;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+    cursor: pointer;
+    opacity: 1;
+    transition: opacity 0.2s ease;
+}
+.decidio-sidebar:not(.is-auth) .add-to-list-btn:hover { opacity: 0.7; background: transparent; }
+
+.decidio-sidebar:not(.is-auth) .btn-plus-circle {
+    width: 40px;              /* AR: .font(.system(size: 40)) */
+    height: 40px;
+    fill: none;
+    stroke: #FFFFFF;
+    stroke-width: 1.8;        /* .fontWeight(.bold) */
+    stroke-linecap: round;
+}
+
+/* ---------- Waiting list ---------------------------------------------------
+   Shown when an invitation code is rejected. Kept in the LoginView vocabulary:
+   flat on the black field, no card or plate, with the same inverted white
+   button the sign-in action uses.
+   -------------------------------------------------------------------------- */
+.auth-waitlist { display: none; }
+.auth-waitlist.is-visible {
+    display: block;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 0.75px solid rgba(255, 255, 255, 0.35);
+}
+.auth-waitlist-title {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    color: #FFFFFF;
+    margin-bottom: 6px;
+}
+.auth-waitlist-body {
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 1.4;
+    /* white@70%, the app's own secondary-text value on a dark field. */
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 12px;
+}
+.auth-waitlist-btn {
+    width: 100%;
+    height: 42px;
+    background: #FFFFFF;
+    color: #000000;
+    border: none;
+    border-radius: 12px;
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.auth-waitlist-btn:hover { background: #F2F2F2; }
+
+/* The invite field only exists in signup mode — style.css already hides
+   .auth-signup-only outside it. */
+
+/* ---------- Waiting-list state --------------------------------------------
+   With .is-waitlist on the panel, the sign-up form collapses to just its email
+   field plus the waiting-list block. Joining a list has nothing to do with
+   passwords, invite codes, confirm fields or social buttons — leaving those on
+   screen made this read as an error on a form rather than a separate thing to
+   do. The email input itself stays, so the address the user already typed
+   carries straight over.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar.is-waitlist #authPassword,
+.decidio-sidebar.is-waitlist #authConfirm,
+.decidio-sidebar.is-waitlist #authInvite,
+.decidio-sidebar.is-waitlist .auth-submit-btn,
+.decidio-sidebar.is-waitlist .auth-divider,
+.decidio-sidebar.is-waitlist .auth-social-btn,
+.decidio-sidebar.is-waitlist .auth-footer {
+    display: none !important;
+}
+
+.auth-waitlist-back {
+    display: block;
+    width: 100%;
+    margin-top: 12px;
+    background: none;
+    border: none;
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+}
+.auth-waitlist-back:hover { color: #FFFFFF; }
+
+.auth-waitlist-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* ---------- Panel minimise control ---------------------------------------- */
+.decidio-sidebar:not(.is-auth) .sidebar-minimize {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    opacity: 0.8;
+}
+.decidio-sidebar:not(.is-auth) .sidebar-minimize:hover { opacity: 1; }
+.decidio-sidebar:not(.is-auth) .sidebar-minimize svg {
+    width: 24px; height: 24px;
+    /* White, .heavy-equivalent stroke — matching the app's own 24pt bold
+       chevron.backward. */
+    stroke: #FFFFFF; stroke-width: 3; stroke-linecap: round;
+    stroke-linejoin: round; fill: none;
+}
+
+/* ---------- Save status ---------------------------------------------------
+   Saving is several network calls with no other visible signal. Plain text on
+   the field, no plate, consistent with everything else here.
+   -------------------------------------------------------------------------- */
+.collect-status {
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: #FFFFFF;
+    padding: 8px 16px 0 16px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+.collect-status.is-visible { opacity: 1; }
+.collect-status.is-error { color: rgba(255, 255, 255, 0.75); }
+
+.decidio-sidebar:not(.is-auth) .dropdown-empty {
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    padding: 8px 0;
+}
+
+/* ---------- Editable title ------------------------------------------------
+   Signals editability on hover/focus without adding a permanent input well.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .product-tile-title[contenteditable]:hover {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+    cursor: text;
+}
+.decidio-sidebar:not(.is-auth) .product-tile-title[contenteditable]:focus {
+    outline: none;
+    text-decoration: none;
+    /* Only while actually editing — the one place a field-like affordance is
+       genuinely useful, since the caret alone is easy to miss on this field. */
+    background: rgba(255, 255, 255, 0.12);
+    /* Overrides the list view's single-line ellipsis so a long title can be
+       read and corrected in full. */
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+/* Waiting-list route in, before any code has been tried. */
+.auth-waitlist-link {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    background: none;
+    border: none;
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: underline;
+    cursor: pointer;
+}
+.auth-waitlist-link:hover { color: #FFFFFF; }
+.decidio-sidebar.is-waitlist .auth-waitlist-link { display: none !important; }
+
+/* ---------- Create a list, inline ----------------------------------------
+   Replaces window.prompt(), which draws Chrome's own dialog — its type,
+   colours and buttons, anchored to the browser rather than the panel, with no
+   Decidio anything in it. Squared, flat, white-on-purple like the rest.
+   -------------------------------------------------------------------------- */
+.create-list-row { display: none; }
+.decidio-sidebar:not(.is-auth) .create-list-row.is-open {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+.decidio-sidebar:not(.is-auth) .create-list-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 40px;
+    padding: 0 12px;
+    background: transparent;
+    border: none;
+    /* A single underline rather than a box — the AR pages separate with rules,
+       never wells. */
+    border-bottom: 0.75px solid #FFFFFF;
+    border-radius: 0;
+    color: #FFFFFF;
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    outline: none;
+}
+.decidio-sidebar:not(.is-auth) .create-list-input::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+}
+.decidio-sidebar:not(.is-auth) .create-list-confirm,
+.decidio-sidebar:not(.is-auth) .create-list-cancel {
+    flex: 0 0 auto;
+    width: 32px; height: 32px;
+    background: none; border: none; padding: 0;
+    cursor: pointer; opacity: 0.85;
+    display: flex; align-items: center; justify-content: center;
+}
+.decidio-sidebar:not(.is-auth) .create-list-confirm:hover,
+.decidio-sidebar:not(.is-auth) .create-list-cancel:hover { opacity: 1; }
+.decidio-sidebar:not(.is-auth) .create-list-confirm:disabled { opacity: 0.4; cursor: default; }
+.decidio-sidebar:not(.is-auth) .create-list-confirm svg,
+.decidio-sidebar:not(.is-auth) .create-list-cancel svg {
+    width: 20px; height: 20px;
+    fill: none; stroke: #FFFFFF; stroke-width: 2.5;
+    stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* ---------- Remove control ------------------------------------------------
+   The tile itself is no longer a delete target, so deletion needs its own
+   affordance. Kept quiet until the row is hovered.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .product-tile-remove {
+    flex: 0 0 auto;
+    width: 28px; height: 28px;
+    background: none; border: none; padding: 0;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.decidio-sidebar:not(.is-auth) .collected-product-tile:hover .product-tile-remove { opacity: 0.7; }
+.decidio-sidebar:not(.is-auth) .product-tile-remove:hover { opacity: 1; }
+.decidio-sidebar:not(.is-auth) .product-tile-remove svg {
+    width: 16px; height: 16px;
+    fill: none; stroke: #FFFFFF; stroke-width: 2.5; stroke-linecap: round;
+}
+/* In the carousel the row is a column, so pin it to the card's top corner
+   rather than letting it stack under the title. */
+.decidio-sidebar:not(.is-auth) .is-view-carousel .collected-product-tile {
+    position: relative;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .product-tile-remove {
+    position: absolute;
+    top: 4px; right: 4px;
+}
+
+/* The whole row is no longer a destructive target, so it should not dim as if
+   it were one. */
+.decidio-sidebar:not(.is-auth) .collected-product-tile:hover { opacity: 1; }
+
+/* ---------- List view, refined to the mockup ------------------------------
+   The reference reads as quiet rows on an open purple field: pale thumbnails,
+   small two-line labels, and generous breathing room — no heavy full-bleed
+   rules boxing each row in. The solid white 0.75px divider under every row was
+   striping the panel and fighting the imagery, so it is gone; spacing does the
+   separating instead, which is what the mockup does.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile {
+    border-bottom: none;
+    padding: 8px 4px;
+    gap: 14px;
+    align-items: center;
+}
+
+/* Thumbnails read as pale plates in the mockup, so an image that has not
+   loaded still leaves a considered shape rather than a purple gap. */
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-thumb {
+    width: 56px;
+    height: 42px;
+    background: rgba(255, 255, 255, 0.92);
+}
+
+/* Two tight lines: the brand quiet above, the product name carrying the row —
+   the inverse weighting of the AR page, matching the mockup. */
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-brand {
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 400;
+    font-size: 11px;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.85);
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-title {
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 600;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #FFFFFF;
+}
+
+/* The index sat under each thumbnail, which at this row height pushed the
+   images apart and broke the even rhythm the mockup has. Carousel view still
+   shows it, where there is room beneath the card. */
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-number {
+    display: none;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-thumb-col {
+    gap: 0;
+}
+
+/* No top padding: the carousel has none, and 4px here was enough to offset the
+   add tile between the two views when the collection was empty. The rows carry
+   their own vertical padding, so nothing is lost. */
+.decidio-sidebar:not(.is-auth) .is-view-list {
+    padding-top: 0;
+}
+
+/* ==========================================================================
+   SIZING PASS — corrections made with the panel actually on screen
+   ========================================================================== */
+
+/* Thumbnails were transparent, so a card with no image yet rendered as text
+   floating over a void — which is what the large empty band above the carousel
+   actually was: 140px of invisible thumbnail, not a spacing bug. A pale plate
+   holds the shape while an image loads and matches the mockup's own thumbs. */
+.decidio-sidebar:not(.is-auth) .collected-product-thumb {
+    background: rgba(255, 255, 255, 0.92);
+}
+
+/* Carousel cards were 222px tall — a 140px image plus a title free to run to
+   three lines. Smaller image, clamped title, so a row of cards fits the panel
+   without dominating it. */
+.decidio-sidebar:not(.is-auth) .is-view-carousel .collected-product-tile {
+    width: 104px;
+    gap: 8px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .collected-product-thumb {
+    width: 104px;
+    height: 104px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .product-tile-brand {
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 400;
+    font-size: 11px;
+    line-height: 1.3;
+    color: rgba(255, 255, 255, 0.85);
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .product-tile-title {
+    font-family: "SFProDisplay", sans-serif;
+    font-weight: 600;
+    font-size: 11px;
+    line-height: 1.3;
+    -webkit-line-clamp: 2;     /* was unbounded, stretching every card */
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .product-tile-number {
+    font-size: 13px;
+}
+
+/* Tighter body: the panel had generous 24px sides against 16px elsewhere. */
+.decidio-sidebar:not(.is-auth) .sidebar-body {
+    padding: 8px 16px 16px 16px;
+}
+.decidio-sidebar:not(.is-auth) .form-group {
+    padding-top: 12px;
+    margin-top: 12px;
+}
+.decidio-sidebar:not(.is-auth) .form-label { font-size: 19px; }
+.decidio-sidebar:not(.is-auth) .brand-logo { font-size: 30px; }
+
+/* ---------- Add affordance ------------------------------------------------
+   style.css draws these plus glyphs in --accent-blue, which on the purple
+   field is both off-brand and close enough in value to disappear. White, and
+   sized down from the 44px/5px-stroke version, which read as a heavy blue ring
+   floating loose in the list.
+   -------------------------------------------------------------------------- */
+/* Blue, as it was — the one accent on the purple field. */
+.decidio-sidebar:not(.is-auth) .circle-plus-blue {
+    border-color: var(--decidio-blue);
+}
+.decidio-sidebar:not(.is-auth) .circle-plus-blue::before,
+.decidio-sidebar:not(.is-auth) .circle-plus-blue::after {
+    background-color: var(--decidio-blue);
+}
+.decidio-sidebar:not(.is-auth) .add-product-tile .circle-plus-blue {
+    width: 26px;
+    height: 26px;
+    border-width: 2px;
+}
+.decidio-sidebar:not(.is-auth) .add-product-tile .circle-plus-blue::before {
+    width: 12px; height: 2px;
+}
+.decidio-sidebar:not(.is-auth) .add-product-tile .circle-plus-blue::after {
+    width: 2px; height: 12px;
+}
+
+/* In the list it belongs as a row, aligned with the thumbnails above it — not
+   floating at the left margin on its own. */
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile {
+    order: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 42px;
+    margin: 6px 0 0 4px;
+    /* No plate — the glyph sits straight on the field like everything else. */
+    background: transparent;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile:hover {
+    background: transparent;
+    opacity: 0.7;
+}
+
+/* In the carousel it matches a card's thumbnail footprint. */
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile {
+    width: 104px;
+    height: 104px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    flex-shrink: 0;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile:hover {
+    background: transparent;
+    opacity: 0.7;
+}
+
+/* Secondary to SINGLE/MULTI above it, rather than competing at the same size. */
+.decidio-sidebar:not(.is-auth) .view-btn { font-size: 12px; }
+.decidio-sidebar:not(.is-auth) .collect-view-toggle { margin: 6px 0 10px 0; }
+
+/* ---------- Dropdown legibility -------------------------------------------
+   The menu was transparent, so options rendered white-on-purple over whatever
+   sat behind them — technically visible, practically unreadable. A solid dark
+   panel gives the options their own surface, which is the one place a plate
+   genuinely earns its keep here.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .dropdown-menu {
+    background: #2A0F22;                       /* deep purple-black */
+    border: 0.75px solid rgba(255, 255, 255, 0.35);
+    border-radius: 0;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    padding: 4px 0;
+    z-index: 20;
+}
+.decidio-sidebar:not(.is-auth) .dropdown-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    background: transparent;
+    color: #FFFFFF;
+    font-family: "SFProDisplay", sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+}
+.decidio-sidebar:not(.is-auth) .dropdown-option:hover {
+    background: rgba(255, 255, 255, 0.14);
+    text-decoration: none;
+}
+.decidio-sidebar:not(.is-auth) .dropdown-option.create-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 0.75px solid rgba(255, 255, 255, 0.2);
+    margin-bottom: 4px;
+    padding-bottom: 12px;
+}
+.decidio-sidebar:not(.is-auth) .dropdown-empty { padding: 10px 14px; }
+
+/* The trigger keeps its underline so the closed control still reads as a
+   control, rather than as a line of text. */
+.decidio-sidebar:not(.is-auth) .dropdown-trigger {
+    border-bottom: 0.75px solid rgba(255, 255, 255, 0.5);
+    padding-bottom: 8px;
+    cursor: pointer;
+}
+
+/* ==========================================================================
+   TYPE SCALE + DROPDOWN — proportional pass
+   ==========================================================================
+   Everything below the headings had drifted to 11-15px while the section
+   labels sat at 19 and the wordmark at 30, so the panel read as two unrelated
+   scales rather than one. Sizes here step evenly off the wordmark instead.
+   ========================================================================== */
+
+.decidio-sidebar:not(.is-auth) .brand-logo   { font-size: 32px; }
+.decidio-sidebar:not(.is-auth) .form-label   { font-size: 22px; }
+
+/* Mode + view controls, one step apart rather than four. */
+.decidio-sidebar:not(.is-auth) .mode-btn     { font-size: 18px; }
+.decidio-sidebar:not(.is-auth) .view-btn     { font-size: 15px; }
+
+/* The dropdown's own value, matching the fields it sits among. */
+.decidio-sidebar:not(.is-auth) .selected-value-display { font-size: 17px; }
+.decidio-sidebar:not(.is-auth) .dropdown-option        { font-size: 16px; padding: 11px 14px; }
+.decidio-sidebar:not(.is-auth) .dropdown-empty         { font-size: 16px; }
+
+/* Collected rows — these were the worst of it at 11px, roughly half the
+   heading beside them. */
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-brand { font-size: 13px; }
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-title { font-size: 15px; }
+.decidio-sidebar:not(.is-auth) .is-view-carousel .product-tile-brand { font-size: 13px; }
+.decidio-sidebar:not(.is-auth) .is-view-carousel .product-tile-title { font-size: 14px; }
+.decidio-sidebar:not(.is-auth) .product-tile-number { font-size: 15px; }
+
+/* Rows grow with their text so the larger type is not cramped. */
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-thumb {
+    width: 64px;
+    height: 48px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile {
+    padding: 10px 4px;
+    gap: 16px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile {
+    width: 64px;
+    height: 48px;
+}
+
+.decidio-sidebar:not(.is-auth) .create-list-input { font-size: 16px; }
+.collect-status { font-size: 14px; }
+
+/* ---------- Dropdown at 73% ----------------------------------------------
+   Translucent rather than solid, so the field reads through it. Backed by a
+   blur: at 73% alone, text and imagery behind the menu still showed through
+   its own options and undid the legibility fix.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .dropdown-menu {
+    background: rgba(42, 15, 34, 0.73);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+/* ---------- One rule per boundary, not two -------------------------------
+   The dropdown trigger drew its own underline directly above the .form-group
+   rule that starts the next section, so the two stacked as a visible double
+   line. The section rule is the structural one, so the trigger drops its own.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .dropdown-trigger {
+    border-bottom: none;
+    padding-bottom: 4px;
+}
+
+/* ---------- Create-list field: no underline -------------------------------
+   The input carried its own bottom rule, but the field is only part of a row
+   that also holds the confirm and cancel controls — so the line stopped dead
+   partway across, reading as a broken divider rather than an underlined field.
+   The row already sits inside a bordered section, so it needs no rule of its
+   own.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .create-list-input {
+    border-bottom: none;
+}
+
+/* ---------- Add affordance: sized to its slot -----------------------------
+   26px was set when the tile was smaller; against a 104px carousel card and a
+   64x48 list slot it read as a stray dot rather than a control. Scaled to each
+   context, with stroke weights kept proportional so the ring does not thin out
+   as it grows.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue {
+    width: 52px;
+    height: 52px;
+    border-width: 3px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::before {
+    width: 24px; height: 3px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::after {
+    width: 3px; height: 24px;
+}
+
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue {
+    width: 34px;
+    height: 34px;
+    border-width: 2.5px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::before {
+    width: 16px; height: 2.5px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::after {
+    width: 2.5px; height: 16px;
+}
+
+/* The "Create List" row's own small plus, matched to the option text beside it. */
+.decidio-sidebar:not(.is-auth) .dropdown-option .circle-plus-blue {
+    width: 18px;
+    height: 18px;
+    border-width: 2px;
+}
+.decidio-sidebar:not(.is-auth) .dropdown-option .circle-plus-blue::before {
+    width: 8px; height: 2px;
+}
+.decidio-sidebar:not(.is-auth) .dropdown-option .circle-plus-blue::after {
+    width: 2px; height: 8px;
+}
+
+/* ==========================================================================
+   WEIGHT + ALIGNMENT PASS
+   ========================================================================== */
+
+/* Bottom action: heavier ring and cross. 1.8 was thin for a 40px glyph sitting
+   alone at the foot of the panel — it read as an outline rather than a control. */
+.decidio-sidebar:not(.is-auth) .btn-plus-circle {
+    stroke-width: 2.6;
+}
+
+/* Both blue add controls at one size and one weight. They were 52px in the
+   carousel and 34px in the list, so the same control changed size when the
+   view changed — the size was tracking its slot rather than its meaning. */
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue,
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue {
+    width: 44px;
+    height: 44px;
+    border-width: 4px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::before,
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::before {
+    width: 20px; height: 4px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::after,
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::after {
+    width: 4px; height: 20px;
+}
+/* The list slot has to give the now-larger control room to sit in. */
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile {
+    width: 64px;
+    height: 56px;
+}
+
+/* ---------- Chevron: always white, aligned to the rules -------------------
+   It sat at 0.8 opacity, so it read as grey against the white wordmark beside
+   it. And its 32px box centred a 24px glyph, pushing it 4px in from the panel
+   padding — enough to sit visibly proud of the horizontal rules below, which
+   start at the padding edge. Left-aligning the glyph inside its own box lines
+   the two up without moving the button's hit area.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .sidebar-minimize {
+    opacity: 1;
+    justify-content: flex-start;
+    padding: 0;
+}
+.decidio-sidebar:not(.is-auth) .sidebar-minimize:hover { opacity: 0.75; }
+.decidio-sidebar:not(.is-auth) .sidebar-minimize svg {
+    stroke: #FFFFFF;
+    /* Nudges the drawn stroke flush with the rules: the chevron's path starts
+       inset within its own 24px viewBox. */
+    margin-left: -8px;
+}
+
+/* ---------- Accent period -------------------------------------------------
+   Blue on both surfaces. It was forced white on the purple field because
+   Decidio Blue is close to it in value; a slightly lifted blue keeps the
+   accent reading as the brand's without disappearing into the ground.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .brand-logo .blue-dot {
+    color: #7FA6DC;
+}
+
+/* The auth headline now carries the period the removed wordmark used to. */
+.auth-heading .blue-dot {
+    color: var(--decidio-blue);
+}
+
+/* ---------- Add tile: one control, one place ------------------------------
+   It sat at 104x104 in the carousel and 64x56 in the list, at opposite ends of
+   the flow, so switching views moved it and resized it. Now the same footprint
+   as a thumbnail in each view, always last, and top-aligned with the images
+   rather than floating in the middle of the taller card — so the ring lines up
+   with the row of pictures either way and the switch reads as the same control
+   staying put.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile {
+    width: 104px;
+    height: 104px;
+    align-self: flex-start;   /* level with the thumbnails, not the whole card */
+    order: 999;
+}
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile {
+    width: 64px;
+    height: 48px;             /* matches the list thumbnail exactly */
+    align-self: flex-start;
+    margin: 10px 0 0 4px;
+    order: 999;
+}
+
+/* Bolder ring and cross in both. */
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue,
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue {
+    width: 40px;
+    height: 40px;
+    border-width: 5px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::before,
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::before {
+    width: 18px; height: 5px;
+}
+.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::after,
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::after {
+    width: 5px; height: 18px;
+}
+
+/* The carousel lays cards out from the top so the tile can align with the
+   thumbnails; centring stretched it against the taller cards. */
+.decidio-sidebar:not(.is-auth) .products-dotted-container.is-view-carousel {
+    align-items: flex-start;
+}
+
+/* ---------- Empty state: one shared slot ----------------------------------
+   With items present, the add tile matches its view's thumbnail footprint —
+   104x104 in the carousel, 64x48 in the list — which is right, because it
+   lines up with the pictures beside it. With NOTHING collected there are no
+   pictures to line up with, so those two different footprints just put the
+   ring in two different places and it jumped when the view was switched.
+   :only-child means this applies only while the collection is empty.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .products-dotted-container .add-product-tile:only-child {
+    width: 64px;
+    height: 64px;
+    margin: 10px 0 0 4px;
+    align-self: flex-start;
+}
+
+/* ---------- No hover chrome on collected items ----------------------------
+   Both views used to reveal affordances when the pointer crossed a row: a
+   dotted underline under the title (signalling it was editable) and a fading
+   × (remove). Between them the row changed appearance just from passing over
+   it, which is noisy on a panel this small. Both are gone.
+
+   The title stays editable — clicking it still focuses the field, and the
+   focus treatment further down remains — it simply no longer advertises
+   itself on hover.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .product-tile-title[contenteditable]:hover {
+    text-decoration: none;
+    cursor: text;
+}
+
+.decidio-sidebar:not(.is-auth) .product-tile-remove,
+.decidio-sidebar:not(.is-auth) .collected-product-tile:hover .product-tile-remove,
+.decidio-sidebar:not(.is-auth) .is-view-carousel .product-tile-remove,
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-remove {
+    display: none;
+}

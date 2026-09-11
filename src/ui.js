@@ -6,14 +6,92 @@
  * Creates and injects the floating action button into the document body.
  * Handles styling, hover interactions, click triggers, and initial badge updates.
  */
+/**
+ * Registers the Decidio faces on the HOST page, once.
+ *
+ * @font-face declared inside a shadow root is ignored by the CSS spec — font
+ * loading is document-scoped — so the picker's own <style> cannot bring these
+ * in on its own, and anything in the shadow DOM asking for "SFProDisplay"
+ * would silently fall back to a system face. Injecting here makes the faces
+ * available to both the shadow UI and the floating button.
+ *
+ * The files are listed in web_accessible_resources; without that the browser
+ * blocks the fetch and the fallback kicks in just as quietly.
+ */
+function ensureDecidioFonts() {
+  if (document.getElementById('decidio-font-face')) return;
+
+  const url = (file) => chrome.runtime.getURL('fonts/' + file);
+  const style = document.createElement('style');
+  style.id = 'decidio-font-face';
+  style.textContent = `
+    @font-face {
+      font-family: "SFProDisplay";
+      src: url("${url('SFProDisplay-Regular.woff2')}") format("woff2");
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "SFProDisplay";
+      src: url("${url('SFProDisplay-Medium.woff2')}") format("woff2");
+      font-weight: 500; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "SFProDisplay";
+      src: url("${url('SFProDisplay-Semibold.woff2')}") format("woff2");
+      font-weight: 600; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "SFProDisplay";
+      src: url("${url('SFProDisplay-Heavy.woff2')}") format("woff2");
+      font-weight: 800; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "NHaasGroteskDSStd";
+      src: url("${url('NHaasGroteskDSStd-65Md.woff2')}") format("woff2");
+      font-weight: 500; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "NHaasGroteskDSStd";
+      src: url("${url('NHaasGroteskDSStd-75Bd.woff2')}") format("woff2");
+      font-weight: 700; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "NHaasGroteskDSStd";
+      src: url("${url('NHaasGroteskDSStd-95Blk.woff2')}") format("woff2");
+      font-weight: 900; font-style: normal; font-display: swap;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+/**
+ * Shows the floating "d." only while the panel is NOT on screen.
+ *
+ * Both carry the decidio wordmark, so with the panel open they read as two
+ * logos stacked in the same corner. The button's whole job is to be something
+ * to click when there is no panel, so it steps aside once there is one.
+ */
+function syncFloatingToggleVisibility() {
+  const toggleBtn = document.getElementById('decidio-toggle-btn');
+  if (!toggleBtn) return;
+
+  const iframe = document.getElementById('decidio-main-frame');
+  const panelOnScreen = Boolean(iframe) && iframe.style.right === '0px';
+
+  toggleBtn.style.opacity = panelOnScreen ? '0' : '1';
+  toggleBtn.style.pointerEvents = panelOnScreen ? 'none' : 'auto';
+}
+
 function createFloatingToggleButton() {
   // Prevent duplicate button creation if it already exists in the DOM
   if (document.getElementById('decidio-toggle-btn')) return;
 
+  ensureDecidioFonts();
+
   // Create container element and populate logo/label
   const toggleBtn = document.createElement('div');
   toggleBtn.id = 'decidio-toggle-btn';
-  toggleBtn.innerHTML = `d<span style="color: #3b82f6;">.</span>`;
+  toggleBtn.innerHTML = `d<span style="color: #476DA7;">.</span>`;   // Decidio Blue
   
   // Apply inline styles to fix positioning, backdrop blur, and layering
   toggleBtn.style.cssText = `
@@ -22,22 +100,22 @@ function createFloatingToggleButton() {
     right: 24px;
     width: 56px;
     height: 56px;
-    background-color: rgba(45, 46, 48, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(197, 191, 191, 0.2);
-    border-radius: 12px;
+    /* Solid black, square, no blur or outline — the grey frosted plate was
+       chrome the app does not use anywhere. */
+    background-color: #000000;
+    border: none;
+    border-radius: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #ffffff;
-    font-family: Arial, sans-serif;
+    font-family: "NHaasGroteskDSStd", Arial, sans-serif;
     font-size: 26px;
-    font-weight: 800;
+    font-weight: 900;
     cursor: pointer;
     z-index: 2147483647; /* Maximum z-index to ensure it sits above host page elements */
     user-select: none;
-    transition: transform 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.25s ease;
   `;
 
   // Hover animations
@@ -48,14 +126,33 @@ function createFloatingToggleButton() {
     toggleBtn.style.transform = 'scale(1)';
   });
 
-  // Toggle extension sidebar state on click
+  // Toggle extension sidebar visibility on click
   toggleBtn.addEventListener('click', () => {
     const extensionRoot = document.getElementById('decidio-extension-root');
-    if (extensionRoot) {
-      deactivateExtensionUI();
-    } else {
+    const iframe = document.getElementById('decidio-main-frame');
+
+    // Nothing mounted yet — build it.
+    if (!extensionRoot || !iframe) {
       activateExtensionUI();
+      return;
     }
+
+    // Slide, do not tear down. This used to call deactivateExtensionUI(), which
+    // REMOVES the root 300ms later, so every re-open rebuilt the iframe from
+    // scratch: index.html reloaded and everything living in the panel (the auth
+    // form's contents, the selected list, collected tiles) was thrown away on
+    // each toggle. Clicking twice inside that 300ms window also let the pending
+    // removal fire after the panel had been re-activated, leaving it gone.
+    // Minimising keeps the iframe alive, which is what this button is described
+    // as doing — toggling the panel in and out, not turning the extension off.
+    // The toolbar icon remains the on/off control.
+    const isHidden = iframe.style.right !== '0px';
+    if (isHidden) {
+      restoreSidebar();
+    } else {
+      minimizeSidebar();
+    }
+    syncFloatingToggleVisibility();
   });
 
   // Attach to host page DOM and fetch initial state
@@ -116,6 +213,7 @@ function activateExtensionUI() {
   // Trigger smooth slide-in animation on next paint frame
   requestAnimationFrame(() => {
     iframe.style.right = '0px';
+    syncFloatingToggleVisibility();
   });
 }
 
@@ -177,6 +275,8 @@ function minimizeSidebar() {
   if (iframe) {
     iframe.style.right = '-450px';
   }
+  // The panel just left, so the "d." becomes the way back to it.
+  syncFloatingToggleVisibility();
 }
 
 /**
@@ -187,4 +287,5 @@ function restoreSidebar() {
   if (iframe) {
     iframe.style.right = '0px';
   }
+  syncFloatingToggleVisibility();
 }

@@ -96,6 +96,10 @@ class DecidioContentPicker {
     this.shadowRoot = this.hostElement.attachShadow({ mode: 'open' });
 
     // Scoped CSS stylesheet for picker UI components
+    // Faces must be registered on the document, not in here — see
+    // ensureDecidioFonts() in ui.js for why a shadow-root @font-face is inert.
+    if (typeof ensureDecidioFonts === 'function') ensureDecidioFonts();
+
     const style = document.createElement('style');
     style.textContent = `
       .decidio-overlay {
@@ -104,7 +108,9 @@ class DecidioContentPicker {
         left: 0;
         width: 100vw; 
         height: 100vh;
-        background: rgba(15, 23, 42, 0.4);
+        /* black @50%, as ARSelectionBox uses — not the slate-blue tint that
+           was here. The cutout below is the same reverseMask idea. */
+        background: rgba(0, 0, 0, 0.5);
         z-index: 2147483645;
         cursor: crosshair;
         opacity: 0;
@@ -116,20 +122,46 @@ class DecidioContentPicker {
       .decidio-overlay.active {
         opacity: 1;
       }
+      /* Mirrors ARSelectionBox: a plain white 2pt stroke on a 12pt rounded
+         rect, with the emphasis carried by purple corner brackets rather than
+         a coloured glow. The old 3px outline + 4px blue ring read as a
+         different product. */
       .decidio-highlight-box {
         position: fixed;
         z-index: 2147483646;
-        outline: 3px solid #ffffff;
-        box-shadow: 0 0 0 4px #3A6FAC, 0 20px 40px rgba(0, 0, 0, 0.4);
+        outline: 2px solid #ffffff;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
         pointer-events: none;
         display: none;
-        border-radius: 4px;
+        border-radius: 12px;
         transition: outline-color 0.25s ease;
         will-change: top, left, width, height;
       }
       .decidio-highlight-box.show {
         display: block;
       }
+
+      /* Corner brackets — the AR view's CornerBracket, redrawn in CSS: 26x26,
+         4px stroke, rounded caps, Decidio Purple (#803065). Each is an L made
+         from two borders of a corner-anchored box, so it scales with nothing
+         and never distorts. Offset by -2px so the bracket sits over the white
+         stroke rather than inside it. */
+      .decidio-corner {
+        position: absolute;
+        width: 26px;
+        height: 26px;
+        border: 4px solid #803065;
+        border-radius: 3px;
+        pointer-events: none;
+      }
+      .decidio-corner.tl { top: -2px; left: -2px;  border-right: none; border-bottom: none;
+                           border-top-left-radius: 12px; }
+      .decidio-corner.tr { top: -2px; right: -2px; border-left: none;  border-bottom: none;
+                           border-top-right-radius: 12px; }
+      .decidio-corner.bl { bottom: -2px; left: -2px;  border-right: none; border-top: none;
+                           border-bottom-left-radius: 12px; }
+      .decidio-corner.br { bottom: -2px; right: -2px; border-left: none;  border-top: none;
+                           border-bottom-right-radius: 12px; }
       .decidio-hover-badge {
         position: fixed;
         top: 0;
@@ -137,13 +169,13 @@ class DecidioContentPicker {
         z-index: 2147483648;
         display: flex;
         align-items: center;
-        background: rgba(15, 23, 42, 0.9);
+        background: rgba(0, 0, 0, 0.85);
         backdrop-filter: blur(4px);
         -webkit-backdrop-filter: blur(4px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         color: #ffffff;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 11px;
+        font-family: "SFProDisplay", -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 12px;
         font-weight: 600;
         padding: 4px 10px;
         border-radius: 12px;
@@ -156,40 +188,75 @@ class DecidioContentPicker {
       .decidio-hover-badge.show {
         opacity: 1;
       }
-      .decidio-blue-dot { color: #3A6FAC; }
+      /* The wordmark period, in the app's own Decidio Blue (#476DA7). */
+      .decidio-blue-dot { color: #476DA7; }
+      /* Squared and branded, rather than a rounded grey capsule: nothing in
+         the app is pill-shaped, and the count is the thing worth reading here,
+         so it leads at display size instead of being buried in a sentence. */
       .decidio-multi-pill {
         position: fixed;
-        bottom: 24px;
+        bottom: 28px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(45, 46, 48, 0.95);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 30px;
-        padding: 8px 18px;
+        background: rgba(0, 0, 0, 0.82);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border: none;
+        border-radius: 0;
+        padding: 0 0 0 16px;
         display: flex;
-        align-items: center;
-        gap: 12px;
+        align-items: stretch;
+        gap: 14px;
         color: #ffffff;
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        font-weight: 600;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        font-family: "SFProDisplay", -apple-system, BlinkMacSystemFont, sans-serif;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
         pointer-events: auto;
         z-index: 2147483647;
+        overflow: hidden;
       }
+      .decidio-pill-count {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        padding: 10px 0;
+      }
+      /* Quiet. The count was 26px Neue Haas Bold with an uppercase label, which
+         shouted for a number that only needs to be legible at a glance. */
+      .decidio-pill-num {
+        font-family: "SFProDisplay", -apple-system, sans-serif;
+        font-weight: 600;
+        font-size: 15px;
+        line-height: 1.2;
+      }
+      .decidio-pill-label {
+        font-size: 13px;
+        font-weight: 400;
+        letter-spacing: 0;
+        text-transform: none;
+        color: rgba(255, 255, 255, 0.6);
+      }
+      /* "Collect", not "Finish" — it names what the button does rather than
+         that the mode is ending, matching the Collect section it feeds.
+         White plate with a dark label, as the app inverts its primary
+         controls; #3b82f6 was a generic blue belonging to nothing here. */
+      /* Full-height plate against the panel's own edge, so the action reads as
+         the end of the bar rather than a button floating inside it. */
       .decidio-finish-btn {
-        background: #3b82f6;
-        color: #ffffff;
+        background: #ffffff;
+        color: #000000;
         border: none;
-        border-radius: 16px;
-        padding: 6px 14px;
-        font-weight: 700;
+        border-radius: 0;
+        padding: 0 18px;
+        align-self: stretch;
+        font-family: "SFProDisplay", -apple-system, sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0;
         cursor: pointer;
         transition: background 0.2s ease;
       }
-      .decidio-finish-btn:hover { background: #2563eb; }
+      .decidio-finish-btn:hover { background: #f0f0f0; }
+      .decidio-finish-btn:disabled { opacity: 0.45; cursor: default; }
     `;
 
     this.shadowRoot.appendChild(style);
@@ -202,21 +269,36 @@ class DecidioContentPicker {
     // Target highlight outline frame
     this.highlightBox = document.createElement('div');
     this.highlightBox.className = 'decidio-highlight-box';
+    // Four corner brackets, as ARSelectionBox draws. Children of the box so
+    // they follow it for free when updateHighlight moves/resizes it — no extra
+    // positioning work on the hot path.
+    ['tl', 'tr', 'bl', 'br'].forEach((corner) => {
+      const bracket = document.createElement('div');
+      bracket.className = `decidio-corner ${corner}`;
+      this.highlightBox.appendChild(bracket);
+    });
     this.shadowRoot.appendChild(this.highlightBox);
 
     // Mouse-following badge indicator
-    this.badge = document.createElement('div');
-    this.badge.className = 'decidio-hover-badge';
-    this.badge.innerHTML = 'decidio<span class="decidio-blue-dot">.</span>';
-    this.shadowRoot.appendChild(this.badge);
+    // Cursor-following "decidio." badge — intentionally NOT created. It rode
+    // alongside the pointer during picking, competing with the selection box
+    // for attention and covering whatever sat just under the cursor, which is
+    // exactly the thing being aimed at. The AR view carries no such marker:
+    // the reticle alone communicates the mode. Left as null rather than
+    // deleted so the guarded `if (this.badge)` call sites keep working and
+    // restoring it is a one-block change.
+    this.badge = null;
 
     // Render multi-item selection counter and finish button if in multi mode
     if (this.selectionMode === 'multi') {
       this.multiPill = document.createElement('div');
       this.multiPill.className = 'decidio-multi-pill';
       this.multiPill.innerHTML = `
-        <span>Items picked: <strong id="decidio-count">0</strong></span>
-        <button class="decidio-finish-btn" id="decidio-finish">Finish</button>
+        <span class="decidio-pill-count">
+          <span class="decidio-pill-num" id="decidio-count">0</span>
+          <span class="decidio-pill-label">selected</span>
+        </span>
+        <button class="decidio-finish-btn" id="decidio-finish">Collect</button>
       `;
 
       const finishBtn = this.multiPill.querySelector('#decidio-finish');

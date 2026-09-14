@@ -119,7 +119,9 @@
     // Launch interactive DOM element/product picker
     if (request.action === "START_DECIDIO_PICKER") {
       const mode = request.mode || 'single';
-      window.decidioPickerInstance?.start(mode);
+      // Lists ride along from the panel so the picker's footer carousel can
+      // show them without reaching for storage itself.
+      window.decidioPickerInstance?.start(mode, request.lists || [], request.selectedListId || null);
       sendResponse({ status: "picker_started" });
     }
 

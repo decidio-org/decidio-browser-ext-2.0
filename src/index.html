@@ -15,18 +15,25 @@
 
         <!-- Header Section (shared by both views) -->
         <!-- Three-part row, same shape as MyCollectionsHeader: back control
-             hard left, wordmark centred, matching-width spacer right so the
-             centre stays optically centred rather than shifted by the button. -->
+             hard left, wordmark centred, menu button right. -->
         <div class="sidebar-header">
             <button class="sidebar-minimize" id="sidebarMinimizeBtn"
                     aria-label="Back" title="Back">
-                <!-- chevron.backward, white -->
+                <!-- chevron.backward, white, bold -->
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                     <polyline points="15,5 8,12 15,19"/>
                 </svg>
             </button>
             <div class="brand-logo">decidio<span class="blue-dot">.</span></div>
-            <span class="sidebar-header-spacer" aria-hidden="true"></span>
+            <button class="sidebar-menu-btn" id="sidebarMenuBtn"
+                    aria-label="Menu" title="Menu">
+                <!-- line.3.horizontal, white, bold -->
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+            </button>
         </div>
 
         <!-- ==================================================================
@@ -162,23 +169,9 @@ to Decidio<span class="blue-dot">.</span></h1>
                 <div class="form-group">
                     <div class="collect-header-row">
                         <label class="form-label">Collect <span class="blue-plus">+</span></label>
-                        <!-- Segmented Mode Controller -->
-                        <div class="selection-mode-toggle" id="modeToggleContainer">
-                            <button class="mode-btn active" id="modeSingleBtn" title="Single Select">Single</button>
-                            <button class="mode-btn" id="modeMultiBtn" title="Multi Select">Multi</button>
-                        </div>
-                    </div>
-                    <!-- Carousel / List switch. Two ways of viewing the SAME
-                         collected items: the original horizontal carousel, and
-                         a vertical stack in the AR Identify page's row format
-                         where every item is visible at once. Same carousel
-                         idiom as the Single/Multi control above it. -->
-                    <div class="collect-view-toggle" id="collectViewToggle">
-                        <button class="view-btn active" id="viewCarouselBtn" title="Carousel">Carousel</button>
-                        <button class="view-btn" id="viewListBtn" title="List">List</button>
                     </div>
 
-                    <div id="products-container" class="products-dotted-container is-view-carousel">
+                    <div id="products-container" class="products-dotted-container is-view-list">
                         <div class="add-product-tile" id="addProductBtn">
                             <span class="circle-plus-blue"></span>
                         </div>

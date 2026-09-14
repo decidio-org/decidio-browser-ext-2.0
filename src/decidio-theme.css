@@ -274,8 +274,6 @@
    a single rule so nothing is missed piecemeal. */
 .decidio-sidebar:not(.is-auth) .dropdown-trigger,
 .decidio-sidebar:not(.is-auth) .dropdown-menu,
-.decidio-sidebar:not(.is-auth) .selection-mode-toggle,
-.decidio-sidebar:not(.is-auth) .mode-btn,
 .decidio-sidebar:not(.is-auth) .products-dotted-container,
 .decidio-sidebar:not(.is-auth) .add-product-tile,
 .decidio-sidebar:not(.is-auth) .add-to-list-btn,
@@ -313,10 +311,11 @@
    the back control's width — the same three-part balance MyCollectionsHeader
    gets from its trailing Color.clear.frame(width: 44). */
 .decidio-sidebar:not(.is-auth) .sidebar-minimize,
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn,
 .decidio-sidebar:not(.is-auth) .sidebar-header-spacer {
-    flex: 0 0 32px;
-    width: 32px;
-    height: 32px;
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
 }
 .decidio-sidebar:not(.is-auth) .brand-logo {
     flex: 1 1 auto;
@@ -352,28 +351,6 @@
     text-decoration: underline;
 }
 
-/* Single / Multi in the carousel's own idiom (HomeView.categoryChip): text
-   only, active at full white, inactive at white@45%, no plate behind either. */
-.decidio-sidebar:not(.is-auth) .mode-btn {
-    font-family: "NHaasGroteskDSStd", sans-serif;
-    font-weight: 900;
-    font-size: 16px;
-    color: rgba(255, 255, 255, 0.45);
-    padding: 0 6px;
-    cursor: pointer;
-}
-.decidio-sidebar:not(.is-auth) .mode-btn.active {
-    color: #FFFFFF;
-}
-/* The carousel's own bullet separator, at its white@30%. */
-.decidio-sidebar:not(.is-auth) .mode-btn + .mode-btn::before {
-    content: "•";
-    color: rgba(255, 255, 255, 0.3);
-    font-family: "SFProDisplay", sans-serif;
-    font-weight: 800;
-    margin-right: 10px;
-    margin-left: 4px;
-}
 
 /* Collect area: no dashed well, just the add affordance on the field. */
 .decidio-sidebar:not(.is-auth) .add-product-tile {
@@ -422,32 +399,6 @@
    Both drive the SAME elements; only layout differs, so switching never
    re-renders, drops or reorders anything.
    ========================================================================== */
-
-/* The switch itself, in the carousel idiom the mode control already uses. */
-.decidio-sidebar:not(.is-auth) .collect-view-toggle {
-    display: flex;
-    align-items: center;
-    margin: 10px 0 12px 0;
-}
-.decidio-sidebar:not(.is-auth) .view-btn {
-    font-family: "NHaasGroteskDSStd", sans-serif;
-    font-weight: 900;
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.45);
-    background: transparent;
-    border: none;
-    padding: 0 6px;
-    cursor: pointer;
-}
-.decidio-sidebar:not(.is-auth) .view-btn.active { color: #FFFFFF; }
-.decidio-sidebar:not(.is-auth) .view-btn + .view-btn::before {
-    content: "\2022";
-    color: rgba(255, 255, 255, 0.3);
-    font-family: "SFProDisplay", sans-serif;
-    font-weight: 800;
-    margin-right: 10px;
-    margin-left: 4px;
-}
 
 /* Shared container reset — the frosted well and dashed outline are gone in
    both views; only the flow direction differs below. */
@@ -725,22 +676,23 @@
     cursor: default;
 }
 
-/* ---------- Panel minimise control ---------------------------------------- */
-.decidio-sidebar:not(.is-auth) .sidebar-minimize {
+/* ---------- Header controls: minimise chevron, menu hamburger --------------
+   Both are bare glyphs on the purple field, the way the app draws them — the
+   background/border reset matters because a <button> otherwise paints its own
+   grey plate behind the stroke.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .sidebar-minimize,
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn {
     background: none;
     border: none;
-    padding: 4px;
+    padding: 0;
     cursor: pointer;
     display: flex;
     align-items: center;
-    opacity: 0.8;
 }
-.decidio-sidebar:not(.is-auth) .sidebar-minimize:hover { opacity: 1; }
-.decidio-sidebar:not(.is-auth) .sidebar-minimize svg {
-    width: 24px; height: 24px;
-    /* White, .heavy-equivalent stroke — matching the app's own 24pt bold
-       chevron.backward. */
-    stroke: #FFFFFF; stroke-width: 3; stroke-linecap: round;
+.decidio-sidebar:not(.is-auth) .sidebar-minimize svg,
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn svg {
+    stroke: #FFFFFF; stroke-linecap: round;
     stroke-linejoin: round; fill: none;
 }
 
@@ -1056,10 +1008,6 @@
     opacity: 0.7;
 }
 
-/* Secondary to SINGLE/MULTI above it, rather than competing at the same size. */
-.decidio-sidebar:not(.is-auth) .view-btn { font-size: 12px; }
-.decidio-sidebar:not(.is-auth) .collect-view-toggle { margin: 6px 0 10px 0; }
-
 /* ---------- Dropdown legibility -------------------------------------------
    The menu was transparent, so options rendered white-on-purple over whatever
    sat behind them — technically visible, practically unreadable. A solid dark
@@ -1117,10 +1065,6 @@
 
 .decidio-sidebar:not(.is-auth) .brand-logo   { font-size: 32px; }
 .decidio-sidebar:not(.is-auth) .form-label   { font-size: 22px; }
-
-/* Mode + view controls, one step apart rather than four. */
-.decidio-sidebar:not(.is-auth) .mode-btn     { font-size: 18px; }
-.decidio-sidebar:not(.is-auth) .view-btn     { font-size: 15px; }
 
 /* The dropdown's own value, matching the fields it sits among. */
 .decidio-sidebar:not(.is-auth) .selected-value-display { font-size: 17px; }
@@ -1267,18 +1211,28 @@
    start at the padding edge. Left-aligning the glyph inside its own box lines
    the two up without moving the button's hit area.
    -------------------------------------------------------------------------- */
-.decidio-sidebar:not(.is-auth) .sidebar-minimize {
+.decidio-sidebar:not(.is-auth) .sidebar-minimize,
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn {
     opacity: 1;
-    justify-content: flex-start;
     padding: 0;
 }
-.decidio-sidebar:not(.is-auth) .sidebar-minimize:hover { opacity: 0.75; }
-.decidio-sidebar:not(.is-auth) .sidebar-minimize svg {
+.decidio-sidebar:not(.is-auth) .sidebar-minimize { justify-content: flex-start; }
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn { justify-content: flex-end; }
+.decidio-sidebar:not(.is-auth) .sidebar-minimize:hover,
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn:hover { opacity: 0.75; }
+
+/* Both glyphs carry the app's own 28pt/.heavy weight — the size and stroke
+   HomeOverlayMenuBar and MyCollectionsHeader draw at. */
+.decidio-sidebar:not(.is-auth) .sidebar-minimize svg,
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn svg {
+    width: 28px; height: 28px;
     stroke: #FFFFFF;
-    /* Nudges the drawn stroke flush with the rules: the chevron's path starts
-       inset within its own 24px viewBox. */
-    margin-left: -8px;
+    stroke-width: 3.5;
 }
+/* Nudges each drawn stroke flush with the rules below: both paths start inset
+   within their own 24px viewBox — the chevron by 8 units, the bars by 3. */
+.decidio-sidebar:not(.is-auth) .sidebar-minimize svg { margin-left: -7.58px; }
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn svg { margin-right: -1.25px; }
 
 /* ---------- Accent period -------------------------------------------------
    Blue on both surfaces. It was forced white on the purple field because

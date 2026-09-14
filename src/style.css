@@ -422,40 +422,6 @@ html, body {
     margin-bottom: 0;
 }
 
-/* Mode switcher container pill */
-.selection-mode-toggle {
-    display: flex;
-    background: rgba(255, 255, 255, 0.06);
-    padding: 2px;
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Individual mode select button */
-.mode-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 20px;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    transition: all 0.2s ease;
-}
-
-.mode-btn:hover {
-    color: var(--text-secondary);
-}
-
-/* Active mode button state */
-.mode-btn.active {
-    background: var(--text-primary);
-    color: #1c1d1f;
-}
-
 /* Floating overlay pill injected onto webpage during multi-select picker mode */
 .decidio-floating-finish-pill {
     position: fixed;

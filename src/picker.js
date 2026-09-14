@@ -20,26 +20,48 @@ class DecidioContentPicker {
     this.shadowRoot = null;         // Isolated Shadow DOM root
     this.highlightBox = null;       // Highlighting element surrounding hovered target
     this.overlay = null;            // Fullscreen backdrop with clip-path cutout
-    this.multiPill = null;          // Floating UI panel for batch selection controls
+    this.footer = null;             // Bottom chrome: list carousel + plus, after ARFooter
     this.badge = null;              // Mouse-following logo badge element
     this.lastMouseX = 0;            // Last recorded viewport X coordinate
     this.lastMouseY = 0;            // Last recorded viewport Y coordinate
     this.isTickPending = false;     // Throttle flag for requestAnimationFrame loop
     this.lastRect = null;           // Cached DOMRect to prevent unnecessary layout writes
+
+    // Frozen-selection state, mirroring ARScanView: a click freezes the frame
+    // and drops a box, auto-detect snaps that box onto whatever was under the
+    // pointer, and from then on the box is the user's to move and resize
+    // freely. While frozen the hover hit-test is suspended, otherwise the box
+    // would snap back to whatever the cursor drifted over.
+    this.isFrozen = false;
+    // Box in PAGE coordinates, not viewport — the page scrolls under it, and
+    // a viewport-relative box would slide off the thing it was drawn around.
+    this.box = null;                // {x, y, w, h}
+    this.drag = null;               // active move/resize gesture
+    this.lists = [];                // [{id, name}] shown in the footer carousel
+    this.selectedListId = null;
   }
+
+  /** Minimum box edge, px. ARSelectionBox uses 0.08 of the frame; a page is
+   *  far larger than a phone viewfinder, so this is a flat floor instead. */
+  static get MIN_BOX() { return 40; }
 
   /**
    * Starts the content picker in either single or batch selection mode.
    * 
    * @param {'single' | 'multi'} [mode='single'] - Selection mode operation.
    */
-  start(mode = 'single') {
+  start(mode = 'single', lists = [], selectedListId = null) {
     if (this.isActive) this.stop();
     this.isActive = true;
     this.selectionMode = mode;
     this.selectedBatch = [];
     this.currentTarget = null;
     this.lastRect = null;
+    this.isFrozen = false;
+    this.box = null;
+    this.drag = null;
+    this.lists = Array.isArray(lists) ? lists : [];
+    this.selectedListId = selectedListId;
 
     // Minimize extension sidebar to clear screen real estate
     if (typeof minimizeSidebar === 'function') minimizeSidebar();
@@ -140,6 +162,13 @@ class DecidioContentPicker {
       .decidio-highlight-box.show {
         display: block;
       }
+      /* Inert while hovering so the hit-test underneath still sees the page;
+         grabbable once frozen, when the box becomes the thing being handled. */
+      .decidio-highlight-box.is-frozen {
+        pointer-events: auto;
+        cursor: move;
+        transition: none;
+      }
 
       /* Corner brackets — the AR view's CornerBracket, redrawn in CSS: 26x26,
          4px stroke, rounded caps, Decidio Purple (#803065). Each is an L made
@@ -154,6 +183,18 @@ class DecidioContentPicker {
         border-radius: 3px;
         pointer-events: none;
       }
+      /* ARSelectionBox pads each 26pt bracket out to a 44pt touch target; the
+         same padding here via a transparent box drawn around the bracket. */
+      .decidio-highlight-box.is-frozen .decidio-corner {
+        pointer-events: auto;
+        box-sizing: content-box;
+        padding: 9px;
+        margin: -9px;
+      }
+      .decidio-highlight-box.is-frozen .decidio-corner.tl { cursor: nwse-resize; }
+      .decidio-highlight-box.is-frozen .decidio-corner.br { cursor: nwse-resize; }
+      .decidio-highlight-box.is-frozen .decidio-corner.tr { cursor: nesw-resize; }
+      .decidio-highlight-box.is-frozen .decidio-corner.bl { cursor: nesw-resize; }
       .decidio-corner.tl { top: -2px; left: -2px;  border-right: none; border-bottom: none;
                            border-top-left-radius: 12px; }
       .decidio-corner.tr { top: -2px; right: -2px; border-left: none;  border-bottom: none;
@@ -193,70 +234,131 @@ class DecidioContentPicker {
       /* Squared and branded, rather than a rounded grey capsule: nothing in
          the app is pill-shaped, and the count is the thing worth reading here,
          so it leads at display size instead of being buried in a sentence. */
-      .decidio-multi-pill {
+      /* ---------- Bottom chrome, after ARFooter -------------------------
+         A rule, the list carousel, a rule, then a bare plus.circle. Pinned to
+         the bottom of the viewport the way ARFooter pins to the screen, so it
+         never moves with page content.
+         ------------------------------------------------------------------ */
+      .decidio-ar-footer {
         position: fixed;
-        bottom: 28px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.82);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        border: none;
-        border-radius: 0;
-        padding: 0 0 0 16px;
-        display: flex;
-        align-items: stretch;
-        gap: 14px;
-        color: #ffffff;
-        font-family: "SFProDisplay", -apple-system, BlinkMacSystemFont, sans-serif;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-        pointer-events: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
         z-index: 2147483647;
-        overflow: hidden;
+        pointer-events: auto;
+        font-family: "SFProDisplay", -apple-system, BlinkMacSystemFont, sans-serif;
+        padding-bottom: 24px;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
       }
-      .decidio-pill-count {
+      .decidio-ar-rule {
+        height: 3px;
+        background: #ffffff;
+      }
+
+      /* The carousel. ARListCarousel loops an infinite strip under a fixed
+         centre; a page can scroll natively, so this is a scroller with the
+         same 160px slots and the same edge fade, letting names slide under
+         the edges rather than dimming individually. */
+      .decidio-ar-strip {
         display: flex;
-        align-items: baseline;
-        gap: 6px;
-        padding: 10px 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        height: 36px;
+        margin: 4px 0;
+        scroll-behavior: smooth;
+        /* Half a viewport of padding either side, less half a slot, so ANY
+           name can sit dead centre — including the first and last. Without it
+           the strip bottoms out against its left edge and the selected name
+           stays pinned there instead of centring, which is what ARListCarousel
+           gets for free from its infinite triple-copy strip. */
+        padding-left: calc(50% - 80px);
+        padding-right: calc(50% - 80px);
+        -webkit-mask-image: linear-gradient(to right,
+          transparent 0%, #000 10%, #000 90%, transparent 100%);
+        mask-image: linear-gradient(to right,
+          transparent 0%, #000 10%, #000 90%, transparent 100%);
       }
-      /* Quiet. The count was 26px Neue Haas Bold with an uppercase label, which
-         shouted for a number that only needs to be legible at a glance. */
-      .decidio-pill-num {
-        font-family: "SFProDisplay", -apple-system, sans-serif;
-        font-weight: 600;
-        font-size: 15px;
-        line-height: 1.2;
+      .decidio-ar-strip::-webkit-scrollbar { display: none; }
+      .decidio-ar-name {
+        flex: 0 0 160px;
+        width: 160px;
+        height: 36px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-family: "NHaasGroteskDSStd", "SFProDisplay", sans-serif;
+        font-weight: 700;
+        font-size: 20px;
+        line-height: 36px;
+        color: #ffffff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 0 8px;
       }
-      .decidio-pill-label {
-        font-size: 13px;
-        font-weight: 400;
-        letter-spacing: 0;
-        text-transform: none;
+      /* Selected name in Decidio Purple — lifted from the app's #803065, which
+         sits on a bright camera feed there and goes nearly black against this
+         footer's dark plate. Same treatment the panel's blue accent already
+         gets for the same reason. */
+      .decidio-ar-name.is-selected { color: #C77FAE; }
+      .decidio-ar-name:not(.is-selected) { color: rgba(255, 255, 255, 0.55); }
+      .decidio-ar-empty {
+        flex: 1;
+        height: 36px;
+        line-height: 36px;
+        text-align: center;
         color: rgba(255, 255, 255, 0.6);
+        font-size: 15px;
       }
-      /* "Collect", not "Finish" — it names what the button does rather than
-         that the mode is ending, matching the Collect section it feeds.
-         White plate with a dark label, as the app inverts its primary
-         controls; #3b82f6 was a generic blue belonging to nothing here. */
-      /* Full-height plate against the panel's own edge, so the action reads as
-         the end of the bar rather than a button floating inside it. */
-      .decidio-finish-btn {
+
+      .decidio-ar-actions {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding-top: 20px;
+      }
+      /* plus.circle, 40pt bold white — the AR view's own bottom action. */
+      .decidio-ar-plus {
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        opacity: 0.4;
+        transition: opacity 0.2s ease;
+      }
+      .decidio-ar-plus svg {
+        width: 40px;
+        height: 40px;
+        stroke: #ffffff;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        fill: none;
+      }
+      /* Only live once a box is frozen — there is nothing to add before that. */
+      .decidio-ar-footer.is-frozen .decidio-ar-plus { opacity: 1; }
+
+      .decidio-ar-count {
+        position: absolute;
+        left: 20px;
+        color: rgba(255, 255, 255, 0.75);
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .decidio-ar-done {
+        position: absolute;
+        right: 20px;
         background: #ffffff;
         color: #000000;
         border: none;
         border-radius: 0;
-        padding: 0 18px;
-        align-self: stretch;
+        padding: 8px 16px;
         font-family: "SFProDisplay", -apple-system, sans-serif;
         font-size: 14px;
         font-weight: 600;
-        letter-spacing: 0;
         cursor: pointer;
-        transition: background 0.2s ease;
       }
-      .decidio-finish-btn:hover { background: #f0f0f0; }
-      .decidio-finish-btn:disabled { opacity: 0.45; cursor: default; }
+      .decidio-ar-done:hover { background: #f0f0f0; }
     `;
 
     this.shadowRoot.appendChild(style);
@@ -275,7 +377,14 @@ class DecidioContentPicker {
     ['tl', 'tr', 'bl', 'br'].forEach((corner) => {
       const bracket = document.createElement('div');
       bracket.className = `decidio-corner ${corner}`;
+      bracket.addEventListener('mousedown', (e) => this.beginDrag(e, corner));
       this.highlightBox.appendChild(bracket);
+    });
+    // Anywhere else on the box moves it whole, as ARSelectionBox's moveGesture
+    // does on its stroked rectangle.
+    this.highlightBox.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('decidio-corner')) return;
+      this.beginDrag(e, 'move');
     });
     this.shadowRoot.appendChild(this.highlightBox);
 
@@ -289,26 +398,62 @@ class DecidioContentPicker {
     // restoring it is a one-block change.
     this.badge = null;
 
-    // Render multi-item selection counter and finish button if in multi mode
+    // Bottom chrome, mirroring ARFooter: a rule, the list carousel, a rule,
+    // then the plus. The pill that used to float here had no counterpart in
+    // the app — the AR view puts the lists themselves at the bottom of the
+    // screen and adds to whichever is centred.
     if (this.selectionMode === 'multi') {
-      this.multiPill = document.createElement('div');
-      this.multiPill.className = 'decidio-multi-pill';
-      this.multiPill.innerHTML = `
-        <span class="decidio-pill-count">
-          <span class="decidio-pill-num" id="decidio-count">0</span>
-          <span class="decidio-pill-label">selected</span>
-        </span>
-        <button class="decidio-finish-btn" id="decidio-finish">Collect</button>
+      this.footer = document.createElement('div');
+      this.footer.className = 'decidio-ar-footer';
+
+      const names = this.lists.length
+        ? this.lists.map((l) => `
+            <button class="decidio-ar-name" data-list-id="${l.id}">${
+              String(l.name || 'Untitled list').replace(/[<>&]/g, '')
+            }</button>`).join('')
+        : '<span class="decidio-ar-empty">No lists yet</span>';
+
+      this.footer.innerHTML = `
+        <div class="decidio-ar-rule"></div>
+        <div class="decidio-ar-strip">${names}</div>
+        <div class="decidio-ar-rule"></div>
+        <div class="decidio-ar-actions">
+          <span class="decidio-ar-count" id="decidio-count"></span>
+          <button class="decidio-ar-plus" id="decidio-plus" aria-label="Add to list">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9.25"/>
+              <line x1="12" y1="7.6" x2="12" y2="16.4"/>
+              <line x1="7.6" y1="12" x2="16.4" y2="12"/>
+            </svg>
+          </button>
+          <button class="decidio-ar-done" id="decidio-done">Done</button>
+        </div>
       `;
 
-      const finishBtn = this.multiPill.querySelector('#decidio-finish');
-      finishBtn.addEventListener('click', (e) => {
+      // stopPropagation throughout: the window-level capture click handler
+      // would otherwise read a press on the footer as a click on the page.
+      this.footer.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        this.finishBatchSelection();
-      });
 
-      this.shadowRoot.appendChild(this.multiPill);
+        const name = e.target.closest('.decidio-ar-name');
+        if (name) {
+          this.selectedListId = name.dataset.listId;
+          this.updateCarouselSelection();
+          chrome.runtime.sendMessage({
+            action: 'DECIDIO_PICKER_LIST_CHANGED',
+            listId: this.selectedListId
+          });
+          return;
+        }
+
+        if (e.target.closest('#decidio-plus')) this.commitBoxSelection();
+        if (e.target.closest('#decidio-done')) this.finishBatchSelection();
+      }, true);
+
+      this.shadowRoot.appendChild(this.footer);
+      this.updateCarouselSelection(true);
+      this.updateFooterState();
     }
 
     document.body.appendChild(this.hostElement);
@@ -319,6 +464,8 @@ class DecidioContentPicker {
    */
   attachEventListeners() {
     window.addEventListener('mousemove', this.handleMouseMove, { passive: true, capture: true });
+    window.addEventListener('mousemove', this.handleDragMove, true);
+    window.addEventListener('mouseup', this.handleDragEnd, true);
     window.addEventListener('scroll', this.handleScroll, { passive: true, capture: true });
     window.addEventListener('click', this.handleClick, true);
     window.addEventListener('keydown', this.handleKeyDown, true);
@@ -329,6 +476,8 @@ class DecidioContentPicker {
    */
   detachEventListeners() {
     window.removeEventListener('mousemove', this.handleMouseMove, true);
+    window.removeEventListener('mousemove', this.handleDragMove, true);
+    window.removeEventListener('mouseup', this.handleDragEnd, true);
     window.removeEventListener('scroll', this.handleScroll, true);
     window.removeEventListener('click', this.handleClick, true);
     window.removeEventListener('keydown', this.handleKeyDown, true);
@@ -371,6 +520,13 @@ class DecidioContentPicker {
       this.badge.style.transform = `translate3d(${this.lastMouseX + 12}px, ${this.lastMouseY + 12}px, 0)`;
     }
 
+    // The frozen box is stored in page coordinates, so scrolling changes where
+    // it lands on screen even though the box itself has not moved.
+    if (this.isFrozen) {
+      this.renderBox();
+      return;
+    }
+
     this.checkElementAtCursor(this.lastMouseX, this.lastMouseY);
   };
 
@@ -381,9 +537,14 @@ class DecidioContentPicker {
    * @param {number} y - Viewport Y coordinate.
    */
   checkElementAtCursor(x, y) {
+    // A locked selection owns the box until it is collected or dismissed —
+    // tracking the cursor here would drag the highlight off the thing the user
+    // is in the middle of adjusting.
+    if (this.isFrozen) return;
+
     // Ignore hovering over picker's own multi-selection UI pill
     const shadowTarget = this.shadowRoot ? this.shadowRoot.elementFromPoint(x, y) : null;
-    if (shadowTarget && shadowTarget.closest('.decidio-multi-pill')) {
+    if (shadowTarget && shadowTarget.closest('.decidio-ar-footer')) {
       this.currentTarget = null;
       this.updateHighlight(null);
       return;
@@ -397,8 +558,9 @@ class DecidioContentPicker {
       return;
     }
 
-    // Locate valid product image within hovered element context
-    const targetImg = this.findTargetImage(elementUnderneath);
+    // Locate the product image, or failing that whatever the pointer was most
+    // plausibly aimed at (see resolveIntendedTarget).
+    const targetImg = this.resolveIntendedTarget(elementUnderneath);
 
     if (targetImg) {
       this.currentTarget = targetImg;
@@ -459,6 +621,94 @@ class DecidioContentPicker {
 
     if (element.tagName === 'IMG') return element;
     return container.querySelector('img');
+  }
+
+  /**
+   * Resolves what the user was most likely aiming at.
+   *
+   * findTargetImage only succeeds where a real <img> exists, so anything drawn
+   * as a CSS background, an <svg>, a <canvas>, or a card whose picture sits in
+   * a sibling subtree used to highlight nothing at all. This falls back to
+   * scoring the clicked node's ancestors and taking the best-looking discrete
+   * item, so arbitrary objects still resolve to something sensible.
+   *
+   * @param {Element|null} element - Raw element under the pointer.
+   * @returns {Element|null} Best-guess target, or null if nothing qualifies.
+   */
+  resolveIntendedTarget(element) {
+    if (!element || element === document.body || element === document.documentElement) return null;
+
+    const img = this.findTargetImage(element);
+    if (img) return img;
+
+    // Same exclusions the container search applies — chrome is never the thing
+    // being collected, however well it scores.
+    if (element.closest('nav, [role="navigation"], #site-header, .site-header, #main-header, .main-header, footer')) {
+      return null;
+    }
+
+    let best = null;
+    let bestScore = 0;
+    let node = element;
+
+    // Six levels is enough to climb out of a text node's wrappers and into the
+    // enclosing card without reaching page-level containers.
+    for (let depth = 0; node && depth < 6 && node !== document.body; depth++) {
+      const score = this.scoreAsItem(node);
+      // Strictly-greater keeps the TIGHTEST candidate on ties, since the walk
+      // runs innermost first — a card and its padding wrapper score alike, and
+      // the inner one is the better selection.
+      if (score > bestScore) {
+        bestScore = score;
+        best = node;
+      }
+      node = node.parentElement;
+    }
+
+    return bestScore >= 3 ? best : null;
+  }
+
+  /**
+   * Rates how much an element looks like one self-contained item rather than a
+   * fragment of one or a chunk of page scaffolding.
+   *
+   * @param {Element} el
+   * @returns {number} Higher is a better selection; below 3 is not worth offering.
+   */
+  scoreAsItem(el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 32 || rect.height < 32) return 0;
+
+    const viewportArea = window.innerWidth * window.innerHeight;
+    const area = rect.width * rect.height;
+
+    // Page wrappers span most of both axes. They technically contain the item,
+    // but selecting one collects the whole page section.
+    if (rect.width > window.innerWidth * 0.9 && rect.height > window.innerHeight * 0.9) return 0;
+
+    let score = 0;
+
+    // Something picture-shaped, however it is drawn.
+    if (/^(IMG|PICTURE|SVG|CANVAS|VIDEO)$/.test(el.tagName)) {
+      score += 4;
+    } else if (el.querySelector('img, picture, svg, canvas, video')) {
+      score += 3;
+    } else {
+      const bg = getComputedStyle(el).backgroundImage;
+      if (bg && bg !== 'none' && bg.includes('url(')) score += 3;
+    }
+
+    // Items are captioned; raw media wells are not.
+    const text = (el.innerText || '').trim();
+    if (text.length >= 3 && text.length <= 300) score += 2;
+
+    // A card that links somewhere is almost always a product.
+    if (el.tagName === 'A' || el.querySelector('a[href]') || el.closest('a[href]')) score += 2;
+
+    // Card-sized, not banner-sized and not a thumbnail chip.
+    if (area > viewportArea * 0.004 && area < viewportArea * 0.6) score += 1;
+
+    return score;
   }
 
   /**
@@ -526,17 +776,36 @@ class DecidioContentPicker {
     // Check click target within Shadow DOM elements
     const path = e.composedPath ? e.composedPath() : [];
     const clickedInsidePill = path.some(el => 
-      el.classList && el.classList.contains('decidio-multi-pill')
+      el.classList && el.classList.contains('decidio-ar-footer')
     );
 
     const shadowTarget = this.shadowRoot ? this.shadowRoot.elementFromPoint(e.clientX, e.clientY) : null;
-    const clickedShadowUI = shadowTarget && shadowTarget.closest('.decidio-multi-pill');
+    const clickedShadowUI = shadowTarget && shadowTarget.closest('.decidio-ar-footer');
 
     // Ignore click events originating on multi-selection UI controls
     if (clickedInsidePill || clickedShadowUI) return;
 
     e.preventDefault();
     e.stopPropagation();
+
+    // With a selection already frozen, a click on empty space discards it and
+    // goes back to hovering. Clicking within the box is a no-op, so aiming at
+    // the thing you already chose cannot lose it.
+    // A drag that ended on this click already did its work — swallow it so a
+    // resize does not also read as a click on the page behind the box.
+    if (this.justDragged) {
+      this.justDragged = false;
+      return;
+    }
+
+    if (this.isFrozen) {
+      const x = e.clientX + window.scrollX;
+      const y = e.clientY + window.scrollY;
+      const inside = x >= this.box.x && x <= this.box.x + this.box.w &&
+                     y >= this.box.y && y <= this.box.y + this.box.h;
+      if (!inside) this.releaseSelection();
+      return;
+    }
 
     // Handle clicks outside valid image targets
     if (!this.currentTarget) {
@@ -547,67 +816,617 @@ class DecidioContentPicker {
       return;
     }
 
-    const targetImg = this.currentTarget;
-    const container = this.findValidProductContainer(targetImg) || targetImg.parentElement;
-
-    // Extract product metadata using page extractor helper
-    const pickedItem = {
-      imageUrl: ProductPageExtractor.extractImageUrl(targetImg),
-      productUrl: ProductPageExtractor.extractProductUrl(targetImg, container),
-      productTitle: ProductPageExtractor.extractTitle(targetImg, container)
-    };
-
+    // Single mode has no pill, so it has nowhere to host the adjust controls —
+    // it keeps the original pick-and-send behaviour.
     if (this.selectionMode === 'single') {
-      // Direct message payload emission for single pick mode
       chrome.runtime.sendMessage({
         action: "PRODUCT_IMAGE_PICKED",
-        ...pickedItem
+        ...this.extractFromTarget(this.currentTarget)
       });
       this.stop();
-    } else {
-      // Accumulate item payload for batch mode
-      this.selectedBatch.push(pickedItem);
-      this.updateMultiPillCount();
-      
-      // Brief success feedback animation (green outline flash)
-      if (this.highlightBox) {
-        this.highlightBox.style.outlineColor = '#10B981';
-        setTimeout(() => {
-          if (this.highlightBox) this.highlightBox.style.outlineColor = '#ffffff';
-        }, 250);
-      }
+      return;
     }
+
+    this.freezeSelection(this.currentTarget, e.clientX, e.clientY);
   };
 
   /**
-   * Keyboard shortcut handler (ESC key cancels selection mode).
+   * Keyboard shortcuts: Escape backs out one level (frozen selection first,
+   * then the picker itself), and the arrow keys widen/narrow a frozen
+   * selection so it can be adjusted without reaching for the pill.
    */
   handleKeyDown = (e) => {
     if (e.key === 'Escape') {
-      chrome.runtime.sendMessage({ action: "DECIDIO_PICKER_CANCELLED" });
-      this.stop();
+      if (this.isFrozen) {
+        e.preventDefault();
+        this.releaseSelection();
+        return;
+      }
+      this.finishBatchSelection();
+      return;
+    }
+
+    if (this.isFrozen && e.key === 'Enter') {
+      e.preventDefault();
+      this.commitBoxSelection();
     }
   };
 
   /**
-   * Updates item counter inside batch selection multi-pill UI element.
+   * Freezes the current hover target so it can be widened or narrowed before
+   * being committed.
+   *
+   * @param {Element} el - Element the user clicked.
    */
-  updateMultiPillCount() {
-    if (!this.shadowRoot) return;
-    const countEl = this.shadowRoot.querySelector('#decidio-count');
-    if (countEl) {
-      countEl.innerText = this.selectedBatch.length;
+  subjectRect(el) {
+    const { node } = this.resolveImageFor(el);
+    const host = el.getBoundingClientRect();
+
+    if (!node) return host.width && host.height ? host : null;
+
+    const r = this.imageContentRect(node);
+    if (!r || !r.width || !r.height) return host.width && host.height ? host : null;
+    return r;
+  }
+
+  /**
+   * Where an image's pixels are actually painted, in viewport coordinates.
+   *
+   * An <img> box is not necessarily the picture: object-fit letterboxes the
+   * drawn pixels inside it, so a contained portrait in a square slot leaves
+   * bars that are part of the element but not part of the image.
+   *
+   * @param {Element} node
+   * @returns {DOMRect|null}
+   */
+  imageContentRect(node) {
+    const r = node.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    if (node.tagName !== 'IMG' || !node.naturalWidth || !node.naturalHeight) return r;
+
+    const fit = getComputedStyle(node).objectFit;
+
+    let scale = null;
+    if (fit === 'contain') scale = Math.min(r.width / node.naturalWidth, r.height / node.naturalHeight);
+    if (fit === 'none') scale = 1;
+    if (fit === 'scale-down') scale = Math.min(1, Math.min(r.width / node.naturalWidth, r.height / node.naturalHeight));
+
+    // 'cover' and 'fill' paint the whole box, so the box IS the picture.
+    if (scale === null) return r;
+
+    // Clipped to the element for 'none'/'scale-down', which can overflow it.
+    const w = Math.min(node.naturalWidth * scale, r.width);
+    const h = Math.min(node.naturalHeight * scale, r.height);
+    return new DOMRect(r.left + (r.width - w) / 2, r.top + (r.height - h) / 2, w, h);
+  }
+
+  /**
+   * Renders the part of a picture the box is framing, as a data URL.
+   *
+   * The app's plus does `frozen.cropped(toNormalized: box)` — the box is a
+   * crop, not just an aiming aid — so resizing it has to change the pixels
+   * that get collected, not merely which image is chosen.
+   *
+   * Returns null when the crop cannot be taken: a cross-origin image without
+   * CORS headers taints the canvas and toDataURL throws. Callers keep the
+   * original URL in that case rather than losing the image altogether.
+   *
+   * @param {Element} node - img, canvas or video.
+   * @param {HTMLImageElement} [source] - CORS-loaded stand-in for `node`.
+   * @returns {string|null}
+   */
+  cropGeometry(node, box) {
+    if (!box) return null;
+    if (!/^(IMG|CANVAS|VIDEO)$/.test(node.tagName)) return null;
+
+    const content = this.imageContentRect(node);
+    if (!content || !content.width || !content.height) return null;
+
+    const natW = node.naturalWidth || node.videoWidth || node.width;
+    const natH = node.naturalHeight || node.videoHeight || node.height;
+    if (!natW || !natH) return null;
+
+    // Box and picture in the same (viewport) frame, then clipped to the part
+    // of the picture the box actually covers.
+    const vx = box.x - window.scrollX;
+    const vy = box.y - window.scrollY;
+    const left = Math.max(vx, content.left);
+    const top = Math.max(vy, content.top);
+    const right = Math.min(vx + box.w, content.right);
+    const bottom = Math.min(vy + box.h, content.bottom);
+    if (right - left < 2 || bottom - top < 2) return null;
+
+    // Displayed pixels -> source pixels.
+    const kx = natW / content.width;
+    const ky = natH / content.height;
+    return {
+      sx: (left - content.left) * kx,
+      sy: (top - content.top) * ky,
+      sw: (right - left) * kx,
+      sh: (bottom - top) * ky
+    };
+  }
+
+  /**
+   * Draws a previously-measured crop to a canvas.
+   *
+   * @param {CanvasImageSource} source - The node itself, or a CORS-loaded stand-in.
+   * @param {{sx:number, sy:number, sw:number, sh:number}} g
+   * @returns {string|null} data URL, or null if the canvas was tainted.
+   */
+  drawCrop(source, g) {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(g.sw));
+      canvas.height = Math.max(1, Math.round(g.sh));
+      canvas.getContext('2d').drawImage(source, g.sx, g.sy, g.sw, g.sh, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png');
+    } catch (e) {
+      return null;   // tainted canvas, or a video with no frame yet
     }
+  }
+
+  /**
+   * Second attempt at a crop for an image that tainted the canvas, by
+   * re-requesting it with CORS. Patches the already-collected item in place,
+   * so a slow or failed request never holds up the picker — and takes the
+   * geometry by argument, since the box itself is released the moment the
+   * item is collected.
+   *
+   * @param {Element} node
+   * @param {{sx:number, sy:number, sw:number, sh:number}} geom
+   * @param {{imageUrl: string|null}} item
+   */
+  recropWithCors(node, geom, item) {
+    const src = node.currentSrc || node.src;
+    if (!src || src.startsWith('data:')) return;
+
+    const probe = new Image();
+    probe.crossOrigin = 'anonymous';
+    probe.onload = () => {
+      const cropped = this.drawCrop(probe, geom);
+      if (cropped) item.imageUrl = cropped;
+    };
+    probe.onerror = () => { /* no CORS headers — the full image stands */ };
+    probe.src = src;
+  }
+
+  beginDrag(e, mode) {
+    if (!this.isFrozen || !this.box) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.drag = { mode, startX: e.clientX, startY: e.clientY, startBox: { ...this.box }, moved: false };
+  };
+
+  /**
+   * Tracks an in-flight move/resize. Bound at the window so the gesture
+   * survives the pointer leaving the box, which it does constantly while
+   * shrinking one.
+   */
+  handleDragMove = (e) => {
+    if (!this.drag) return;
+    const dx = e.clientX - this.drag.startX;
+    const dy = e.clientY - this.drag.startY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) this.drag.moved = true;
+    this.applyDrag(dx, dy);
+  };
+
+  handleDragEnd = () => {
+    if (!this.drag) return;
+    // Only swallow the click that closes a real drag; a plain press on the box
+    // should still fall through to handleClick.
+    this.justDragged = this.drag.moved;
+    this.drag = null;
+  };
+
+  freezeSelection(el, clientX, clientY) {
+    // Sized to the picture itself wherever there is one, so the box arrives
+    // with the subject's own proportions rather than a generic square — a wide
+    // banner shot and a tall product shot should not open the same box.
+    const r = el ? this.subjectRect(el) : null;
+    let box;
+
+    if (r) {
+      // Padded per-axis, not by one shared value: a flat pad on a 3:1 banner
+      // pulls it toward square, losing exactly the proportions this is meant
+      // to preserve. ARScanView pads in normalized space where 3% is already
+      // per-axis; this is the same thing in pixels.
+      const padX = r.width * 0.03;
+      const padY = r.height * 0.03;
+      box = {
+        x: r.left + window.scrollX - padX,
+        y: r.top + window.scrollY - padY,
+        w: r.width + padX * 2,
+        h: r.height + padY * 2
+      };
+    } else {
+      // Nothing identifiable under the pointer — the provisional square
+      // handleFreeze drops before its detector answers.
+      const half = 90;
+      box = {
+        x: clientX + window.scrollX - half,
+        y: clientY + window.scrollY - half,
+        w: half * 2,
+        h: half * 2
+      };
+    }
+
+    this.isFrozen = true;
+    this.box = box;
+    this.currentTarget = null;
+    if (this.highlightBox) this.highlightBox.classList.add('is-frozen');
+    this.renderBox();
+    this.updateFooterState();
+  }
+
+  /**
+   * Drops the frozen box and returns to cursor tracking.
+   */
+  releaseSelection() {
+    this.isFrozen = false;
+    this.box = null;
+    this.drag = null;
+    this.currentTarget = null;
+    this.lastRect = null;
+    if (this.highlightBox) this.highlightBox.classList.remove('is-frozen');
+    this.updateHighlight(null);
+    this.updateFooterState();
+  }
+
+  /**
+   * Paints the frozen box and its scrim cutout.
+   *
+   * Bypasses updateHighlight because that derives its rect from an element;
+   * once the box is the user's to drag there is no element to derive from.
+   */
+  renderBox() {
+    if (!this.box || !this.highlightBox || !this.overlay) return;
+
+    const x1 = this.box.x - window.scrollX;
+    const y1 = this.box.y - window.scrollY;
+    const x2 = x1 + this.box.w;
+    const y2 = y1 + this.box.h;
+
+    this.highlightBox.style.left = `${x1}px`;
+    this.highlightBox.style.top = `${y1}px`;
+    this.highlightBox.style.width = `${this.box.w}px`;
+    this.highlightBox.style.height = `${this.box.h}px`;
+
+    this.overlay.style.setProperty('--decidio-cutout', `polygon(
+      0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
+      ${x1}px ${y1}px, ${x1}px ${y2}px, ${x2}px ${y2}px, ${x2}px ${y1}px, ${x1}px ${y1}px
+    )`);
+
+    this.highlightBox.classList.add('show');
+  }
+
+  /**
+   * Applies a move or corner-resize gesture.
+   *
+   * Same arithmetic as ARSelectionBox.resizeGesture, including its rule that a
+   * box pushed below the minimum pins its moving edge rather than inverting.
+   *
+   * @param {number} dx - Pointer delta since the gesture began.
+   * @param {number} dy
+   */
+  applyDrag(dx, dy) {
+    const { mode, startBox: s } = this.drag;
+    const MIN = DecidioContentPicker.MIN_BOX;
+
+    if (mode === 'move') {
+      this.box = { x: s.x + dx, y: s.y + dy, w: s.w, h: s.h };
+      this.renderBox();
+      return;
+    }
+
+    let { x, y, w, h } = s;
+    if (mode === 'tl') { x = s.x + dx; y = s.y + dy; w = s.w - dx; h = s.h - dy; }
+    if (mode === 'tr') {              y = s.y + dy; w = s.w + dx; h = s.h - dy; }
+    if (mode === 'bl') { x = s.x + dx;              w = s.w - dx; h = s.h + dy; }
+    if (mode === 'br') {                            w = s.w + dx; h = s.h + dy; }
+
+    if (w < MIN) { if (mode === 'tl' || mode === 'bl') x = s.x + s.w - MIN; w = MIN; }
+    if (h < MIN) { if (mode === 'tl' || mode === 'tr') y = s.y + s.h - MIN; h = MIN; }
+
+    this.box = { x, y, w, h };
+    this.renderBox();
+  }
+
+  /**
+   * Works out what sits inside a freely-drawn box.
+   *
+   * A dragged rectangle corresponds to no single node, so the box is sampled
+   * on a grid and each hit walked up to the largest ancestor still mostly
+   * inside it. Scoring then picks between those the same way auto-detect does.
+   *
+   * @returns {Element|null}
+   */
+  resolveBoxContent() {
+    if (!this.box) return null;
+
+    const vx = this.box.x - window.scrollX;
+    const vy = this.box.y - window.scrollY;
+    const seen = new Set();
+    const STEPS = 5;
+
+    // Every part of this picker that takes pointer events is also a hit for
+    // elementFromPoint, which would return the shadow host instead of the page
+    // beneath. The footer matters most: it covers the bottom of the viewport,
+    // so a box overlapping it lost those samples entirely and could resolve to
+    // nothing at all. Stand the whole overlay down for the duration of the scan.
+    const interactive = [this.highlightBox, this.footer].filter(Boolean);
+    const saved = interactive.map((el) => el.style.pointerEvents);
+    interactive.forEach((el) => { el.style.pointerEvents = 'none'; });
+
+    try {
+      for (let i = 1; i < STEPS; i++) {
+        for (let j = 1; j < STEPS; j++) {
+          const px = vx + (this.box.w * i) / STEPS;
+          const py = vy + (this.box.h * j) / STEPS;
+          if (px < 0 || py < 0 || px > window.innerWidth || py > window.innerHeight) continue;
+
+          let node = document.elementFromPoint(px, py);
+          if (!node || node === this.hostElement) continue;
+
+          for (let depth = 0; node && depth < 6 && node !== document.body; depth++) {
+            seen.add(node);
+            node = node.parentElement;
+          }
+        }
+      }
+    } finally {
+      interactive.forEach((el, i) => { el.style.pointerEvents = saved[i]; });
+    }
+
+    let best = null;
+    let bestScore = 0;
+
+    for (const el of seen) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+
+      // How much of the element the box actually covers. Anything spilling
+      // well outside was not what the box was drawn around.
+      const ix = Math.max(0, Math.min(r.right, vx + this.box.w) - Math.max(r.left, vx));
+      const iy = Math.max(0, Math.min(r.bottom, vy + this.box.h) - Math.max(r.top, vy));
+      const contained = (ix * iy) / (r.width * r.height);
+      if (contained < 0.6) continue;
+
+      // Bias toward filling the box, so the caption block wins over a bare
+      // thumbnail when the user deliberately drew around both.
+      const fill = (ix * iy) / (this.box.w * this.box.h);
+      const score = this.scoreAsItem(el) + fill * 3;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = el;
+      }
+    }
+
+    return best;
+  }
+
+  /**
+   * Pulls a collectable payload out of any element, image or not.
+   *
+   * ProductPageExtractor is built around an <img>, so a target resolved by
+   * scoring (a background-image card, an <svg>) has to surface an image node
+   * first, and falls back to its own CSS background when there is none.
+   *
+   * @param {Element} el
+   * @returns {{imageUrl: string|null, productUrl: string|null, productTitle: string|null}}
+   */
+  extractFromTarget(el) {
+    const container = this.findValidProductContainer(el) || el.parentElement || el;
+    const { node, url } = this.resolveImageFor(el);
+
+    // extractTitle/extractLocalTitle walk up from whatever anchor they are
+    // given and tolerate a non-image one, so the scoring in productPageExtract
+    // is reused even when nothing here is an <img>. Anchoring on the image
+    // when there IS one keeps its proximity heuristics meaningful.
+    const anchor = node && node.tagName === 'IMG' ? node : el;
+    const title = ProductPageExtractor.extractTitle(anchor, container);
+
+    const link = el.tagName === 'A' ? el : (el.closest('a[href]') || el.querySelector('a[href]'));
+    const productUrl = (node && node.tagName === 'IMG')
+      ? ProductPageExtractor.extractProductUrl(node, container)
+      : (link ? link.href : location.href);
+
+    return { imageUrl: url, productUrl, productTitle: title || null };
+  }
+
+  /**
+   * Finds the picture for a target, whatever form it takes.
+   *
+   * Widening the selection used to lose the image: a card wrapping a
+   * background-image div has no background of its own, so reading only the
+   * target's own style returned nothing the moment you stepped out one level.
+   * The search therefore covers descendants too, and serializes inline SVG
+   * art, which is neither an <img> nor a background.
+   *
+   * @param {Element} el
+   * @returns {{node: Element|null, url: string|null}}
+   */
+  resolveImageFor(el) {
+    const img = el.tagName === 'IMG' ? el : el.querySelector('img');
+    if (img) return { node: img, url: ProductPageExtractor.extractImageUrl(img) };
+
+    const bgUrl = (n) => {
+      if (!n || !n.nodeType) return null;
+      const bg = getComputedStyle(n).backgroundImage;
+      const m = bg && bg !== 'none' && bg.match(/url\(["']?(.*?)["']?\)/);
+      if (!m) return null;
+      try { return new URL(m[1], location.href).href; } catch (e) { return m[1]; }
+    };
+
+    const own = bgUrl(el);
+    if (own) return { node: el, url: own };
+
+    for (const child of el.querySelectorAll('*')) {
+      const u = bgUrl(child);
+      if (u) return { node: child, url: u };
+    }
+
+    const svg = el.tagName === 'SVG' || el.tagName === 'svg' ? el : el.querySelector('svg');
+    if (svg) {
+      try {
+        const markup = new XMLSerializer().serializeToString(svg);
+        // encodeURIComponent rather than btoa: the markup may carry characters
+        // outside Latin-1, which btoa throws on.
+        return { node: svg, url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(markup) };
+      } catch (e) { /* fall through to no image */ }
+    }
+
+    return { node: null, url: null };
+  }
+
+  /**
+   * Commits the frozen selection to the batch and re-arms the picker for the
+   * next one. Collect adds an item; it does not end the session — that is what
+   * Done does.
+   */
+  commitBoxSelection() {
+    if (!this.isFrozen) return;
+
+    const el = this.resolveBoxContent();
+    const picture = this.resolveBoxImage();
+
+    // The item's identity and its picture are resolved separately on purpose.
+    // resolveBoxContent needs an element mostly INSIDE the box to name the
+    // thing; but a box tightened around part of a photo leaves that photo only
+    // partly covered, so the same test would throw away the very image being
+    // framed. Whatever the box overlaps most wins the picture.
+    if (el || picture) {
+      const item = el
+        ? this.extractFromTarget(el)
+        : { imageUrl: null, productUrl: location.href, productTitle: null };
+
+      if (picture && picture.url) item.imageUrl = picture.url;
+
+      // The box is a crop, as it is in the app — so what gets collected is the
+      // framed region, not the whole source image. Measured before the box is
+      // released below, since the CORS retry resolves long after that.
+      if (picture && picture.node) {
+        const geom = this.cropGeometry(picture.node, this.box);
+        if (geom) {
+          const cropped = this.drawCrop(picture.node, geom);
+          if (cropped) {
+            item.imageUrl = cropped;
+          } else {
+            this.recropWithCors(picture.node, geom, item);
+          }
+        }
+      }
+
+      // With no element to name it, fall back to the picture's own context.
+      if (!item.productTitle && picture && picture.node) {
+        item.productTitle = ProductPageExtractor.extractTitle(
+          picture.node,
+          this.findValidProductContainer(picture.node) || picture.node.parentElement
+        ) || null;
+      }
+
+      this.selectedBatch.push(item);
+    }
+
+    this.releaseSelection();
+    this.updateFooterState();
+  }
+
+  /**
+   * Finds the picture the box is framing, by overlap rather than containment.
+   *
+   * @returns {{node: Element, url: string}|null}
+   */
+  resolveBoxImage() {
+    if (!this.box) return null;
+
+    const vx = this.box.x - window.scrollX;
+    const vy = this.box.y - window.scrollY;
+    let best = null;
+    let bestArea = 0;
+
+    for (const node of document.querySelectorAll('img, svg, canvas, video, picture')) {
+      const r = node.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+
+      const ix = Math.max(0, Math.min(r.right, vx + this.box.w) - Math.max(r.left, vx));
+      const iy = Math.max(0, Math.min(r.bottom, vy + this.box.h) - Math.max(r.top, vy));
+      const area = ix * iy;
+
+      if (area > bestArea) {
+        bestArea = area;
+        best = node;
+      }
+    }
+
+    // A stray sliver clipping the box edge is not what is being framed.
+    if (!best || bestArea < this.box.w * this.box.h * 0.15) return null;
+
+    const { url } = this.resolveImageFor(best);
+    return url ? { node: best, url } : null;
+  }
+
+  /**
+   * Keeps the footer in step with the picker: the plus only means anything
+   * while a box is frozen, and the running count sits beside it.
+   */
+  updateFooterState() {
+    if (!this.footer) return;
+
+    this.footer.classList.toggle('is-frozen', this.isFrozen);
+
+    const count = this.footer.querySelector('#decidio-count');
+    if (count) {
+      count.textContent = this.selectedBatch.length
+        ? `${this.selectedBatch.length} collected`
+        : '';
+    }
+  }
+
+  /**
+   * Marks the chosen list in the footer carousel and centres it, the way
+   * ARListCarousel keeps the selected name under the middle of the strip.
+   */
+  updateCarouselSelection(instant = false) {
+    if (!this.footer) return;
+
+    const strip = this.footer.querySelector('.decidio-ar-strip');
+    if (!strip) return;
+
+    strip.querySelectorAll('.decidio-ar-name').forEach((el) => {
+      const on = el.dataset.listId === String(this.selectedListId);
+      el.classList.toggle('is-selected', on);
+      if (!on) return;
+
+      // Deferred a frame: on first render this runs before the footer has been
+      // laid out, so the measurements below are all still zero.
+      //
+      // Measured from live rects and applied as a RELATIVE scroll, rather than
+      // via offsetLeft — the strip is not a positioned element, so offsetLeft
+      // resolves against some ancestor further up the shadow tree and does not
+      // share an origin with scrollLeft.
+      requestAnimationFrame(() => {
+        const sr = strip.getBoundingClientRect();
+        const er = el.getBoundingClientRect();
+        const delta = (er.left + er.width / 2) - (sr.left + sr.width / 2);
+        strip.scrollBy({ left: delta, behavior: instant ? 'auto' : 'smooth' });
+      });
+    });
   }
 
   /**
    * Emits collected batch selection payload to background runtime and closes picker.
    */
   finishBatchSelection() {
-    chrome.runtime.sendMessage({
-      action: "PRODUCT_IMAGES_BATCH_PICKED",
-      items: this.selectedBatch
-    });
+    // Leaving with nothing collected is a cancel, not an empty batch — the
+    // panel restores either way, but an empty PRODUCT_IMAGES_BATCH_PICKED
+    // would still read as a completed save downstream.
+    chrome.runtime.sendMessage(
+      this.selectedBatch.length
+        ? { action: "PRODUCT_IMAGES_BATCH_PICKED", items: this.selectedBatch }
+        : { action: "DECIDIO_PICKER_CANCELLED" }
+    );
     this.stop();
   }
 }

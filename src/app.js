@@ -92,12 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const sidebarPanel = document.getElementById('decidioSidebarPanel');
   const addProductBtn = document.getElementById('addProductBtn');
   const productsContainer = document.getElementById('products-container');
-  const singleModeBtn = document.getElementById('modeSingleBtn');
-  const multiModeBtn = document.getElementById('modeMultiBtn');
   const dropdowns = document.querySelectorAll('.list-dropdown-component');
 
   // Selection mode state ('single' vs 'multi') sent to the content script picker
-  let currentSelectionMode = 'single';
+  // Default to 'multi' mode
+  let currentSelectionMode = 'multi';
 
   /* --------------------------------------------------------------------------
      SIDEBAR PANEL INITIALIZATION
@@ -1127,20 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Toggle selection modes (single element vs. batch multi-selection)
-  if (singleModeBtn && multiModeBtn) {
-    singleModeBtn.addEventListener('click', () => {
-      currentSelectionMode = 'single';
-      singleModeBtn.classList.add('active');
-      multiModeBtn.classList.remove('active');
-    });
-
-    multiModeBtn.addEventListener('click', () => {
-      currentSelectionMode = 'multi';
-      multiModeBtn.classList.add('active');
-      singleModeBtn.classList.remove('active');
-    });
-  }
+  // Multi-select is always on; single/multi toggle removed
 
   /* --------------------------------------------------------------------------
      TRIGGER PICKER IN ACTIVE TAB & MESSAGE LISTENERS
@@ -1156,46 +1142,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /* --------------------------------------------------------------------------
-     COLLECTED ITEMS: CAROUSEL <-> LIST
-     -------------------------------------------------------------------------- */
-
-  // Two presentations of the same collected items, swapped by a class on the
-  // container. Nothing is re-rendered — the rows/cards are the same DOM, laid
-  // out differently by CSS — so switching never drops or reorders anything.
-  const viewCarouselBtn = document.getElementById('viewCarouselBtn');
-  const viewListBtn = document.getElementById('viewListBtn');
-
-  function setCollectView(mode) {
-    if (!productsContainer) return;
-    const isList = mode === 'list';
-    productsContainer.classList.toggle('is-view-list', isList);
-    productsContainer.classList.toggle('is-view-carousel', !isList);
-    if (viewListBtn) viewListBtn.classList.toggle('active', isList);
-    if (viewCarouselBtn) viewCarouselBtn.classList.toggle('active', !isList);
-    try {
-      chrome.storage.local.set({ collectViewMode: mode });
-    } catch (e) { /* orphaned context — the view still switched visually */ }
+  // Menu button (hamburger) in top right — no action yet, placeholder for future
+  const sidebarMenuBtn = document.getElementById('sidebarMenuBtn');
+  if (sidebarMenuBtn) {
+    sidebarMenuBtn.addEventListener('click', () => {
+      // TODO: implement menu actions
+    });
   }
 
-  if (viewCarouselBtn) viewCarouselBtn.addEventListener('click', () => setCollectView('carousel'));
-  if (viewListBtn) viewListBtn.addEventListener('click', () => setCollectView('list'));
+  /* --------------------------------------------------------------------------
+     COLLECTED ITEMS: LIST VIEW ONLY
+     -------------------------------------------------------------------------- */
 
-  // Restore the last-used view so the choice survives reopening the panel.
-  try {
-    chrome.storage.local.get({ collectViewMode: 'carousel' }, (result) => {
-      if (!chrome.runtime.lastError && result) setCollectView(result.collectViewMode);
-    });
-  } catch (e) { /* leave the markup default (carousel) */ }
+  // Only list view is available; products are always shown in list format.
+  if (productsContainer) {
+    productsContainer.classList.remove('is-view-carousel');
+    productsContainer.classList.add('is-view-list');
+  }
 
   // Send payload to content script on active tab when user clicks "Add Product"
   if (addProductBtn) {
     addProductBtn.addEventListener('click', async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab) {
-        chrome.tabs.sendMessage(tab.id, { 
+        chrome.tabs.sendMessage(tab.id, {
           action: "START_DECIDIO_PICKER",
-          mode: currentSelectionMode 
+          mode: currentSelectionMode,
+          lists: availableLists.map((l) => ({ id: l.id, name: l.name || 'Untitled list' })),
+          selectedListId
         });
       }
     });
@@ -1206,6 +1180,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (message.action === "RENDER_PICKED_PRODUCT" || message.action === "DECIDIO_PICKER_CANCELLED") {
       if (sidebarPanel) sidebarPanel.classList.remove('is-collapsed');
       if (toggleAnchor) toggleAnchor.style.display = '';
+    }
+
+    // The picker's footer carousel can change the target list while the panel
+    // is hidden; mirror it here so the dropdown does not disagree on return.
+    if (message.action === "DECIDIO_PICKER_LIST_CHANGED") {
+      selectedListId = message.listId;
+      const match = availableLists.find((l) => String(l.id) === String(message.listId));
+      const display = document.querySelector('.list-dropdown-component .selected-value-display');
+      if (match && display) display.innerText = match.name || 'Untitled list';
     }
   });
 

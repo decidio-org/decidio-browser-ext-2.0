@@ -14,13 +14,14 @@ class DecidioContentPicker {
   constructor() {
     this.isActive = false;          // Tracks whether the picker overlay is active
     this.selectionMode = 'single';  // 'single' | 'multi'
-    this.selectedBatch = [];        // Stores accumulated items in multi-selection mode
     this.currentTarget = null;      // Currently hovered target HTMLImageElement
     this.hostElement = null;        // Container injected into host document
     this.shadowRoot = null;         // Isolated Shadow DOM root
     this.highlightBox = null;       // Highlighting element surrounding hovered target
     this.overlay = null;            // Fullscreen backdrop with clip-path cutout
     this.footer = null;             // Bottom chrome: list carousel + plus, after ARFooter
+    this.identifyPage = null;       // Results queue, after ARIdentifyPage
+    this.hint = null;               // One-time vertical "Identify" signpost
     this.badge = null;              // Mouse-following logo badge element
     this.lastMouseX = 0;            // Last recorded viewport X coordinate
     this.lastMouseY = 0;            // Last recorded viewport Y coordinate
@@ -39,6 +40,14 @@ class DecidioContentPicker {
     this.drag = null;               // active move/resize gesture
     this.lists = [];                // [{id, name}] shown in the footer carousel
     this.selectedListId = null;
+
+    // Identify queue, after ARSessionStore. Collecting an item does not produce
+    // a finished result — it enqueues one as `pending` and resolves it, so the
+    // queue is the source of truth for what gets saved rather than a silent
+    // array filled in behind the user.
+    this.queue = [];                // [{id, thumb, title, brand, productUrl, state, error}]
+    this.identifyOpen = false;
+    this.nextQueueId = 1;
   }
 
   /** Minimum box edge, px. ARSelectionBox uses 0.08 of the frame; a page is
@@ -54,7 +63,6 @@ class DecidioContentPicker {
     if (this.isActive) this.stop();
     this.isActive = true;
     this.selectionMode = mode;
-    this.selectedBatch = [];
     this.currentTarget = null;
     this.lastRect = null;
     this.isFrozen = false;
@@ -62,6 +70,8 @@ class DecidioContentPicker {
     this.drag = null;
     this.lists = Array.isArray(lists) ? lists : [];
     this.selectedListId = selectedListId;
+    this.queue = [];
+    this.identifyOpen = false;
 
     // Minimize extension sidebar to clear screen real estate
     if (typeof minimizeSidebar === 'function') minimizeSidebar();
@@ -85,12 +95,17 @@ class DecidioContentPicker {
     this.detachEventListeners();
     document.body.style.cursor = '';
 
+    clearTimeout(this.hintTimer);
+
     // Remove host element and clear Shadow DOM references
     if (this.hostElement) {
       this.hostElement.remove();
       this.hostElement = null;
       this.shadowRoot = null;
       this.badge = null;
+      this.footer = null;
+      this.identifyPage = null;
+      this.hint = null;
     }
 
     // Restore minimized extension sidebar
@@ -254,6 +269,17 @@ class DecidioContentPicker {
         height: 3px;
         background: #ffffff;
       }
+      /* The list carousel is page-0 chrome — ARFooter fades it out as you page
+         away from the camera, leaving just the plus. The rules go with it;
+         they frame the carousel, not the footer. */
+      .decidio-ar-strip, .decidio-ar-rule {
+        transition: opacity 0.3s ease;
+      }
+      .decidio-ar-footer.is-identifying .decidio-ar-strip,
+      .decidio-ar-footer.is-identifying .decidio-ar-rule {
+        opacity: 0;
+        pointer-events: none;
+      }
 
       /* The carousel. ARListCarousel loops an infinite strip under a fixed
          centre; a page can scroll natively, so this is a scroller with the
@@ -338,13 +364,6 @@ class DecidioContentPicker {
       /* Only live once a box is frozen — there is nothing to add before that. */
       .decidio-ar-footer.is-frozen .decidio-ar-plus { opacity: 1; }
 
-      .decidio-ar-count {
-        position: absolute;
-        left: 20px;
-        color: rgba(255, 255, 255, 0.75);
-        font-size: 13px;
-        font-weight: 500;
-      }
       .decidio-ar-done {
         position: absolute;
         right: 20px;
@@ -359,6 +378,225 @@ class DecidioContentPicker {
         cursor: pointer;
       }
       .decidio-ar-done:hover { background: #f0f0f0; }
+
+      /* ---------- Vertical "Collect" hint --------------------------------
+         ARCameraPage draws a 168pt NHaas Bold "Identify" rotated -90 down the
+         left edge, holds it 2s, then fades it over 0.8s — a one-time signpost
+         that the next page is off to the side. Same treatment and timing here,
+         since the browser has no swipe affordance of its own to make that
+         obvious. The word differs deliberately: this reads "Collect", and the
+         page it points at is "Collected", matching the extension's own
+         vocabulary rather than the app's "Identify".
+
+         Set with vertical writing rather than rotate(-90deg): a rotation about
+         the bottom-left corner sweeps the glyph body to the LEFT of the origin
+         and straight off the viewport. vertical-rl gives a box that is already
+         tall and narrow, so it can be positioned like any other element, and
+         the 180deg flip makes it read bottom-to-top as the app's does.
+
+         The size is clamped so the word still fits a short browser window;
+         168px would run off the top of anything under ~820px tall.
+         ------------------------------------------------------------------ */
+      .decidio-ar-hint {
+        position: fixed;
+        left: 24px;
+        /* Sits clear of the footer's top rule. The offset is measured from the
+           footer itself rather than hard-coded, because its height moves with
+           the carousel and the safe-area padding. */
+        bottom: var(--decidio-hint-bottom, 150px);
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        white-space: nowrap;
+        font-family: "NHaasGroteskDSStd", "SFProDisplay", sans-serif;
+        font-weight: 700;
+        font-size: min(168px, calc((100vh - var(--decidio-hint-bottom, 150px) - 56px) / 4.3));
+        line-height: 1;
+        letter-spacing: -0.02em;
+        color: #ffffff;
+        pointer-events: none;
+        z-index: 2147483646;
+        /* Present from the first frame, as ARCameraPage's identifyOpacity
+           starts at 1.0. Nothing gates it on a rAF callback: those do not fire
+           while the tab is not painting, which left the hint invisible until
+           the fade timer removed it entirely. The overlay's own 0.2s fade-in
+           carries the entrance. */
+        opacity: 1;
+      }
+      .decidio-ar-hint.is-faded {
+        opacity: 0;
+        transition: opacity 0.8s ease-out;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .decidio-ar-hint.is-faded { transition: opacity 0.01s; }
+      }
+
+      /* ---------- Collected (page 2 of the app's AR flow) ----------------
+         ARIdentifyPage, titled "Collected" here: a 72pt NHaas Bold title over a queue of rows, each a
+         70x50 still beside either a spinner, the identified name, or a plain
+         failure line. Rows are divided by the same 0.75px white hairline the
+         rest of the AR chrome uses.
+         ------------------------------------------------------------------ */
+      .decidio-ar-identify {
+        position: absolute;
+        left: 20px;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 7px;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        font-family: "NHaasGroteskDSStd", "SFProDisplay", sans-serif;
+        font-weight: 700;
+        font-size: 17px;
+        color: rgba(255, 255, 255, 0.55);
+        transition: color 0.2s ease;
+      }
+      .decidio-ar-identify:hover,
+      .decidio-ar-footer.is-identifying .decidio-ar-identify { color: #ffffff; }
+      .decidio-ar-count {
+        font-family: "SFProDisplay", -apple-system, sans-serif;
+        font-weight: 500;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.55);
+      }
+
+      .decidio-id-page {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 2147483646;
+        background: rgba(0, 0, 0, 0.88);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        font-family: "SFProDisplay", -apple-system, BlinkMacSystemFont, sans-serif;
+        display: flex;
+        flex-direction: column;
+        pointer-events: auto;
+        /* Sits to the RIGHT of the picker and pages in sideways, because that
+           is where it lives in the app: ARScanView is a horizontal paging
+           ScrollView of [camera | identify | detail], not a stack of sheets.
+           Swiping left from the picker is the same move as swiping left from
+           the camera. */
+        transform: translateX(100%);
+        visibility: hidden;
+        transition: transform 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+                    visibility 0s linear 0.36s;
+      }
+      .decidio-id-page.is-open {
+        transform: translateX(0);
+        visibility: visible;
+        transition: transform 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+                    visibility 0s;
+      }
+      /* Follows the pointer 1:1 mid-swipe; the eased transition above only
+         takes over once the gesture is released. */
+      .decidio-id-page.is-dragging { transition: none; }
+
+      .decidio-id-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 40px 20px 16px;
+        flex: 0 0 auto;
+      }
+      /* 56px against the app's 72 — scaled to a browser overlay rather than a
+         phone screen, but the same face and weight carrying the page. */
+      .decidio-id-title {
+        font-family: "NHaasGroteskDSStd", "SFProDisplay", sans-serif;
+        font-weight: 700;
+        font-size: 56px;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        color: #ffffff;
+      }
+      .decidio-id-close {
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        margin-top: 8px;
+      }
+      .decidio-id-close svg {
+        width: 28px; height: 28px;
+        stroke: #ffffff; stroke-width: 3;
+        stroke-linecap: round; fill: none;
+      }
+
+      .decidio-id-body {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding-bottom: 180px;   /* clears the footer */
+      }
+      .decidio-id-empty {
+        padding: 56px 20px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 18px;
+        color: rgba(255, 255, 255, 0.75);
+      }
+      .decidio-id-rule {
+        height: 0.75px;
+        background: #ffffff;
+        margin: 0 16px;
+      }
+
+      .decidio-id-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 16px;
+      }
+      .decidio-id-thumb {
+        flex: 0 0 70px;
+        width: 70px;
+        height: 50px;
+        object-fit: cover;
+        display: block;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .decidio-id-thumb.is-blank { display: block; }
+
+      .decidio-id-text { display: flex; flex-direction: column; min-width: 0; }
+      /* First word above, full name below — the split ARIdentifyPage uses. */
+      .decidio-id-brand {
+        font-family: "NHaasGroteskDSStd", "SFProDisplay", sans-serif;
+        font-weight: 700;
+        font-size: 18px;
+        color: #ffffff;
+        line-height: 1.15;
+      }
+      .decidio-id-name {
+        font-family: "NHaasGroteskDSStd", "SFProDisplay", sans-serif;
+        font-weight: 500;
+        font-size: 18px;
+        color: #ffffff;
+        line-height: 1.15;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .decidio-id-failed {
+        font-weight: 700;
+        font-size: 18px;
+        color: rgba(255, 255, 255, 0.75);
+      }
+
+      .decidio-id-spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        animation: decidio-spin 0.7s linear infinite;
+      }
+      @keyframes decidio-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        .decidio-id-spinner { animation-duration: 2.4s; }
+        .decidio-id-page { transition: opacity 0.01s, visibility 0s; }
+      }
     `;
 
     this.shadowRoot.appendChild(style);
@@ -418,7 +656,9 @@ class DecidioContentPicker {
         <div class="decidio-ar-strip">${names}</div>
         <div class="decidio-ar-rule"></div>
         <div class="decidio-ar-actions">
-          <span class="decidio-ar-count" id="decidio-count"></span>
+          <button class="decidio-ar-identify" id="decidio-identify">
+            Collected<span class="decidio-ar-count" id="decidio-count"></span>
+          </button>
           <button class="decidio-ar-plus" id="decidio-plus" aria-label="Add to list">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="9.25"/>
@@ -449,9 +689,58 @@ class DecidioContentPicker {
 
         if (e.target.closest('#decidio-plus')) this.commitBoxSelection();
         if (e.target.closest('#decidio-done')) this.finishBatchSelection();
+        if (e.target.closest('#decidio-identify')) this.toggleIdentify();
       }, true);
 
       this.shadowRoot.appendChild(this.footer);
+
+      // Page 2 of the app's AR flow, as a panel that slides up over the picker
+      // rather than a page you scroll sideways to — a browser overlay has no
+      // horizontal pager to live in.
+      this.identifyPage = document.createElement('div');
+      this.identifyPage.className = 'decidio-id-page';
+      this.identifyPage.innerHTML = `
+        <div class="decidio-id-head">
+          <span class="decidio-id-title">Collected</span>
+          <button class="decidio-id-close" id="decidio-id-close" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <line x1="6" y1="6" x2="18" y2="18"/>
+              <line x1="18" y1="6" x2="6" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="decidio-id-body"></div>
+      `;
+      this.identifyPage.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (e.target.closest('#decidio-id-close')) {
+          e.preventDefault();
+          this.toggleIdentify(false);
+        }
+      }, true);
+
+      this.shadowRoot.appendChild(this.identifyPage);
+
+      // One-time signpost, matching ARCameraPage's own onAppear timing:
+      // present on open, held 2s, then faded over 0.8s and left alone.
+      this.hint = document.createElement('div');
+      this.hint.className = 'decidio-ar-hint';
+      this.hint.textContent = 'Collect';
+      this.shadowRoot.appendChild(this.hint);
+
+      // getBoundingClientRect forces layout, so the footer measures correctly
+      // here without waiting a frame — which matters, since a rAF callback
+      // would not run at all while the tab is not painting.
+      const footerH = this.footer.getBoundingClientRect().height;
+      if (footerH) {
+        this.hint.style.setProperty('--decidio-hint-bottom', `${Math.round(footerH + 20)}px`);
+      }
+
+      this.hintTimer = setTimeout(() => {
+        if (this.hint) this.hint.classList.add('is-faded');
+      }, 2000);
+
+      this.renderIdentify();
       this.updateCarouselSelection(true);
       this.updateFooterState();
     }
@@ -467,6 +756,7 @@ class DecidioContentPicker {
     window.addEventListener('mousemove', this.handleDragMove, true);
     window.addEventListener('mouseup', this.handleDragEnd, true);
     window.addEventListener('scroll', this.handleScroll, { passive: true, capture: true });
+    window.addEventListener('wheel', this.handleWheel, { passive: false, capture: true });
     window.addEventListener('click', this.handleClick, true);
     window.addEventListener('keydown', this.handleKeyDown, true);
   }
@@ -478,6 +768,7 @@ class DecidioContentPicker {
     window.removeEventListener('mousemove', this.handleMouseMove, true);
     window.removeEventListener('mousemove', this.handleDragMove, true);
     window.removeEventListener('mouseup', this.handleDragEnd, true);
+    window.removeEventListener('wheel', this.handleWheel, true);
     window.removeEventListener('scroll', this.handleScroll, true);
     window.removeEventListener('click', this.handleClick, true);
     window.removeEventListener('keydown', this.handleKeyDown, true);
@@ -1326,10 +1617,179 @@ class DecidioContentPicker {
         ) || null;
       }
 
-      this.selectedBatch.push(item);
+      this.enqueueForIdentify(item);
     }
 
     this.releaseSelection();
+    this.updateFooterState();
+  }
+
+  /**
+   * Puts a collected item into the identify queue and starts resolving it.
+   *
+   * Newest first, as ARSessionStore.submit inserts at index 0 — the thing you
+   * just framed should be the row you look at.
+   *
+   * @param {{imageUrl: string|null, productUrl: string|null, productTitle: string|null}} item
+   */
+  enqueueForIdentify(item) {
+    const entry = {
+      id: this.nextQueueId++,
+      thumb: item.imageUrl,
+      productUrl: item.productUrl,
+      title: item.productTitle,
+      brand: null,
+      state: 'pending',
+      error: null
+    };
+
+    this.queue.unshift(entry);
+    this.renderIdentify();
+    this.identify(entry);
+  }
+
+  /**
+   * Shows or hides the identify queue.
+   *
+   * @param {boolean} [force] - Explicit state; omitted toggles.
+   */
+  toggleIdentify(force) {
+    this.identifyOpen = force === undefined ? !this.identifyOpen : force;
+    if (this.identifyPage) {
+      this.identifyPage.classList.remove('is-dragging');
+      this.identifyPage.style.transform = '';
+      this.identifyPage.classList.toggle('is-open', this.identifyOpen);
+    }
+    if (this.footer) this.footer.classList.toggle('is-identifying', this.identifyOpen);
+  }
+
+  /**
+   * Horizontal paging between the picker and the Identify list.
+   *
+   * Trackpad/wheel deltaX is the browser's nearest equivalent of the app's
+   * swipe. Vertical scrolling is left alone so the page underneath still
+   * scrolls while picking, and paging is suspended while a selection is frozen
+   * — the same guard as `.scrollDisabled(frozen != nil)`.
+   */
+  handleWheel = (e) => {
+    if (!this.isActive || this.isFrozen || !this.identifyPage) return;
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+
+    e.preventDefault();
+
+    const now = Date.now();
+    if (now - (this.pageWheelAt || 0) > 220) this.pageWheelDx = 0;
+    this.pageWheelAt = now;
+    this.pageWheelDx = (this.pageWheelDx || 0) + e.deltaX;
+
+    // Live tracking, so the panel follows the gesture rather than appearing
+    // after it. deltaX is positive swiping toward the Identify page.
+    const w = window.innerWidth;
+    const base = this.identifyOpen ? 0 : w;
+    const x = Math.max(0, Math.min(w, base + (this.identifyOpen ? -this.pageWheelDx : -this.pageWheelDx)));
+
+    if (Math.abs(this.pageWheelDx) > 90) {
+      this.pageWheelDx = 0;
+      this.toggleIdentify(!this.identifyOpen);
+      return;
+    }
+
+    this.identifyPage.classList.add('is-dragging');
+    this.identifyPage.style.visibility = 'visible';
+    this.identifyPage.style.transform = `translateX(${x}px)`;
+
+    clearTimeout(this.pageWheelTimer);
+    this.pageWheelTimer = setTimeout(() => {
+      this.pageWheelDx = 0;
+      this.identifyPage.classList.remove('is-dragging');
+      this.identifyPage.style.transform = '';
+      this.identifyPage.style.visibility = '';
+    }, 200);
+  };
+
+  /**
+   * The queue rows that resolved, in the payload shape the panel expects.
+   * Mirrors ARSessionStore.completedItems.
+   *
+   * @returns {Array<{imageUrl: string|null, productUrl: string|null, productTitle: string|null}>}
+   */
+  identifiedItems() {
+    return this.queue
+      .filter((q) => q.state === 'complete')
+      .map((q) => ({ imageUrl: q.thumb, productUrl: q.productUrl, productTitle: q.title }));
+  }
+
+  /**
+   * Paints the identify queue. Rebuilt wholesale rather than diffed — the list
+   * is a handful of rows and only changes when one resolves.
+   */
+  renderIdentify() {
+    if (!this.identifyPage) return;
+
+    const body = this.identifyPage.querySelector('.decidio-id-body');
+    if (!body) return;
+
+    if (!this.queue.length) {
+      body.innerHTML = '<div class="decidio-id-empty">Collect items to identify them</div>';
+      this.updateFooterState();
+      return;
+    }
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (c) => (
+      { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]
+    ));
+
+    body.innerHTML = '<div class="decidio-id-rule"></div>' + this.queue.map((q) => {
+      let detail;
+      if (q.state === 'pending') {
+        detail = '<span class="decidio-id-spinner" role="status" aria-label="Identifying"></span>';
+      } else if (q.state === 'complete') {
+        detail = `<span class="decidio-id-text">
+            <span class="decidio-id-brand">${esc(q.brand)}</span>
+            <span class="decidio-id-name">${esc(q.title)}</span>
+          </span>`;
+      } else {
+        detail = `<span class="decidio-id-failed">Could not identify</span>`;
+      }
+
+      const thumb = q.thumb
+        ? `<img class="decidio-id-thumb" src="${esc(q.thumb)}" alt="">`
+        : '<span class="decidio-id-thumb is-blank"></span>';
+
+      return `<div class="decidio-id-row is-${q.state}">${thumb}${detail}</div>
+              <div class="decidio-id-rule"></div>`;
+    }).join('');
+
+    this.updateFooterState();
+  }
+
+  /**
+   * Resolves one queued item.
+   *
+   * This is the seam where the app calls Gemini via ItemScanService. The
+   * extension has no identification endpoint wired yet, so the answer comes
+   * from what the page itself declared while the item was picked. Kept async
+   * and state-driven anyway, so swapping in a real request later changes only
+   * the body of this method — not the queue, the states, or the UI.
+   *
+   * @param {{state: string, title: string|null, brand: string|null}} entry
+   */
+  async identify(entry) {
+    try {
+      const title = (entry.title || '').trim();
+      if (!title) throw new Error('No name found on the page');
+
+      // Same split the app's Identify rows use: first word above, full name
+      // below (see ARIdentifyPage.itemRow).
+      entry.brand = title.split(/\s+/)[0] || null;
+      entry.title = title;
+      entry.state = 'complete';
+    } catch (err) {
+      entry.state = 'failed';
+      entry.error = err.message;
+    }
+
+    this.renderIdentify();
     this.updateFooterState();
   }
 
@@ -1378,9 +1838,11 @@ class DecidioContentPicker {
 
     const count = this.footer.querySelector('#decidio-count');
     if (count) {
-      count.textContent = this.selectedBatch.length
-        ? `${this.selectedBatch.length} collected`
-        : '';
+      const done = this.identifiedItems().length;
+      const waiting = this.queue.filter((q) => q.state === 'pending').length;
+      count.textContent = waiting
+        ? `${done} collected · ${waiting} working`
+        : (done ? `${done} collected` : '');
     }
   }
 
@@ -1422,9 +1884,12 @@ class DecidioContentPicker {
     // Leaving with nothing collected is a cancel, not an empty batch — the
     // panel restores either way, but an empty PRODUCT_IMAGES_BATCH_PICKED
     // would still read as a completed save downstream.
+    // Only identified rows are saved — a pending or failed one has no name to
+    // file under, and the queue shows exactly which those are.
+    const items = this.identifiedItems();
     chrome.runtime.sendMessage(
-      this.selectedBatch.length
-        ? { action: "PRODUCT_IMAGES_BATCH_PICKED", items: this.selectedBatch }
+      items.length
+        ? { action: "PRODUCT_IMAGES_BATCH_PICKED", items }
         : { action: "DECIDIO_PICKER_CANCELLED" }
     );
     this.stop();

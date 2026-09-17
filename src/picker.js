@@ -399,7 +399,9 @@ class DecidioContentPicker {
          ------------------------------------------------------------------ */
       .decidio-ar-hint {
         position: fixed;
-        left: 24px;
+        /* Right edge, not the app's left: here the Collected page slides in
+           from the right, so the signpost sits on the side it points to. */
+        right: 24px;
         /* Sits clear of the footer's top rule. The offset is measured from the
            footer itself rather than hard-coded, because its height moves with
            the carousel and the safe-area padding. */

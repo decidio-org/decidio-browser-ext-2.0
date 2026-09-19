@@ -19,19 +19,29 @@
         <div class="sidebar-header">
             <button class="sidebar-minimize" id="sidebarMinimizeBtn"
                     aria-label="Back" title="Back">
-                <!-- chevron.backward, white, bold -->
+                <!-- arrow.left, as MyCollectionsHeader draws its back control:
+                     the keynote mockup shows a plain straight arrow, not the
+                     chevron Header.swift uses. -->
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <polyline points="15,5 8,12 15,19"/>
+                    <line x1="21" y1="12" x2="4" y2="12"/>
+                    <polyline points="11,5 4,12 11,19"/>
                 </svg>
             </button>
             <div class="brand-logo">decidio<span class="blue-dot">.</span></div>
             <button class="sidebar-menu-btn" id="sidebarMenuBtn"
-                    aria-label="Menu" title="Menu">
-                <!-- line.3.horizontal, white, bold -->
-                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    aria-label="Menu" title="Menu"
+                    aria-expanded="false" aria-controls="panelMenu">
+                <!-- line.3.horizontal, swapping to xmark while the menu is open -->
+                <svg class="icon-menu" viewBox="0 0 24 24" aria-hidden="true">
                     <line x1="3" y1="6" x2="21" y2="6"/>
                     <line x1="3" y1="12" x2="21" y2="12"/>
                     <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+                <!-- Drawn to the hamburger's right edge (x=21) so the two
+                     share an outside line and nothing jumps on the swap. -->
+                <svg class="icon-close" viewBox="0 0 24 24" aria-hidden="true">
+                    <line x1="5" y1="5" x2="21" y2="21"/>
+                    <line x1="21" y1="5" x2="5" y2="21"/>
                 </svg>
             </button>
         </div>
@@ -119,30 +129,39 @@ to Decidio<span class="blue-dot">.</span></h1>
              ================================================================== -->
         <div class="workspace-view" id="workspaceView">
 
+            <!-- Menu, after HomeOverlayMenuItems. Covers the workspace while
+                 open; the header's hamburger (now an X) closes it. -->
+            <div class="panel-menu" id="panelMenu" hidden>
+                <div class="panel-menu-title">Menu</div>
+                <!-- The app's Aero / Twilight switch: names the mode it will
+                     switch TO, with a sun or moon, as the app's menu does. -->
+                <button class="panel-menu-item" id="appearanceToggle">
+                    <svg class="panel-menu-icon icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="4.2" stroke="none"/>
+                        <line x1="12" y1="1.8" x2="12" y2="4.2"/>
+                        <line x1="12" y1="19.8" x2="12" y2="22.2"/>
+                        <line x1="1.8" y1="12" x2="4.2" y2="12"/>
+                        <line x1="19.8" y1="12" x2="22.2" y2="12"/>
+                        <line x1="4.8" y1="4.8" x2="6.5" y2="6.5"/>
+                        <line x1="17.5" y1="17.5" x2="19.2" y2="19.2"/>
+                        <line x1="4.8" y1="19.2" x2="6.5" y2="17.5"/>
+                        <line x1="17.5" y1="6.5" x2="19.2" y2="4.8"/>
+                    </svg>
+                    <svg class="panel-menu-icon icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke="none" d="M20.6 14.6A8.6 8.6 0 0 1 9.4 3.4a8.6 8.6 0 1 0 11.2 11.2z"/>
+                    </svg>
+                    <span id="appearanceLabel">Switch to Aero</span>
+                </button>
+            </div>
+
             <!-- Main Body Content -->
             <div class="sidebar-body">
 
-                <!-- LIST DROPDOWN -->
+                <!-- SELECT PRODUCTS WORKSPACE SECTION -->
                 <div class="form-group">
-                    <label class="form-label">Lists</label>
-                    <div class="custom-dropdown list-dropdown-component">
-                        <div class="dropdown-trigger" tabindex="0">
-                            <span class="selected-value-display">Select a list...</span>
-                            <div class="dropdown-arrow"></div>
-                        </div>
-
-                        <!-- TEMPORARY LIST NAMES -->
-                        <div class="dropdown-menu">
-                            <div class="dropdown-options-list">
-                                <button class="dropdown-option create-action-btn" data-value="create-new">
-                                    <span class="circle-plus-blue"></span>
-                                    Create List
-                                </button>
-                                <!-- Options are rendered at load; see renderListOptions() in app.js. -->
-                            </div>
-                        </div>
+                    <div class="collect-header-row">
+                        <label class="form-label">Collect <span class="blue-plus">+</span></label>
                     </div>
-
                     <!-- Inline name field for a new list. Replaces window.prompt(),
                          which renders as a native browser dialog with Chrome's own
                          chrome — no Decidio type, colour or shape anywhere in it. -->
@@ -163,17 +182,25 @@ to Decidio<span class="blue-dot">.</span></h1>
                             </svg>
                         </button>
                     </div>
-                </div>
-
-                <!-- SELECT PRODUCTS WORKSPACE SECTION -->
-                <div class="form-group">
-                    <div class="collect-header-row">
-                        <label class="form-label">Collect <span class="blue-plus">+</span></label>
-                    </div>
 
                     <div id="products-container" class="products-dotted-container is-view-list">
-                        <div class="add-product-tile" id="addProductBtn">
-                            <span class="circle-plus-blue"></span>
+                        <div class="add-product-tile" id="addProductBtn"
+                             role="button" tabindex="0"
+                             aria-label="Collect from this page" title="Collect from this page">
+                            <!-- camera.aperture, the symbol the app's Home screen uses
+                                 for this same action (HomeView, onCollect). SF Symbols
+                                 can't ship in a web extension, so it is drawn: the ring,
+                                 and six blades, each running from one corner of a
+                                 hexagonal opening through the next corner out to it. -->
+                            <svg class="add-collect-glyph" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9.25"/>
+                                <line x1="12.00" y1="7.10"  x2="21.24" y2="12.43"/>
+                                <line x1="16.24" y1="9.55"  x2="16.24" y2="20.22"/>
+                                <line x1="16.24" y1="14.45" x2="7.00"  y2="19.78"/>
+                                <line x1="12.00" y1="16.90" x2="2.76"  y2="11.57"/>
+                                <line x1="7.76"  y1="14.45" x2="7.76"  y2="3.78"/>
+                                <line x1="7.76"  y1="9.55"  x2="17.00" y2="4.22"/>
+                            </svg>
                         </div>
                     </div>
                 </div>
@@ -182,14 +209,19 @@ to Decidio<span class="blue-dot">.</span></h1>
 
             <!-- Bottom Footer Area -->
             <div class="sidebar-footer">
+                <!-- List bar, after ARFooter: a rule, the list names, a rule,
+                     then the plus — so the control plainly adds to the list
+                     named directly above it. Replaces the Lists dropdown that
+                     used to sit at the top of the body. -->
+                <div class="list-bar-rule"></div>
+                <div class="list-bar" id="listBar"></div>
+                <div class="list-bar-rule"></div>
                 <!-- Identical to the AR flow's own bottom action (ARScanView.swift:591):
                      a bare plus.circle glyph, 40pt bold white, centred — no plate,
                      no label. Drawn as SVG because SF Symbols cannot be
-                     redistributed for web use; the shape is the outlined circle
-                     with a centred cross, kept as plus.circle rather than a
-                     bare "+". -->
+                     redistributed for web use. -->
                 <button class="add-to-list-btn" id="addToListBtn" aria-label="Add to List" title="Add to List">
-                    <svg class="btn-plus-circle" viewBox="0 0 24 24" aria-hidden="true">
+                    <svg class="btn-plus-circle" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
                         <circle cx="12" cy="12" r="9.25"/>
                         <line x1="12" y1="7.6" x2="12" y2="16.4"/>
                         <line x1="7.6" y1="12" x2="16.4" y2="12"/>

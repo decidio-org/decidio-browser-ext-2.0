@@ -291,7 +291,6 @@ class DecidioContentPicker {
         scrollbar-width: none;
         height: 36px;
         margin: 4px 0;
-        scroll-behavior: smooth;
         /* Half a viewport of padding either side, less half a slot, so ANY
            name can sit dead centre — including the first and last. Without it
            the strip bottoms out against its left edge and the selected name
@@ -1874,7 +1873,7 @@ class DecidioContentPicker {
         const sr = strip.getBoundingClientRect();
         const er = el.getBoundingClientRect();
         const delta = (er.left + er.width / 2) - (sr.left + sr.width / 2);
-        strip.scrollBy({ left: delta, behavior: instant ? 'auto' : 'smooth' });
+        strip.scrollBy({ left: delta, behavior: instant ? 'instant' : 'smooth' });
       });
     });
   }

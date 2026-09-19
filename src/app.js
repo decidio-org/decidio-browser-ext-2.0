@@ -2,7 +2,7 @@
  * app.js
  * 
  * Manages the iframe UI: sidebar panel visibility, tile rendering, tile removal,
- * dropdowns, mode toggles, and triggering the picker on the active tab.
+ * the list bar, and triggering the picker on the active tab.
  */
 
 /**
@@ -92,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const sidebarPanel = document.getElementById('decidioSidebarPanel');
   const addProductBtn = document.getElementById('addProductBtn');
   const productsContainer = document.getElementById('products-container');
-  const dropdowns = document.querySelectorAll('.list-dropdown-component');
 
   // Selection mode state ('single' vs 'multi') sent to the content script picker
   // Default to 'multi' mode
@@ -106,6 +105,30 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sidebarPanel) {
     sidebarPanel.classList.remove('is-collapsed');
   }
+
+
+  /**
+   * Tells the host page where the panel sits inside this frame, so it can
+   * clip its frosted iframe to the same shape. Re-sent whenever the panel's
+   * size changes — which is also what happens when it swaps between the
+   * sign-in form and the workspace.
+   */
+  function reportPanelRect() {
+    if (!sidebarPanel) return;
+    const r = sidebarPanel.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    window.parent.postMessage({
+      action: 'DECIDIO_PANEL_RECT',
+      rect: {
+        top: r.top, left: r.left, width: r.width, height: r.height,
+        radius: parseFloat(getComputedStyle(sidebarPanel).borderTopLeftRadius) || 0
+      }
+    }, '*');
+  }
+  if (sidebarPanel && typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(reportPanelRect).observe(sidebarPanel);
+  }
+  window.addEventListener('resize', reportPanelRect);
 
   // Toggle sidebar visibility when clicking the toggle anchor
   if (toggleAnchor && sidebarPanel) {
@@ -792,30 +815,101 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let availableLists = [];
   let selectedListId = null;
+  // True while the create-list field is open, so "New List" carries the
+  // highlight for as long as it is the thing being acted on.
+  let pendingCreate = false;
 
-  /** Renders `availableLists` into the dropdown, keeping "Create List" first. */
-  function renderListOptions() {
-    const menu = document.querySelector('.list-dropdown-component .dropdown-options-list');
-    if (!menu) return;
+  /**
+   * Renders `availableLists` into the footer bar, after ARListCarousel.
+   *
+   * "New List" leads the strip because the app's own carouselNames does the
+   * same — creating a list is one more name to scroll to, not a separate
+   * control somewhere else.
+   */
+  function renderListBar() {
+    const bar = document.getElementById('listBar');
+    if (!bar) return;
 
-    menu.querySelectorAll('.dropdown-option:not(.create-action-btn)').forEach((el) => el.remove());
+    bar.innerHTML = '';
 
-    if (!availableLists.length) {
-      const empty = document.createElement('div');
-      empty.className = 'dropdown-empty';
-      empty.textContent = 'No lists yet';
-      menu.appendChild(empty);
-      return;
-    }
-
-    availableLists.forEach((list) => {
+    const entries = [{ id: 'create-new', name: 'New List' }, ...availableLists];
+    entries.forEach((list) => {
       const btn = document.createElement('button');
-      btn.className = 'dropdown-option';
-      btn.setAttribute('data-value', list.id);
+      btn.className = 'list-bar-name';
+      btn.dataset.value = list.id;
       btn.textContent = list.name || 'Untitled list';
-      menu.appendChild(btn);
+      const on = list.id === 'create-new'
+        ? pendingCreate
+        : (!pendingCreate && String(list.id) === String(selectedListId));
+      if (on) btn.classList.add('is-selected');
+      bar.appendChild(btn);
+    });
+
+    centreSelectedList();
+  }
+
+  /**
+   * Brings the chosen name to the middle of the strip.
+   *
+   * Measured from live rects and applied as a relative scroll: the strip is
+   * not a positioned element, so offsetLeft would not share an origin with
+   * scrollLeft.
+   */
+  function centreSelectedList(instant = false) {
+    const bar = document.getElementById('listBar');
+    const sel = bar && bar.querySelector('.is-selected');
+    if (!sel) return;
+
+    requestAnimationFrame(() => {
+      const br = bar.getBoundingClientRect();
+      // No layout yet — the panel's iframe has no size until it is opened, so
+      // measuring here would scroll by a meaningless amount and leave the
+      // strip parked at 0, showing "New List" in the middle. watchListBarWidth
+      // re-runs this the moment the bar actually gets a width.
+      if (!br.width) return;
+
+      const sr = sel.getBoundingClientRect();
+      bar.scrollBy({
+        left: (sr.left + sr.width / 2) - (br.left + br.width / 2),
+        behavior: instant ? 'instant' : 'smooth'
+      });
     });
   }
+
+  /**
+   * Re-centres the strip whenever its width changes — which includes going
+   * from zero (panel closed) to its real width the first time the panel is
+   * opened. Keyed on width alone so it never fights a scroll the user is
+   * making themselves.
+   */
+  function watchListBarWidth() {
+    const bar = document.getElementById('listBar');
+    if (!bar || typeof ResizeObserver === 'undefined') return;
+
+    let lastWidth = 0;
+    new ResizeObserver(() => {
+      const w = Math.round(bar.getBoundingClientRect().width);
+      if (w === lastWidth) return;
+      lastWidth = w;
+      if (w) centreSelectedList(true);
+    }).observe(bar);
+  }
+  watchListBarWidth();
+
+  document.addEventListener('click', (e) => {
+    const name = e.target.closest && e.target.closest('.list-bar-name');
+    if (!name) return;
+
+    if (name.dataset.value === 'create-new') {
+      pendingCreate = true;
+      renderListBar();
+      openCreateListRow();
+      return;
+    }
+    pendingCreate = false;
+    selectedListId = name.dataset.value;
+    renderListBar();
+  });
 
   /**
    * True when we are running on the fake session the dev bypass creates.
@@ -853,7 +947,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadLists() {
     if (usingDevSession()) {
       availableLists = withDefaultList(await readDevLists());
-      renderListOptions();
+      renderListBar();
       selectDefaultListIfNone();
       return;
     }
@@ -863,24 +957,37 @@ document.addEventListener('DOMContentLoaded', () => {
       // accept either rather than depending on which.
       availableLists = withDefaultList(
         Array.isArray(data) ? data : (data?.lists || data?.items || []));
-      renderListOptions();
+      renderListBar();
       selectDefaultListIfNone();
     } catch (err) {
       // Not surfaced as an error banner: this fires on every panel open,
       // including when signed out. The default still stands so the section is
       // usable rather than blank.
       availableLists = withDefaultList([]);
-      renderListOptions();
+      renderListBar();
       selectDefaultListIfNone();
     }
   }
 
-  /** Preselects the default so the plus works without picking a list first. */
+  /**
+   * Preselects "My Collection" so the plus works without picking a list first,
+   * and so the bar opens with a real name centred.
+   *
+   * Matched by NAME rather than by DEFAULT_LIST.id: when the backend returns a
+   * list already called "My Collection", withDefaultList keeps the server's
+   * copy and its own id, so the hardcoded 'default' id matched no button at
+   * all — nothing carried .is-selected, and the strip sat at scroll 0, which
+   * left "New List" sitting in the centre instead.
+   */
   function selectDefaultListIfNone() {
     if (selectedListId) return;
-    const display = document.querySelector('.list-dropdown-component .selected-value-display');
-    selectedListId = DEFAULT_LIST.id;
-    if (display) display.innerText = DEFAULT_LIST.name;
+
+    const preferred =
+      availableLists.find((l) => (l.name || '').toLowerCase() === DEFAULT_LIST.name.toLowerCase()) ||
+      availableLists[0];
+
+    if (preferred) selectedListId = preferred.id;
+    renderListBar();
   }
 
   async function createListNamed(name) {
@@ -1039,6 +1146,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function closeCreateListRow() {
     if (createListRow) createListRow.classList.remove('is-open');
+    // Whether cancelled or completed, "New List" stops being the live target.
+    pendingCreate = false;
+    renderListBar();
   }
 
   async function confirmCreateList() {
@@ -1048,14 +1158,17 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const display = document.querySelector('.list-dropdown-component .selected-value-display');
     if (createListConfirm) createListConfirm.disabled = true;
 
     try {
       const created = await createListNamed(name);
-      selectedListId = created?.id || created?.list_id || null;
-      if (display) display.innerText = name;
-      closeCreateListRow();
+      const id = created?.id || created?.list_id || null;
+      selectedListId = id;
+      if (id && !availableLists.some((l) => String(l.id) === String(id))) {
+        availableLists.push({ id, name });
+      }
+      closeCreateListRow();   // clears pendingCreate and re-renders
+      renderListBar();
     } catch (err) {
       showCollectStatus(err.message || 'Could not create that list.', true);
     } finally {
@@ -1076,56 +1189,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadLists();
 
-  /* --------------------------------------------------------------------------
-     UI COMPONENTS (DROPDOWNS & MODE SWITCHER)
-     -------------------------------------------------------------------------- */
-
-  // Initialize custom dropdown behavior and option selection
-  dropdowns.forEach(dropdown => {
-    const trigger = dropdown.querySelector('.dropdown-trigger');
-    const options = dropdown.querySelectorAll('.dropdown-option');
-    const display = dropdown.querySelector('.selected-value-display');
-
-    if (!trigger || !display) return;
-
-    function openDropdown() {
-      dropdown.classList.remove('is-closing');
-      dropdown.classList.add('is-active');
-    }
-
-    function closeDropdown() {
-      dropdown.classList.add('is-closing');
-      dropdown.classList.remove('is-active');
-      setTimeout(() => { dropdown.classList.remove('is-closing'); }, 450); // Syncs with CSS closing animation duration
-    }
-
-    trigger.addEventListener('click', (e) => {
-      e.stopPropagation();
-      dropdown.classList.contains('is-active') ? closeDropdown() : openDropdown();
-    });
-
-    options.forEach(option => {
-      option.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const value = option.getAttribute('data-value');
-        closeDropdown();
-
-        if (value === 'create-new') {
-          openCreateListRow();
-          return;
-        }
-
-        selectedListId = value;
-        display.innerText = option.innerText;
-      });
-    });
-
-    // Close open dropdown when clicking outside
-    document.addEventListener('click', () => {
-      if (dropdown.classList.contains('is-active')) closeDropdown();
-    });
-  });
-
   // Multi-select is always on; single/multi toggle removed
 
   /* --------------------------------------------------------------------------
@@ -1142,13 +1205,66 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Menu button (hamburger) in top right — no action yet, placeholder for future
+  /* --------------------------------------------------------------------------
+     MENU + APPEARANCE (Aero / Twilight)
+     -------------------------------------------------------------------------- */
+
+  // Hamburger in the top right, after HomeOverlayMenuBar: opens the menu over
+  // the workspace and turns into the X that closes it.
   const sidebarMenuBtn = document.getElementById('sidebarMenuBtn');
+  const panelMenu = document.getElementById('panelMenu');
+  const appearanceToggle = document.getElementById('appearanceToggle');
+  const appearanceLabel = document.getElementById('appearanceLabel');
+
+  function setMenuOpen(open) {
+    if (!panelMenu || !sidebarMenuBtn) return;
+    panelMenu.hidden = !open;
+    sidebarMenuBtn.classList.add('has-toggled');
+    sidebarMenuBtn.classList.toggle('is-open', open);
+    sidebarMenuBtn.setAttribute('aria-expanded', String(open));
+    sidebarMenuBtn.setAttribute('aria-label', open ? 'Close menu' : 'Menu');
+    sidebarMenuBtn.title = open ? 'Close menu' : 'Menu';
+    if (open && appearanceToggle) appearanceToggle.focus();
+  }
+
   if (sidebarMenuBtn) {
-    sidebarMenuBtn.addEventListener('click', () => {
-      // TODO: implement menu actions
+    sidebarMenuBtn.addEventListener('click', () => setMenuOpen(panelMenu && panelMenu.hidden));
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panelMenu && !panelMenu.hidden) {
+      setMenuOpen(false);
+      if (sidebarMenuBtn) sidebarMenuBtn.focus();
+    }
+  });
+
+  /**
+   * Applies Aero (white) or Twilight (near-black) — the app's two
+   * MatteBackground modes. The entry names the mode it will switch TO, as the
+   * app's own menu does ("Switch to Aero" while dark).
+   *
+   * @param {'aero'|'twilight'} mode
+   */
+  function applyAppearance(mode) {
+    const aero = mode === 'aero';
+    if (sidebarPanel) sidebarPanel.classList.toggle('is-aero', aero);
+    if (appearanceLabel) appearanceLabel.textContent = aero ? 'Switch to Twilight' : 'Switch to Aero';
+  }
+
+  if (appearanceToggle) {
+    appearanceToggle.addEventListener('click', () => {
+      const next = sidebarPanel && sidebarPanel.classList.contains('is-aero') ? 'twilight' : 'aero';
+      applyAppearance(next);
+      // Remembered across panel opens and tabs, like the app's AppearanceStore.
+      try { chrome.storage.local.set({ panelAppearance: next }); } catch (e) { /* orphaned context */ }
     });
   }
+
+  applyAppearance('twilight');
+  try {
+    chrome.storage.local.get({ panelAppearance: 'twilight' }, (r) => {
+      if (!chrome.runtime.lastError && r) applyAppearance(r.panelAppearance);
+    });
+  } catch (e) { /* keep the default */ }
 
   /* --------------------------------------------------------------------------
      COLLECTED ITEMS: LIST VIEW ONLY
@@ -1173,6 +1289,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
     });
+    // It is a div carrying role="button", so it gets a button's keys too.
+    addProductBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        addProductBtn.click();
+      }
+    });
   }
 
   // Listen for messages from background/content scripts to restore sidebar state
@@ -1186,9 +1309,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // is hidden; mirror it here so the dropdown does not disagree on return.
     if (message.action === "DECIDIO_PICKER_LIST_CHANGED") {
       selectedListId = message.listId;
-      const match = availableLists.find((l) => String(l.id) === String(message.listId));
-      const display = document.querySelector('.list-dropdown-component .selected-value-display');
-      if (match && display) display.innerText = match.name || 'Untitled list';
+      renderListBar();
     }
   });
 
@@ -1305,9 +1426,9 @@ function displaySelectedProduct(imageUrl, productUrl, productTitle, container) {
   productTile.appendChild(textBlock);
   productTile.appendChild(removeBtn);
 
-  // Anchored AFTER the collected items, in both views. It used to be pinned
-  // first in the carousel (order 0) and last in the list (order 999), so it
-  // jumped from one end to the other when the view was switched.
+  // Anchored AFTER the collected items. It used to be pinned first in the
+  // carousel (order 0) and last in the list (order 999), so it jumped from one
+  // end to the other when the view was switched.
   const addBtn = document.getElementById('addProductBtn');
   if (addBtn) addBtn.style.order = '999';
 

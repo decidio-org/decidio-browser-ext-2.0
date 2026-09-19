@@ -203,10 +203,50 @@ function activateExtensionUI() {
     height: '100%',
     border: 'none',
     backgroundColor: 'transparent',
+    // Clipped to the panel's own shape, which the panel reports once it has
+    // laid out (see DECIDIO_PANEL_RECT in content.js). Without the clip the
+    // transparent margins of this 430px column would keep eating clicks meant
+    // for the page. This first value is the workspace
+    // panel's default box, so nothing flashes before the report arrives.
+    clipPath: 'inset(88px 24px calc(25vh - 7px) 26px round 16px)',
     transition: 'right 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
     pointerEvents: 'auto' // Re-enable interaction inside the iframe
   });
 
+  // Shadow that lifts the panel off the page. It cannot be the iframe's own:
+  // the iframe is clip-path'd to the panel, and a clip removes anything drawn
+  // outside it, shadow included. So it is a separate layer underneath, in a
+  // frame that slides exactly as the iframe does, sized by the same panel
+  // report that sets the clip (content.js).
+  const shadowFrame = document.createElement('div');
+  shadowFrame.id = 'decidio-panel-shadow-frame';
+  Object.assign(shadowFrame.style, {
+    position: 'absolute',
+    top: '0',
+    right: iframe.style.right,
+    width: '100%',
+    height: '100%',
+    pointerEvents: 'none',
+    transition: iframe.style.transition
+  });
+  const shadow = document.createElement('div');
+  shadow.id = 'decidio-panel-shadow';
+  Object.assign(shadow.style, {
+    position: 'absolute',
+    opacity: '0',                // shown once the panel reports its box
+    transition: 'opacity 0.2s ease',
+    boxShadow: '0 32px 80px rgba(0, 0, 0, 0.30), 0 10px 28px rgba(0, 0, 0, 0.18)'
+  });
+  shadowFrame.appendChild(shadow);
+
+  // Every slide in or out sets iframe.style.right from several places in
+  // this file; mirroring the attribute keeps the shadow in step without
+  // having to remember it at each of them.
+  new MutationObserver(() => {
+    shadowFrame.style.right = iframe.style.right;
+  }).observe(iframe, { attributes: true, attributeFilter: ['style'] });
+
+  extensionRoot.appendChild(shadowFrame);
   extensionRoot.appendChild(iframe);
   document.body.appendChild(extensionRoot);
 

@@ -323,52 +323,6 @@ html, body {
     display: none;
 }
 
-/* Add product tile button (rendered at end of carousel) */
-.add-product-tile {
-    flex-shrink: 0;
-    width: 60px;               /* Fixed square dimension */
-    height: 60px;              
-    background: transparent;   
-    border: none;              
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-    padding: 0;
-    order: 999;                /* Ensures this tile always stays at the end */
-}
-
-.add-product-tile:hover {
-    background: transparent;   
-    transform: scale(1.1);      /* Smooth zoom on hover */
-    opacity: 0.9;
-}
-
-.add-product-tile:active {
-    transform: scale(0.95);     /* Shrink on click */
-}
-
-/* Scaled-up 44px version of the blue circle plus icon inside the add tile */
-.add-product-tile .circle-plus-blue {
-    width: 44px;         
-    height: 44px;        
-    border-width: 5px;   
-}
-
-/* Scaled horizontal bar for larger plus icon */
-.add-product-tile .circle-plus-blue::before {
-    width: 18px;         
-    height: 5px;         
-}
-
-/* Scaled vertical bar for larger plus icon */
-.add-product-tile .circle-plus-blue::after {
-    width: 5px;          
-    height: 18px;        
-}
-
 .product-tile-number {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     letter-spacing: 0.5px;
@@ -480,36 +434,6 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: center;
-}
-
-/* Main primary action button */
-.add-to-list-btn {
-    width: 100%;
-    height: 44px;
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
-    border-radius: 12px;
-    color: var(--text-primary);
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Hover state: Fills button background with brand accent color */
-.add-to-list-btn:hover {
-    background: var(--accent-blue);
-    border-color: var(--accent-blue);
-    box-shadow: 0 4px 16px rgba(58, 111, 172, 0.4);
-    transform: translateY(-1px);
-}
-
-.add-to-list-btn:active {
-    transform: translateY(0);
 }
 
 /* Circular plus icon embedded inside primary button */

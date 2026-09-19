@@ -275,8 +275,6 @@
 .decidio-sidebar:not(.is-auth) .dropdown-trigger,
 .decidio-sidebar:not(.is-auth) .dropdown-menu,
 .decidio-sidebar:not(.is-auth) .products-dotted-container,
-.decidio-sidebar:not(.is-auth) .add-product-tile,
-.decidio-sidebar:not(.is-auth) .add-to-list-btn,
 .decidio-sidebar:not(.is-auth) .collected-product-tile {
     background: transparent;
     border: none;
@@ -351,15 +349,6 @@
     text-decoration: underline;
 }
 
-
-/* Collect area: no dashed well, just the add affordance on the field. */
-.decidio-sidebar:not(.is-auth) .add-product-tile {
-    color: #FFFFFF;
-    opacity: 0.75;
-    cursor: pointer;
-}
-.decidio-sidebar:not(.is-auth) .add-product-tile:hover { opacity: 1; }
-
 /* Item numbers — the app's treatment exactly: zero-padded two digits in
    SFProDisplay-Heavy at 16pt, white (MyCollectionsList.swift:180-182). The
    markup already emitted "01"/"02"; only the face was wrong. */
@@ -376,19 +365,6 @@
     font-weight: 500;
     color: #FFFFFF;
 }
-
-/* Primary action: underlined white text, as ARIdentifyPage's own Back control
-   is — not a filled button, which would reintroduce a plate. */
-.decidio-sidebar:not(.is-auth) .add-to-list-btn {
-    font-family: "SFProDisplay", sans-serif;
-    font-weight: 700;
-    font-size: 18px;
-    color: #FFFFFF;
-    height: 48px;
-    border-top: 0.75px solid #FFFFFF;
-    cursor: pointer;
-}
-.decidio-sidebar:not(.is-auth) .add-to-list-btn:hover { text-decoration: underline; }
 
 /* ==========================================================================
    COLLECTED ITEMS — two views over the same DOM
@@ -568,31 +544,7 @@
     background: transparent;
     border: none;
 }
-.decidio-sidebar:not(.is-auth) .add-to-list-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: auto;
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    padding: 0;
-    cursor: pointer;
-    opacity: 1;
-    transition: opacity 0.2s ease;
-}
-.decidio-sidebar:not(.is-auth) .add-to-list-btn:hover { opacity: 0.7; background: transparent; }
 
-.decidio-sidebar:not(.is-auth) .btn-plus-circle {
-    width: 40px;              /* AR: .font(.system(size: 40)) */
-    height: 40px;
-    fill: none;
-    stroke: #FFFFFF;
-    stroke-width: 1.8;        /* .fontWeight(.bold) */
-    stroke-linecap: round;
-}
 
 /* ---------- Waiting list ---------------------------------------------------
    Shown when an invitation code is rejected. Kept in the LoginView vocabulary:
@@ -963,50 +915,7 @@
 .decidio-sidebar:not(.is-auth) .circle-plus-blue::after {
     background-color: var(--decidio-blue);
 }
-.decidio-sidebar:not(.is-auth) .add-product-tile .circle-plus-blue {
-    width: 26px;
-    height: 26px;
-    border-width: 2px;
-}
-.decidio-sidebar:not(.is-auth) .add-product-tile .circle-plus-blue::before {
-    width: 12px; height: 2px;
-}
-.decidio-sidebar:not(.is-auth) .add-product-tile .circle-plus-blue::after {
-    width: 2px; height: 12px;
-}
 
-/* In the list it belongs as a row, aligned with the thumbnails above it — not
-   floating at the left margin on its own. */
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile {
-    order: 999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 56px;
-    height: 42px;
-    margin: 6px 0 0 4px;
-    /* No plate — the glyph sits straight on the field like everything else. */
-    background: transparent;
-}
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile:hover {
-    background: transparent;
-    opacity: 0.7;
-}
-
-/* In the carousel it matches a card's thumbnail footprint. */
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile {
-    width: 104px;
-    height: 104px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    flex-shrink: 0;
-}
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile:hover {
-    background: transparent;
-    opacity: 0.7;
-}
 
 /* ---------- Dropdown legibility -------------------------------------------
    The menu was transparent, so options rendered white-on-purple over whatever
@@ -1088,10 +997,6 @@
     padding: 10px 4px;
     gap: 16px;
 }
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile {
-    width: 64px;
-    height: 48px;
-}
 
 .decidio-sidebar:not(.is-auth) .create-list-input { font-size: 16px; }
 .collect-status { font-size: 14px; }
@@ -1128,36 +1033,6 @@
     border-bottom: none;
 }
 
-/* ---------- Add affordance: sized to its slot -----------------------------
-   26px was set when the tile was smaller; against a 104px carousel card and a
-   64x48 list slot it read as a stray dot rather than a control. Scaled to each
-   context, with stroke weights kept proportional so the ring does not thin out
-   as it grows.
-   -------------------------------------------------------------------------- */
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue {
-    width: 52px;
-    height: 52px;
-    border-width: 3px;
-}
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::before {
-    width: 24px; height: 3px;
-}
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::after {
-    width: 3px; height: 24px;
-}
-
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue {
-    width: 34px;
-    height: 34px;
-    border-width: 2.5px;
-}
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::before {
-    width: 16px; height: 2.5px;
-}
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::after {
-    width: 2.5px; height: 16px;
-}
-
 /* The "Create List" row's own small plus, matched to the option text beside it. */
 .decidio-sidebar:not(.is-auth) .dropdown-option .circle-plus-blue {
     width: 18px;
@@ -1175,34 +1050,7 @@
    WEIGHT + ALIGNMENT PASS
    ========================================================================== */
 
-/* Bottom action: heavier ring and cross. 1.8 was thin for a 40px glyph sitting
-   alone at the foot of the panel — it read as an outline rather than a control. */
-.decidio-sidebar:not(.is-auth) .btn-plus-circle {
-    stroke-width: 2.6;
-}
 
-/* Both blue add controls at one size and one weight. They were 52px in the
-   carousel and 34px in the list, so the same control changed size when the
-   view changed — the size was tracking its slot rather than its meaning. */
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue,
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue {
-    width: 44px;
-    height: 44px;
-    border-width: 4px;
-}
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::before,
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::before {
-    width: 20px; height: 4px;
-}
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::after,
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::after {
-    width: 4px; height: 20px;
-}
-/* The list slot has to give the now-larger control room to sit in. */
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile {
-    width: 64px;
-    height: 56px;
-}
 
 /* ---------- Chevron: always white, aligned to the rules -------------------
    It sat at 0.8 opacity, so it read as grey against the white wordmark beside
@@ -1229,9 +1077,10 @@
     stroke: #FFFFFF;
     stroke-width: 3.5;
 }
-/* Nudges each drawn stroke flush with the rules below: both paths start inset
-   within their own 24px viewBox — the chevron by 8 units, the bars by 3. */
-.decidio-sidebar:not(.is-auth) .sidebar-minimize svg { margin-left: -7.58px; }
+/* Nudges each drawn stroke flush with the rules below: the paths start inset
+   within their own 24px viewBox — the arrow's head by 4 units, the bars by 3.
+   (The chevron this replaced started at 8, hence its much larger pull.) */
+.decidio-sidebar:not(.is-auth) .sidebar-minimize svg { margin-left: -2.92px; }
 .decidio-sidebar:not(.is-auth) .sidebar-menu-btn svg { margin-right: -1.25px; }
 
 /* ---------- Accent period -------------------------------------------------
@@ -1248,63 +1097,10 @@
     color: var(--decidio-blue);
 }
 
-/* ---------- Add tile: one control, one place ------------------------------
-   It sat at 104x104 in the carousel and 64x56 in the list, at opposite ends of
-   the flow, so switching views moved it and resized it. Now the same footprint
-   as a thumbnail in each view, always last, and top-aligned with the images
-   rather than floating in the middle of the taller card — so the ring lines up
-   with the row of pictures either way and the switch reads as the same control
-   staying put.
-   -------------------------------------------------------------------------- */
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile {
-    width: 104px;
-    height: 104px;
-    align-self: flex-start;   /* level with the thumbnails, not the whole card */
-    order: 999;
-}
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile {
-    width: 64px;
-    height: 48px;             /* matches the list thumbnail exactly */
-    align-self: flex-start;
-    margin: 10px 0 0 4px;
-    order: 999;
-}
-
-/* Bolder ring and cross in both. */
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue,
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue {
-    width: 40px;
-    height: 40px;
-    border-width: 5px;
-}
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::before,
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::before {
-    width: 18px; height: 5px;
-}
-.decidio-sidebar:not(.is-auth) .is-view-carousel .add-product-tile .circle-plus-blue::after,
-.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile .circle-plus-blue::after {
-    width: 5px; height: 18px;
-}
-
 /* The carousel lays cards out from the top so the tile can align with the
    thumbnails; centring stretched it against the taller cards. */
 .decidio-sidebar:not(.is-auth) .products-dotted-container.is-view-carousel {
     align-items: flex-start;
-}
-
-/* ---------- Empty state: one shared slot ----------------------------------
-   With items present, the add tile matches its view's thumbnail footprint —
-   104x104 in the carousel, 64x48 in the list — which is right, because it
-   lines up with the pictures beside it. With NOTHING collected there are no
-   pictures to line up with, so those two different footprints just put the
-   ring in two different places and it jumped when the view was switched.
-   :only-child means this applies only while the collection is empty.
-   -------------------------------------------------------------------------- */
-.decidio-sidebar:not(.is-auth) .products-dotted-container .add-product-tile:only-child {
-    width: 64px;
-    height: 64px;
-    margin: 10px 0 0 4px;
-    align-self: flex-start;
 }
 
 /* ---------- No hover chrome on collected items ----------------------------
@@ -1328,3 +1124,401 @@
 .decidio-sidebar:not(.is-auth) .is-view-list .product-tile-remove {
     display: none;
 }
+
+/* ---------- Footer list bar ------------------------------------------------
+   ARFooter, transplanted: a rule, the list names, a rule, then the plus. The
+   Lists dropdown at the top of the panel is gone — the control now adds to the
+   list named directly above it, instead of to a selection made elsewhere, and
+   the empty stretch under the collected rows is filled by the thing that
+   stretch was missing. Same 160px slots and edge fade as the picker's own
+   footer, so the panel and the overlay read as one surface.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .sidebar-footer {
+    display: block;
+    padding: 0 0 32px 0;
+}
+.decidio-sidebar:not(.is-auth) .list-bar-rule {
+    height: 3px;
+    background: #FFFFFF;
+}
+.decidio-sidebar:not(.is-auth) .list-bar {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+    height: 36px;
+    margin: 4px 0;
+    /* No scroll-behavior here on purpose: it would override a scrollTo whose
+       behavior is 'auto', which is how "jump straight there" is expressed —
+       'auto' means "defer to CSS". The centring code passes 'smooth'
+       explicitly when it wants the animation. */
+    /* Half the bar either side, less half a slot, so any name — first or last
+       — can sit dead centre rather than bottoming out against an edge. */
+    padding-left: calc(50% - 80px);
+    padding-right: calc(50% - 80px);
+    -webkit-mask-image: linear-gradient(to right,
+        transparent 0%, #000 10%, #000 90%, transparent 100%);
+    mask-image: linear-gradient(to right,
+        transparent 0%, #000 10%, #000 90%, transparent 100%);
+}
+.decidio-sidebar:not(.is-auth) .list-bar::-webkit-scrollbar { display: none; }
+.decidio-sidebar:not(.is-auth) .list-bar-name {
+    flex: 0 0 160px;
+    width: 160px;
+    height: 36px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: "NHaasGroteskDSStd", "SFProDisplay", sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    line-height: 36px;
+    /* White on the purple field rather than the picker's lifted purple, which
+       would sit on its own colour here. */
+    color: rgba(255, 255, 255, 0.45);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 8px;
+}
+.decidio-sidebar:not(.is-auth) .list-bar-name.is-selected { color: #FFFFFF; }
+
+/* ---------- Panel height ---------------------------------------------------
+   Shorter than the full-height original so the field below the collected rows
+   is not left as dead space, without going so short that the panel stops
+   looking like a panel.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) {
+    /* The original calc(100vh - 108px), trimmed by iteration: 85% and 80%
+       read long, 77% still a touch long. Kept above 75%, which read short. */
+    height: calc((100vh - 108px) * 0.76);
+}
+
+/* The add control is the last thing in the scroll area, so with the body
+   ending flush against the footer's top rule it was cut through the middle of
+   the glyph. The padding lets it scroll clear of the rule, making the rule the
+   clean cutoff rather than an arbitrary line across the control. */
+.decidio-sidebar:not(.is-auth) .sidebar-body {
+    padding-bottom: 44px;
+}
+
+/* ==========================================================================
+   FIELD — THE APP'S MATTE
+   Every colour on the workspace surface comes from the tokens below.
+
+   The surface is the app's own MatteBackground (Helper Views/
+   MatteBackground.swift) in its Twilight mode, felt display off — plain
+   Color(white: 0.04), as the app draws it wherever isFeltDisplay is false.
+   Near-black rather than #000, which is what keeps it from reading as a hole
+   in the page.
+   Scoped to :not(.is-auth); the sign-in screen styles itself.
+   ========================================================================== */
+.decidio-sidebar:not(.is-auth) {
+    --field:     #0A0A0A;   /* Color(white: 0.04) */
+    --ink:       #FFFFFF;
+    --ink-soft:  rgba(255, 255, 255, 0.6);
+    --ink-faint: rgba(255, 255, 255, 0.4);
+    /* Behind thumbnails, for images that load transparent or not at all. */
+    --plate:     rgba(255, 255, 255, 0.06);
+    /* Hairlines between rows. */
+    --edge:      rgba(255, 255, 255, 0.10);
+    /* Wash behind a title while it is being edited. */
+    --wash:      rgba(255, 255, 255, 0.08);
+    /* Section rule, list-bar rules, thumbnail edge, and the panel's rim. */
+    --rule:       rgba(255, 255, 255, 0.14);
+    --hairline:   rgba(255, 255, 255, 0.22);
+    --thumb-edge: rgba(255, 255, 255, 0.12);
+    --rim:        rgba(255, 255, 255, 0.06);
+
+    background-color: var(--field);
+    background-image: none;
+    border: none;
+    /* Must match the radius the host clips to — the panel reports this value
+       up with its box, so the two cannot drift. */
+    border-radius: 16px;
+    /* Matte has no gloss, so no highlight — just enough of an edge to hold
+       the shape against a dark page. */
+    box-shadow: inset 0 0 0 1px var(--rim);
+}
+
+/* Header */
+.decidio-sidebar:not(.is-auth) .brand-logo { color: var(--ink); }
+/* Decidio Blue itself — the lifted #7FA6DC only existed to read on purple. */
+.decidio-sidebar:not(.is-auth) .brand-logo .blue-dot { color: var(--decidio-blue); }
+.decidio-sidebar:not(.is-auth) .sidebar-minimize svg,
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn svg { stroke: var(--ink); }
+
+/* Section chrome */
+.decidio-sidebar:not(.is-auth) .form-label,
+.decidio-sidebar:not(.is-auth) .blue-plus { color: var(--ink); }
+.decidio-sidebar:not(.is-auth) .form-group { border-top-color: var(--ink); }
+
+/* Collected rows */
+.decidio-sidebar:not(.is-auth) .product-tile-brand { color: var(--ink-soft); }
+.decidio-sidebar:not(.is-auth) .product-tile-title,
+.decidio-sidebar:not(.is-auth) .product-tile-number { color: var(--ink); }
+.decidio-sidebar:not(.is-auth) .collected-product-thumb { background: var(--plate); }
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile { border-bottom-color: var(--edge); }
+.decidio-sidebar:not(.is-auth) .product-tile-title[contenteditable]:focus { background: var(--wash); }
+.decidio-sidebar:not(.is-auth) .product-tile-remove svg { stroke: var(--ink); }
+
+
+/* Create-list field */
+.decidio-sidebar:not(.is-auth) .create-list-input {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
+    caret-color: var(--ink);
+}
+.decidio-sidebar:not(.is-auth) .create-list-input::placeholder { color: var(--ink-faint); }
+.decidio-sidebar:not(.is-auth) .create-list-confirm svg,
+.decidio-sidebar:not(.is-auth) .create-list-cancel svg { stroke: var(--ink); }
+
+/* Footer list bar */
+.decidio-sidebar:not(.is-auth) .list-bar-rule { background: var(--ink); }
+.decidio-sidebar:not(.is-auth) .list-bar-name { color: var(--ink-faint); }
+.decidio-sidebar:not(.is-auth) .list-bar-name.is-selected { color: var(--ink); }
+
+.decidio-sidebar:not(.is-auth) .collect-status { color: var(--ink-soft); }
+
+/* The list view carries its own, more specific colour rules for these three
+   (".is-view-list ..."), which outrank the plain selectors above — so the
+   light field has to be restated at the same specificity or the titles stay
+   white on white. */
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-brand { color: var(--ink-soft); }
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-title { color: var(--ink); }
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-thumb { background: var(--plate); }
+
+/* A full-white section rule is too bright against the matte; kept faint. */
+.decidio-sidebar:not(.is-auth) .form-group { border-top-color: var(--rule); }
+
+/* Decidio Blue as the app draws it over the matte (MyCollectionsHeader). */
+.decidio-sidebar:not(.is-auth) .brand-logo .blue-dot { color: var(--decidio-blue); }
+
+/* Hairline detailing. The list bar's 3px solid white rules framed the
+   carousel the way ARFooter does over a camera feed, but on a flat panel they
+   read as tape. A single fine rule keeps the framing and drops the weight. */
+.decidio-sidebar:not(.is-auth) .list-bar-rule {
+    height: 1px;
+    background: var(--hairline);
+}
+/* Thumbnails set into the surface rather than floating on it: a fine inner
+   edge, drawn with an inset outline because an inset box-shadow is painted
+   beneath an <img>'s pixels and would never show. Corners stay square. */
+.decidio-sidebar:not(.is-auth) .collected-product-thumb {
+    outline: 1px solid var(--thumb-edge);
+    outline-offset: -1px;
+}
+
+/* Content scrolling under the list bar dissolves into it instead of being
+   sliced by the rule — a row cut mid-word, or the plus cut through its
+   circle, was the one hard edge left on the glass. The fade sits inside the
+   body's 44px bottom padding, so anything scrolled fully into view is never
+   dimmed; only what is still passing under the edge is. */
+.decidio-sidebar:not(.is-auth) .sidebar-body {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent 100%);
+}
+
+/* ==========================================================================
+   AERO
+   The app's other appearance — MatteBackground with isLightMode, i.e. plain
+   white — chosen from the menu below. Only the tokens change; every rule
+   above already paints from them. The extra class outranks the Twilight
+   tokens on :not(.is-auth) without needing !important.
+   ========================================================================== */
+.decidio-sidebar.is-aero:not(.is-auth) {
+    --field:      #FFFFFF;
+    --ink:        #000000;
+    --ink-soft:   rgba(0, 0, 0, 0.6);
+    --ink-faint:  rgba(0, 0, 0, 0.4);
+    /* Product shots are mostly on white; a plate keeps them from dissolving
+       into the field. */
+    --plate:      #F2F2F2;
+    --edge:       rgba(0, 0, 0, 0.10);
+    --wash:       rgba(0, 0, 0, 0.06);
+    --rule:       rgba(0, 0, 0, 0.14);
+    --hairline:   rgba(0, 0, 0, 0.22);
+    --thumb-edge: rgba(0, 0, 0, 0.08);
+    --rim:        rgba(0, 0, 0, 0.08);
+}
+
+/* ---------- Menu ------------------------------------------------------------
+   HomeOverlayMenuItems, in the panel: a "Menu" title in NHaas Black, then
+   entries in SF Pro bold at 18 with a leading symbol, left-aligned on the
+   app's 24pt side padding. It covers the workspace below the header rather
+   than the whole panel, so the hamburger stays reachable to close it.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .workspace-view { position: relative; }
+
+.decidio-sidebar:not(.is-auth) .panel-menu {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 16px 24px;
+    background: var(--field);
+    border-top: 0.75px solid var(--rule);
+}
+.decidio-sidebar:not(.is-auth) .panel-menu[hidden] { display: none; }
+
+.decidio-sidebar:not(.is-auth) .panel-menu-title {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 900;
+    font-size: 24px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin-bottom: 4px;
+}
+
+.decidio-sidebar:not(.is-auth) .panel-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--ink);
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    text-align: left;
+}
+.decidio-sidebar:not(.is-auth) .panel-menu-item:hover { opacity: 0.7; }
+.decidio-sidebar:not(.is-auth) .panel-menu-item:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 4px;
+}
+.decidio-sidebar:not(.is-auth) .panel-menu-icon {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    fill: currentColor;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+/* One symbol per state, as the app swaps sun.max.fill for moon.fill. */
+.decidio-sidebar:not(.is-auth) .panel-menu-item .icon-moon { display: none; }
+.decidio-sidebar.is-aero:not(.is-auth) .panel-menu-item .icon-sun { display: none; }
+.decidio-sidebar.is-aero:not(.is-auth) .panel-menu-item .icon-moon { display: block; }
+
+/* Hamburger to close, with the half-turn about the vertical axis that
+   HomeOverlayMenuBar gives line.3.horizontal <-> xmark.
+
+   The ICON turns, not the button: rotating the button mirrors its own
+   layout, and its glyph is aligned to the right edge of a wider box, so the
+   mirror threw the X several pixels left of where the hamburger sat. Each
+   icon plays the turn as it appears (an animation starts when an element
+   goes from display:none to shown); .has-toggled keeps the hamburger from
+   also spinning once on first load. */
+@keyframes decidio-menu-flip {
+    from { transform: rotateY(180deg); }
+    to   { transform: rotateY(0deg); }
+}
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn .icon-close { display: none; }
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn.is-open .icon-menu { display: none; }
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn.is-open .icon-close {
+    display: block;
+    animation: decidio-menu-flip 0.5s ease-in-out;
+}
+.decidio-sidebar:not(.is-auth) .sidebar-menu-btn.has-toggled:not(.is-open) .icon-menu {
+    animation: decidio-menu-flip 0.5s ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+    .decidio-sidebar:not(.is-auth) .sidebar-menu-btn svg { animation: none !important; }
+}
+
+
+/* ---------- The two add controls -------------------------------------------
+   Restored after trying the aperture as the panel's only button. They are two
+   different actions and each keeps its own icon: the aperture in the collected
+   rows starts the picker, and plus.circle at the foot files what was picked
+   into the selected list.
+
+   Gathered here rather than back in their original scattered rules — the
+   originals were spread across the file and several were later overridden, so
+   one block is both the same result and easier to change next time.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .add-product-tile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--ink);
+    opacity: 1;
+    /* Kept from the rule this replaced: the tile grew on hover and dipped on
+       press, and both were animated. Without them the control snaps. */
+    flex-shrink: 0;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.decidio-sidebar:not(.is-auth) .add-product-tile:hover {
+    background: transparent;
+    opacity: 0.7;
+    transform: scale(1.1);
+}
+.decidio-sidebar:not(.is-auth) .add-product-tile:active {
+    transform: scale(0.95);
+}
+.decidio-sidebar:not(.is-auth) .add-product-tile:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 4px;
+}
+/* Sits as the last row, lined up with the thumbnails above it. */
+.decidio-sidebar:not(.is-auth) .is-view-list .add-product-tile {
+    order: 999;
+    width: 64px;
+    height: 48px;
+    align-self: flex-start;
+    margin: 10px 0 0 4px;
+}
+/* With nothing collected there are no thumbnails to line up with, so the slot
+   takes one shared size instead of its view's footprint. */
+.decidio-sidebar:not(.is-auth) .products-dotted-container .add-product-tile:only-child {
+    width: 64px;
+    height: 64px;
+    align-self: flex-start;
+    margin: 10px 0 0 4px;
+}
+
+/* Bottom action, centred under the list bar. */
+.decidio-sidebar:not(.is-auth) .add-to-list-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Full width, as before: the glyph is centred either way, but the whole
+       strip is the target rather than a 40px circle. */
+    width: 100%;
+    height: 44px;
+    margin: 20px 0 0;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ink);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.decidio-sidebar:not(.is-auth) .add-to-list-btn:hover { opacity: 0.7; }
+.decidio-sidebar:not(.is-auth) .add-to-list-btn:disabled { opacity: 0.4; cursor: default; }
+.decidio-sidebar:not(.is-auth) .add-to-list-btn:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 6px;
+    border-radius: 50%;
+}
+
+/* Both glyphs at the panel's icon weight. The aperture's blades step down, or
+   at 2.6 they close the hexagon in the middle. */
+.decidio-sidebar:not(.is-auth) .add-product-tile .add-collect-glyph,
+.decidio-sidebar:not(.is-auth) .btn-plus-circle {
+    width: 40px;
+    height: 40px;
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 2.6;
+    stroke-linecap: round;
+}
+.decidio-sidebar:not(.is-auth) .add-collect-glyph line { stroke-width: 1.9; }

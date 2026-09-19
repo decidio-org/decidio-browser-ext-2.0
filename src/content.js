@@ -187,5 +187,35 @@
     if (event.data?.action === 'DECIDIO_RESTORE_SIDEBAR') {
       restoreSidebar();
     }
+
+    // The panel reports its own box so the panel iframe can be clipped to
+    // exactly that shape — sign-in and workspace are different heights, and
+    // only the panel knows which one it is showing.
+    if (event.data?.action === 'DECIDIO_PANEL_RECT') {
+      const iframe = document.getElementById('decidio-main-frame');
+      // Only our own panel may reshape it; any other frame on the page could
+      // otherwise post this and move the clip.
+      if (!iframe || event.source !== iframe.contentWindow) return;
+
+      const { top, left, width, height, radius } = event.data.rect || {};
+      if (![top, left, width, height].every(Number.isFinite) || !width || !height) return;
+
+      const right = iframe.clientWidth - left - width;
+      const bottom = iframe.clientHeight - top - height;
+      const r = Number.isFinite(radius) ? radius : 16;
+      iframe.style.clipPath =
+        `inset(${top}px ${right}px ${bottom}px ${left}px round ${r}px)`;
+
+      // The lifting shadow sits in a frame that tracks the iframe, so the
+      // same frame-relative box places it.
+      const shadow = document.getElementById('decidio-panel-shadow');
+      if (shadow) {
+        Object.assign(shadow.style, {
+          top: `${top}px`, left: `${left}px`,
+          width: `${width}px`, height: `${height}px`,
+          borderRadius: `${r}px`, opacity: '1'
+        });
+      }
+    }
   });
 })();

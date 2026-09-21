@@ -343,7 +343,10 @@ class DecidioContentPicker {
         justify-content: center;
         padding-top: 20px;
       }
-      /* plus.circle, 40pt bold white — the AR view's own bottom action. */
+      /* camera.aperture, 40pt white — matching the panel's own Collect
+         control. The app's AR footer uses plus.circle here; the aperture is
+         carried across from the panel so one symbol means "collect" on both
+         surfaces. */
       .decidio-ar-plus {
         background: none;
         border: none;
@@ -360,6 +363,9 @@ class DecidioContentPicker {
         stroke-linecap: round;
         fill: none;
       }
+      /* The blades step down from the ring, or they close the hexagon in the
+         middle at the ring's own weight. */
+      .decidio-ar-plus svg line { stroke-width: 1.3; }
       /* Only live once a box is frozen — there is nothing to add before that. */
       .decidio-ar-footer.is-frozen .decidio-ar-plus { opacity: 1; }
 
@@ -663,8 +669,12 @@ class DecidioContentPicker {
           <button class="decidio-ar-plus" id="decidio-plus" aria-label="Add to list">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="9.25"/>
-              <line x1="12" y1="7.6" x2="12" y2="16.4"/>
-              <line x1="7.6" y1="12" x2="16.4" y2="12"/>
+              <line x1="12.00" y1="7.10"  x2="21.24" y2="12.43"/>
+              <line x1="16.24" y1="9.55"  x2="16.24" y2="20.22"/>
+              <line x1="16.24" y1="14.45" x2="7.00"  y2="19.78"/>
+              <line x1="12.00" y1="16.90" x2="2.76"  y2="11.57"/>
+              <line x1="7.76"  y1="14.45" x2="7.76"  y2="3.78"/>
+              <line x1="7.76"  y1="9.55"  x2="17.00" y2="4.22"/>
             </svg>
           </button>
           <button class="decidio-ar-done" id="decidio-done">Done</button>

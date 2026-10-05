@@ -27,7 +27,11 @@
                     <polyline points="11,5 4,12 11,19"/>
                 </svg>
             </button>
-            <div class="brand-logo">decidio<span class="blue-dot">.</span></div>
+            <div class="brand-logo">My Collections<span class="blue-dot">.</span></div>
+            <!-- Replaces the wordmark while a list is being made, as the
+                 keynote's New Collection screen does. Keeps the blue period,
+                 which is the mark the header carries either way. -->
+            <div class="header-title" id="headerTitle" hidden>New Collection<span class="blue-dot">.</span></div>
             <button class="sidebar-menu-btn" id="sidebarMenuBtn"
                     aria-label="Menu" title="Menu"
                     aria-expanded="false" aria-controls="panelMenu">
@@ -57,6 +61,12 @@
                 <h1 class="auth-heading">Welcome
 to Decidio<span class="blue-dot">.</span></h1>
 
+                <!-- Invite gate, signup only. See INVITE_CODES in app.js — the
+                     codes are checked in the browser, so this is an onboarding
+                     flow for a closed beta, NOT a security control. -->
+                <input type="text" class="auth-input auth-signup-only" id="authInvite"
+                       placeholder="Invitation code" autocomplete="off" spellcheck="false">
+
                 <input type="email" class="auth-input" id="authEmail"
                        placeholder="Email" autocomplete="email" spellcheck="false">
 
@@ -66,18 +76,12 @@ to Decidio<span class="blue-dot">.</span></h1>
                 <input type="password" class="auth-input auth-signup-only" id="authConfirm"
                        placeholder="Confirm password" autocomplete="new-password">
 
-                <!-- Invite gate, signup only. See INVITE_CODES in app.js — the
-                     codes are checked in the browser, so this is an onboarding
-                     flow for a closed beta, NOT a security control. -->
-                <input type="text" class="auth-input auth-signup-only" id="authInvite"
-                       placeholder="Invitation code" autocomplete="off" spellcheck="false">
-
                 <!-- Shown when the code is rejected. Everything else in the form
                      is hidden at that point (see .is-waitlist), leaving just the
                      email field above and this — one thing to do, not a form with
                      a message bolted onto it. -->
                 <div class="auth-waitlist" id="authWaitlist">
-                    <div class="auth-waitlist-title">Decidio is invite only</div>
+                    <div class="auth-waitlist-title" id="authWaitlistTitle">Decidio is invite only</div>
                     <div class="auth-waitlist-body" id="authWaitlistBody">Leave your email and we'll send you a code when a place opens up.</div>
                     <button class="auth-waitlist-btn" id="authWaitlistBtn">Join the waiting list</button>
                     <button class="auth-waitlist-back" id="authWaitlistBack">I have a code</button>
@@ -152,79 +156,95 @@ to Decidio<span class="blue-dot">.</span></h1>
                     </svg>
                     <span id="appearanceLabel">Switch to Aero</span>
                 </button>
+                <button class="panel-menu-item" id="notesOpenBtn">
+                    <svg class="panel-menu-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke="none" d="M5 3.5h14v17H5z" opacity="0"/>
+                        <line x1="6" y1="6.5" x2="18" y2="6.5"/>
+                        <line x1="6" y1="11" x2="18" y2="11"/>
+                        <line x1="6" y1="15.5" x2="13" y2="15.5"/>
+                    </svg>
+                    <span>Notes</span>
+                </button>
+            </div>
+
+            <!-- Notes, after the app's New Collection screen: the list name in
+                 Decidio orange, then labelled sections over it. Covers the
+                 workspace the way panel-menu does; the footer's check closes
+                 it. Each field saves as it is typed (debounced) rather than
+                 waiting for a close or a backgrounding. -->
+            <div class="notes-view" id="notesView" hidden>
+                <!-- The name is typed here, not on a prompt before this screen:
+                     naming a list and saying what it is for are one step. Read
+                     only when an existing list's notes are being edited. -->
+                <input type="text" class="notes-title" id="notesTitle"
+                       placeholder="Name your list" autocomplete="off" spellcheck="false">
+                <div class="notes-section">
+                    <label class="notes-label" for="notesDescription">Description.</label>
+                    <textarea class="notes-field" id="notesDescription" rows="1"
+                              placeholder="Optional. What is this list for?"
+                              spellcheck="false"></textarea>
+                </div>
+                <!-- Preferences is not prose about the list: it is the criteria
+                     used later to order the list and to look for new things
+                     like what is already in it. The placeholder asks for that
+                     specifically, since a description written here is of no
+                     use downstream. -->
+                <div class="notes-section">
+                    <label class="notes-label" for="notesPreferences">Preferences.</label>
+                    <textarea class="notes-field" id="notesPreferences" rows="1"
+                              placeholder="Colours, sizes, materials, price — what makes one of these right for you?"
+                              spellcheck="false"></textarea>
+                </div>
+                <div class="notes-saved" id="notesSaved" aria-live="polite"></div>
             </div>
 
             <!-- Main Body Content -->
             <div class="sidebar-body">
 
-                <!-- SELECT PRODUCTS WORKSPACE SECTION -->
-                <div class="form-group">
-                    <div class="collect-header-row">
-                        <label class="form-label">Collect <span class="blue-plus">+</span></label>
-                    </div>
-                    <!-- Inline name field for a new list. Replaces window.prompt(),
-                         which renders as a native browser dialog with Chrome's own
-                         chrome — no Decidio type, colour or shape anywhere in it. -->
-                    <div class="create-list-row" id="createListRow">
-                        <input type="text" class="create-list-input" id="createListInput"
-                               placeholder="Name your list" autocomplete="off" spellcheck="false">
-                        <button class="create-list-confirm" id="createListConfirm"
-                                aria-label="Create list" title="Create list">
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <polyline points="4,12.5 9.5,18 20,6"/>
-                            </svg>
-                        </button>
-                        <button class="create-list-cancel" id="createListCancel"
-                                aria-label="Cancel" title="Cancel">
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <line x1="6" y1="6" x2="18" y2="18"/>
-                                <line x1="18" y1="6" x2="6" y2="18"/>
-                            </svg>
-                        </button>
-                    </div>
+                <!-- My Collections: the lists themselves, set down the middle of
+                     the panel, after the app's own typographic list. Tapping a
+                     name selects it; the aperture below collects into it. The
+                     "Collect +" heading and the aperture tile that used to sit
+                     here are gone — the aperture lives in the footer now, and
+                     the heading named a section that no longer exists. -->
+                <div class="collections-list" id="collectionsList"></div>
 
-                    <div id="products-container" class="products-dotted-container is-view-list">
-                        <div class="add-product-tile" id="addProductBtn"
-                             role="button" tabindex="0"
-                             aria-label="Collect from this page" title="Collect from this page">
-                            <!-- camera.aperture, the symbol the app's Home screen uses
-                                 for this same action (HomeView, onCollect). SF Symbols
-                                 can't ship in a web extension, so it is drawn: the ring,
-                                 and six blades, each running from one corner of a
-                                 hexagonal opening through the next corner out to it. -->
-                            <svg class="add-collect-glyph" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
-                                <circle cx="12" cy="12" r="9.25"/>
-                                <line x1="12.00" y1="7.10"  x2="21.24" y2="12.43"/>
-                                <line x1="16.24" y1="9.55"  x2="16.24" y2="20.22"/>
-                                <line x1="16.24" y1="14.45" x2="7.00"  y2="19.78"/>
-                                <line x1="12.00" y1="16.90" x2="2.76"  y2="11.57"/>
-                                <line x1="7.76"  y1="14.45" x2="7.76"  y2="3.78"/>
-                                <line x1="7.76"  y1="9.55"  x2="17.00" y2="4.22"/>
-                            </svg>
-                        </div>
-                    </div>
+                <!-- The opened list's items, and before anything is filed,
+                     whatever has been collected but not yet put away. -->
+                <div id="products-container" class="products-dotted-container is-view-list"></div>
+
+                <div class="list-empty" id="listEmpty" hidden>
+                    Nothing in this list yet. Use the aperture below to collect
+                    from this page.
                 </div>
 
             </div>
 
             <!-- Bottom Footer Area -->
+            <!-- One control: the aperture, the symbol the app's Home screen uses
+                 for this action. The list bar, its two rules and the plus are
+                 gone — the list is chosen in the body now, so a strip naming it
+                 down here was saying the same thing twice, and with the list
+                 known the plus had nothing left to confirm. -->
             <div class="sidebar-footer">
-                <!-- List bar, after ARFooter: a rule, the list names, a rule,
-                     then the plus — so the control plainly adds to the list
-                     named directly above it. Replaces the Lists dropdown that
-                     used to sit at the top of the body. -->
-                <div class="list-bar-rule"></div>
-                <div class="list-bar" id="listBar"></div>
-                <div class="list-bar-rule"></div>
-                <!-- Identical to the AR flow's own bottom action (ARScanView.swift:591):
-                     a bare plus.circle glyph, 40pt bold white, centred — no plate,
-                     no label. Drawn as SVG because SF Symbols cannot be
-                     redistributed for web use. -->
-                <button class="add-to-list-btn" id="addToListBtn" aria-label="Add to List" title="Add to List">
-                    <svg class="btn-plus-circle" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
+                <button class="collect-btn" id="collectBtn"
+                        aria-label="Collect from this page" title="Collect from this page">
+                    <svg class="btn-aperture" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
                         <circle cx="12" cy="12" r="9.25"/>
-                        <line x1="12" y1="7.6" x2="12" y2="16.4"/>
-                        <line x1="7.6" y1="12" x2="16.4" y2="12"/>
+                        <line x1="12.00" y1="7.10"  x2="21.24" y2="12.43"/>
+                        <line x1="16.24" y1="9.55"  x2="16.24" y2="20.22"/>
+                        <line x1="16.24" y1="14.45" x2="7.00"  y2="19.78"/>
+                        <line x1="12.00" y1="16.90" x2="2.76"  y2="11.57"/>
+                        <line x1="7.76"  y1="14.45" x2="7.76"  y2="3.78"/>
+                        <line x1="7.76"  y1="9.55"  x2="17.00" y2="4.22"/>
+                    </svg>
+                </button>
+                <!-- The New Collection screen ends in a check rather than a
+                     plus, so the footer swaps glyphs while notes are open. -->
+                <button class="notes-done-btn" id="notesDoneBtn" aria-label="Done" title="Done" hidden>
+                    <svg class="btn-check-circle" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9.25"/>
+                        <polyline points="7.6,12.2 10.7,15.3 16.4,8.9"/>
                     </svg>
                 </button>
             </div>

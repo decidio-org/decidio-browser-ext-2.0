@@ -181,7 +181,9 @@ class DecidioContentPicker {
          grabbable once frozen, when the box becomes the thing being handled. */
       .decidio-highlight-box.is-frozen {
         pointer-events: auto;
-        cursor: move;
+        /* 'copy' rather than 'move': clicking the box collects it, which is
+           the primary action now. Dragging it still moves it. */
+        cursor: copy;
         transition: none;
       }
 
@@ -1105,7 +1107,13 @@ class DecidioContentPicker {
       const y = e.clientY + window.scrollY;
       const inside = x >= this.box.x && x <= this.box.x + this.box.w &&
                      y >= this.box.y && y <= this.box.y + this.box.h;
-      if (!inside) this.releaseSelection();
+      // Clicking the box you already framed collects it, so the common case
+      // never leaves the selection: click to frame, click again to keep. A
+      // drag that resized it came through justDragged above and never gets
+      // here, so adjusting still costs nothing. The footer plus and Enter do
+      // the same thing for anyone who reaches for them.
+      if (inside) this.commitBoxSelection();
+      else this.releaseSelection();
       return;
     }
 

@@ -429,8 +429,11 @@
     align-items: stretch;
     gap: 0;                    /* rows are separated by their own rule */
     overflow-x: hidden;
-    overflow-y: auto;
-    max-height: 320px;
+    /* No height of its own, and no scroller of its own. A fixed 320px box cut
+       the list off well above the footer and hid the rest behind an inner
+       scrollbar nobody could see — so the rows ran out a third of the way up
+       the panel. The body is the one thing that scrolls; this just grows. */
+    overflow-y: visible;
 }
 .decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile {
     flex-direction: row;
@@ -1198,7 +1201,7 @@
    the glyph. The padding lets it scroll clear of the rule, making the rule the
    clean cutoff rather than an arbitrary line across the control. */
 .decidio-sidebar:not(.is-auth) .sidebar-body {
-    padding-bottom: 44px;
+    padding-bottom: 24px;
 }
 
 /* ==========================================================================
@@ -1314,9 +1317,141 @@
    body's 44px bottom padding, so anything scrolled fully into view is never
    dimmed; only what is still passing under the edge is. */
 .decidio-sidebar:not(.is-auth) .sidebar-body {
-    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent 100%);
 }
+
+/* ---------- Header and footer rules --------------------------------------
+   The two lines that bracket the panel. Both sit close to what they divide:
+   the header's rule used to come off .form-group, a whole section down the
+   body, which put a band of empty field between the wordmark and its line.
+   ------------------------------------------------------------------------ */
+.decidio-sidebar:not(.is-auth) .sidebar-header {
+    padding-bottom: 8px;
+    border-bottom: 0.75px solid var(--rule);
+}
+.decidio-sidebar:not(.is-auth) .sidebar-footer {
+    padding: 8px 0 20px 0;
+    border-top: 0.75px solid var(--rule);
+}
+
+/* ==========================================================================
+   MY COLLECTIONS
+   The lists, set down the middle of the panel, after the app's own
+   typographic list (MyCollectionsList). This replaced the footer list bar:
+   a horizontal strip showed one name at a time and hid the rest behind a
+   scroll, where the whole point of this screen is seeing what you have.
+   ========================================================================== */
+.decidio-sidebar:not(.is-auth) .collections-list {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 10px 20px 16px;
+}
+/* Two columns: the index, then the name. A fixed number column is what keeps
+   every name starting on the same line down the left, however wide the
+   numbers get. */
+.decidio-sidebar:not(.is-auth) .collection-name {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    align-items: baseline;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 7px 0;
+    cursor: pointer;
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    text-align: left;
+    /* Unselected names are present but quiet, so the selected one reads as the
+       list being collected into without the others going missing. */
+    color: var(--ink-faint);
+    transition: color 120ms ease;
+}
+/* Neue Haas, as the app sets the numbers beside its own list of collections —
+   the name stays in the UI face, the index is typographic. */
+.decidio-sidebar:not(.is-auth) .collection-num {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--ink-faint);
+    text-align: left;
+}
+.decidio-sidebar:not(.is-auth) .collection-name.is-selected .collection-num {
+    color: var(--ink-soft);
+}
+.decidio-sidebar:not(.is-auth) .collection-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.decidio-sidebar:not(.is-auth) .collection-name:hover { color: var(--ink-soft); }
+.decidio-sidebar:not(.is-auth) .collection-name.is-selected { color: var(--ink); }
+.decidio-sidebar:not(.is-auth) .collection-name:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+}
+/* New list sits with the names but is plainly not one of them. */
+.decidio-sidebar:not(.is-auth) .collection-name.is-new {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--decidio-blue);
+    margin-top: 10px;
+}
+
+/* An opened list shows its items; the column of names steps aside. */
+.decidio-sidebar.is-in-list:not(.is-auth) .collections-list { display: none; }
+.decidio-sidebar:not(.is-in-list):not(.is-auth) .list-empty { display: none; }
+.decidio-sidebar:not(.is-auth) .list-empty {
+    padding: 12px 20px;
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--ink-faint);
+}
+.decidio-sidebar:not(.is-auth) .list-empty[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .collection-name.is-new:hover { color: var(--ink); }
+
+/* ---------- Footer -------------------------------------------------------
+   One control now: the aperture. Same 40px glyph and 2.6 weight the plus had,
+   so nothing about the footer's mass changed when its job did.
+   ------------------------------------------------------------------------ */
+.decidio-sidebar:not(.is-auth) .collect-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 120ms ease;
+}
+.decidio-sidebar:not(.is-auth) .collect-btn[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .collect-btn:hover { transform: scale(1.1); }
+.decidio-sidebar:not(.is-auth) .collect-btn:active { transform: scale(0.95); }
+.decidio-sidebar:not(.is-auth) .btn-aperture {
+    width: 40px;
+    height: 40px;
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 2.6;
+    stroke-linecap: round;
+}
+/* The blades are the aperture's inner detail — at the ring's weight they fill
+   the opening in. */
+.decidio-sidebar:not(.is-auth) .btn-aperture line { stroke-width: 1.9; }
 
 /* ==========================================================================
    AERO
@@ -1400,6 +1535,177 @@
     stroke-linecap: round;
 }
 /* One symbol per state, as the app swaps sun.max.fill for moon.fill. */
+/* --------------------------------------------------------------------------
+   NOTES
+   --------------------------------------------------------------------------
+   The app's New Collection screen: the list name in Decidio orange, then
+   labelled sections of plain white body copy. Same cover-the-workspace
+   treatment as panel-menu, so only one of the two is ever up.
+   -------------------------------------------------------------------------- */
+.decidio-sidebar:not(.is-auth) .notes-view {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    /* Bottom padding clears the footer, which paints over this overlay, so a
+       long note scrolls out from under it rather than behind it. */
+    padding: 16px 24px 150px;
+    overflow-y: auto;
+    background: var(--field);
+    border-top: 0.75px solid var(--rule);
+}
+.decidio-sidebar:not(.is-auth) .notes-view[hidden] { display: none; }
+
+/* The notes screen keeps its footer — the list it belongs to stays named
+   below it, and the check that closes it lives there. So unlike panel-menu,
+   which covers the panel whole, the footer is lifted above this overlay. */
+.decidio-sidebar:not(.is-auth) .notes-view:not([hidden]) ~ .sidebar-footer {
+    position: relative;
+    z-index: 6;
+    background: var(--field);
+}
+
+/* #F68B04, sampled from the screen itself — warmer than --decidio-orange,
+   which is the brick red used for destructive rows. Darkened for Aero, where
+   the screen orange on white would drop under 3:1. */
+.decidio-sidebar:not(.is-auth) .notes-view { --note-accent: #F68B04; }
+.decidio-sidebar.is-aero:not(.is-auth) .notes-view { --note-accent: #A85500; }
+
+/* "New Collection." takes the wordmark's place in the header while a list is
+   being made. Set in the wordmark's own face and colour, one step down in
+   size because the longer string will not hold 32px across a 380px panel
+   between the back arrow and the hamburger. */
+/* Identical to the wordmark it replaces — same face, weight, size and
+   tracking — so the header does not change height or voice between screens.
+   A name too long for the row is stepped down by fitHeaderTitle rather than
+   being truncated: a clipped list name is worse than a slightly smaller one. */
+.decidio-sidebar:not(.is-auth) .header-title {
+    flex: 1 1 auto;
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 700;
+    font-size: 32px;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    color: var(--ink);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.decidio-sidebar:not(.is-auth) .header-title[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .header-title .blue-dot { color: var(--decidio-blue); }
+/* Only one of the two is ever up. */
+.decidio-sidebar.is-titled:not(.is-auth) .brand-logo { display: none; }
+
+/* An input rather than a heading: the name is typed here when the list is
+   being made. Stripped of every field affordance so it reads as the title it
+   becomes, and read only once the list exists. */
+.decidio-sidebar:not(.is-auth) .notes-title {
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    line-height: 1.2;
+    color: var(--note-accent);
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+}
+.decidio-sidebar:not(.is-auth) .notes-title::placeholder {
+    color: var(--note-accent);
+    opacity: 0.45;
+}
+.decidio-sidebar:not(.is-auth) .notes-title:focus {
+    outline: none;
+    box-shadow: 0 1px 0 0 var(--hairline);
+}
+.decidio-sidebar:not(.is-auth) .notes-title:read-only { box-shadow: none; }
+
+.decidio-sidebar:not(.is-auth) .notes-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.decidio-sidebar:not(.is-auth) .notes-label {
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 800;
+    font-size: 16px;
+    line-height: 1.3;
+    color: var(--note-accent);
+}
+
+/* A textarea rather than a div so the text is selectable, undoable and
+   keyboard-navigable for free; every other affordance is stripped so it reads
+   as the body copy it is until you click into it. Height is set from the
+   content by JS, so nothing ever scrolls inside a field. */
+.decidio-sidebar:not(.is-auth) .notes-field {
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 500;
+    font-size: 16px;
+    line-height: 1.35;
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    resize: none;
+    overflow: hidden;
+    width: 100%;
+    min-height: 1.35em;
+}
+.decidio-sidebar:not(.is-auth) .notes-field::placeholder { color: var(--ink-faint); }
+.decidio-sidebar:not(.is-auth) .notes-field:focus {
+    outline: none;
+    box-shadow: 0 1px 0 0 var(--hairline);
+}
+
+.decidio-sidebar:not(.is-auth) .notes-saved {
+    margin-top: auto;
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    opacity: 0;
+    transition: opacity 140ms ease;
+}
+.decidio-sidebar:not(.is-auth) .notes-saved.is-shown { opacity: 1; }
+
+/* Shares every rule the plus has — only the glyph differs. */
+.decidio-sidebar:not(.is-auth) .notes-done-btn {
+    margin: 20px 0 0;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 44px;
+    flex-shrink: 0;
+    transition: transform 120ms ease;
+}
+.decidio-sidebar:not(.is-auth) .notes-done-btn[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .notes-done-btn:hover { transform: scale(1.1); }
+.decidio-sidebar:not(.is-auth) .notes-done-btn:active { transform: scale(0.95); }
+/* Same weight as the plus it replaces — 2.6 at 40px, round caps — so the
+   footer glyph does not appear to thin out when the screen changes. */
+.decidio-sidebar:not(.is-auth) .btn-check-circle {
+    width: 40px;
+    height: 40px;
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 2.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
 .decidio-sidebar:not(.is-auth) .panel-menu-item .icon-moon { display: none; }
 .decidio-sidebar.is-aero:not(.is-auth) .panel-menu-item .icon-sun { display: none; }
 .decidio-sidebar.is-aero:not(.is-auth) .panel-menu-item .icon-moon { display: block; }
@@ -1486,6 +1792,9 @@
 }
 
 /* Bottom action, centred under the list bar. */
+/* display:flex would otherwise beat the hidden attribute when notes swap this
+   glyph for the check. */
+.decidio-sidebar:not(.is-auth) .add-to-list-btn[hidden] { display: none; }
 .decidio-sidebar:not(.is-auth) .add-to-list-btn {
     display: flex;
     align-items: center;

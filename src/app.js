@@ -90,7 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Primary UI control elements & state references
   const toggleAnchor = document.getElementById('decidioToggle');
   const sidebarPanel = document.getElementById('decidioSidebarPanel');
-  const addProductBtn = document.getElementById('addProductBtn');
   const productsContainer = document.getElementById('products-container');
 
   // Selection mode state ('single' vs 'multi') sent to the content script picker
@@ -149,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
      const authInvite = document.getElementById('authInvite');
      const authWaitlist = document.getElementById('authWaitlist');
      const authWaitlistBtn = document.getElementById('authWaitlistBtn');
+     const authWaitlistBack = document.getElementById('authWaitlistBack');
      const authSubmitBtn = document.getElementById('authSubmitBtn');
      const authForgotBtn = document.getElementById('authForgotBtn');
      const authGoogleBtn = document.getElementById('authGoogleBtn');
@@ -205,6 +205,13 @@ document.addEventListener('DOMContentLoaded', () => {
          authWaitlistBtn.disabled = false;
          authWaitlistBtn.textContent = 'Join the waiting list';
        }
+       // Every way out of the waiting list leaves it asking again, not stuck on
+       // the confirmation of a join from earlier in the session.
+       const title = document.getElementById('authWaitlistTitle');
+       const body = document.getElementById('authWaitlistBody');
+       if (title) title.textContent = 'Decidio is invite only';
+       if (body) body.textContent = "Leave your email and we'll send you a code when a place opens up.";
+       if (authWaitlistBack) authWaitlistBack.textContent = 'I have a code';
      }
 
      /**
@@ -237,10 +244,19 @@ document.addEventListener('DOMContentLoaded', () => {
            });
          } catch (e) { /* orphaned context — the confirmation below still shows */ }
 
+         // The whole panel becomes the confirmation rather than one line of it
+         // changing under an unchanged heading — joining is the end of this
+         // flow, so it should read as done.
+         const title = document.getElementById('authWaitlistTitle');
          const body = document.getElementById('authWaitlistBody');
-         if (body) body.textContent = "You're on the list. We'll email " + email + " when a place opens up.";
+         if (title) title.textContent = "Thanks — you're on the list";
+         if (body) {
+           body.textContent = "We'll email " + email + " as soon as a place opens up. "
+             + "You can close this and come back with the code.";
+         }
          authWaitlistBtn.textContent = 'Added';
          authWaitlistBtn.disabled = true;
+         if (authWaitlistBack) authWaitlistBack.textContent = 'Back to sign in';
        });
      }
 
@@ -253,13 +269,11 @@ document.addEventListener('DOMContentLoaded', () => {
        });
      }
 
-     const authWaitlistBack = document.getElementById('authWaitlistBack');
      if (authWaitlistBack) {
        authWaitlistBack.addEventListener('click', () => {
+         // hideWaitlist puts the panel back to its asking state.
          hideWaitlist();
          clearAuthError();
-         const body = document.getElementById('authWaitlistBody');
-         if (body) body.textContent = "Leave your email and we'll send you a code when a place opens up.";
        });
      }
    
@@ -820,95 +834,156 @@ document.addEventListener('DOMContentLoaded', () => {
   let pendingCreate = false;
 
   /**
-   * Renders `availableLists` into the footer bar, after ARListCarousel.
+   * Renders `availableLists` down the middle of the panel, after the app's own
+   * My Collections. Replaced the footer's horizontal strip: that showed one
+   * name at a time with the rest behind a scroll, and this screen exists to
+   * show what you have.
    *
-   * "New List" leads the strip because the app's own carouselNames does the
-   * same — creating a list is one more name to scroll to, not a separate
-   * control somewhere else.
+   * "New list" sits at the end rather than the start — the strip led with it
+   * because a carousel has no end, but a column does, and leading a list of
+   * your collections with something that is not one of them reads oddly.
    */
-  function renderListBar() {
-    const bar = document.getElementById('listBar');
-    if (!bar) return;
+  function renderCollections() {
+    const host = document.getElementById('collectionsList');
+    if (!host) return;
 
-    bar.innerHTML = '';
+    host.innerHTML = '';
 
-    const entries = [{ id: 'create-new', name: 'New List' }, ...availableLists];
-    entries.forEach((list) => {
+    availableLists.forEach((list, i) => {
       const btn = document.createElement('button');
-      btn.className = 'list-bar-name';
+      btn.className = 'collection-name';
       btn.dataset.value = list.id;
-      btn.textContent = list.name || 'Untitled list';
-      const on = list.id === 'create-new'
-        ? pendingCreate
-        : (!pendingCreate && String(list.id) === String(selectedListId));
-      if (on) btn.classList.add('is-selected');
-      bar.appendChild(btn);
+      if (!pendingCreate && String(list.id) === String(selectedListId)) {
+        btn.classList.add('is-selected');
+      }
+
+      // "01." "02." — the numbered index the app's own My Collections sets
+      // beside each name.
+      const num = document.createElement('span');
+      num.className = 'collection-num';
+      num.textContent = String(i + 1).padStart(2, '0') + '.';
+
+      const label = document.createElement('span');
+      label.className = 'collection-label';
+      label.textContent = list.name || 'Untitled list';
+
+      btn.appendChild(num);
+      btn.appendChild(label);
+      host.appendChild(btn);
     });
 
-    centreSelectedList();
+    const add = document.createElement('button');
+    add.className = 'collection-name is-new';
+    add.dataset.value = 'create-new';
+    // Kept in the same two-column shape as the rows above, with the number
+    // slot empty, so every label starts on one line down the left.
+    add.innerHTML = '<span class="collection-num"></span>'
+      + '<span class="collection-label">New list</span>';
+    host.appendChild(add);
   }
 
-  /**
-   * Brings the chosen name to the middle of the strip.
-   *
-   * Measured from live rects and applied as a relative scroll: the strip is
-   * not a positioned element, so offsetLeft would not share an origin with
-   * scrollLeft.
-   */
-  function centreSelectedList(instant = false) {
-    const bar = document.getElementById('listBar');
-    const sel = bar && bar.querySelector('.is-selected');
-    if (!sel) return;
+  // Kept under its old name so the many call sites that just mean "repaint the
+  // list of lists" do not all have to change.
+  const renderListBar = renderCollections;
 
-    requestAnimationFrame(() => {
-      const br = bar.getBoundingClientRect();
-      // No layout yet — the panel's iframe has no size until it is opened, so
-      // measuring here would scroll by a meaningless amount and leave the
-      // strip parked at 0, showing "New List" in the middle. watchListBarWidth
-      // re-runs this the moment the bar actually gets a width.
-      if (!br.width) return;
+  /* ---------- An opened list ------------------------------------------------
+     Tapping a name opens it: the header takes the list's name in place of
+     "My Collections", the column of names gives way to that list's items, and
+     the back arrow comes back here instead of closing the panel.
+     ------------------------------------------------------------------------ */
+  let openListId = null;
 
-      const sr = sel.getBoundingClientRect();
-      bar.scrollBy({
-        left: (sr.left + sr.width / 2) - (br.left + br.width / 2),
-        behavior: instant ? 'instant' : 'smooth'
+  function listNameFor(id) {
+    const list = availableLists.find((l) => String(l.id) === String(id));
+    return (list && list.name) || 'Untitled list';
+  }
+
+  /** The items filed into a list. */
+  function readListItems(listId) {
+    return new Promise((resolve) => {
+      const key = 'devListItems_' + listId;
+      try {
+        chrome.storage.local.get({ [key]: [] }, (r) => resolve((r && r[key]) || []));
+      } catch (e) { resolve([]); }
+    });
+  }
+
+  async function openList(listId) {
+    if (!listId) return;
+    openListId = listId;
+    selectedListId = listId;
+
+    setHeaderTitle(listNameFor(listId));
+    if (sidebarPanel) sidebarPanel.classList.add('is-in-list');
+
+    const items = await readListItems(listId);
+    if (productsContainer) {
+      productsContainer.querySelectorAll('.collected-product-tile').forEach((t) => t.remove());
+      // Newest first, the order the collected rows already use.
+      [...items].reverse().forEach((it) => {
+        displaySelectedProduct(it.imageUrl, it.productUrl, it.productTitle || 'Product', productsContainer);
       });
-    });
+    }
+
+    const empty = document.getElementById('listEmpty');
+    if (empty) empty.hidden = items.length > 0;
+  }
+
+  /** Back out of an opened list to the column of names. */
+  function closeList() {
+    openListId = null;
+    if (sidebarPanel) sidebarPanel.classList.remove('is-in-list');
+    setHeaderTitle(null);
+    const empty = document.getElementById('listEmpty');
+    if (empty) empty.hidden = true;
+    if (productsContainer) {
+      productsContainer.querySelectorAll('.collected-product-tile').forEach((t) => t.remove());
+    }
+    renderCollections();
   }
 
   /**
-   * Re-centres the strip whenever its width changes — which includes going
-   * from zero (panel closed) to its real width the first time the panel is
-   * opened. Keyed on width alone so it never fights a scroll the user is
-   * making themselves.
+   * Ends a creation, however it ended. There is no name row to close any more
+   * — the sheet is the whole flow — so this just stops "New list" being the
+   * live target and repaints.
    */
-  function watchListBarWidth() {
-    const bar = document.getElementById('listBar');
-    if (!bar || typeof ResizeObserver === 'undefined') return;
-
-    let lastWidth = 0;
-    new ResizeObserver(() => {
-      const w = Math.round(bar.getBoundingClientRect().width);
-      if (w === lastWidth) return;
-      lastWidth = w;
-      if (w) centreSelectedList(true);
-    }).observe(bar);
+  function endCreate() {
+    pendingCreate = false;
+    renderCollections();
   }
-  watchListBarWidth();
 
   document.addEventListener('click', (e) => {
-    const name = e.target.closest && e.target.closest('.list-bar-name');
+    const name = e.target.closest && e.target.closest('.collection-name');
     if (!name) return;
 
     if (name.dataset.value === 'create-new') {
+      // Straight to the sheet — the name is typed there, next to what the list
+      // is for, rather than on a prompt that has to be cleared first.
       pendingCreate = true;
-      renderListBar();
-      openCreateListRow();
+      renderCollections();
+      openNotesForCreate();
       return;
     }
     pendingCreate = false;
     selectedListId = name.dataset.value;
     renderListBar();
+    openList(name.dataset.value);
+
+    // The footer stays live while notes are up, so the list under them can
+    // change out from under the screen. Notes belong to a list, so follow it:
+    // the edit view reloads against the newly selected one (flushing whatever
+    // was typed against the old one first), and a half-finished creation is
+    // abandoned, since picking an existing list is a decision not to make a
+    // new one.
+    if (notesView && !notesView.hidden) {
+      if (notesMode === 'create') {
+        closeNotes();
+        endCreate();
+      } else {
+        flushNotes();
+        openNotesForEdit();
+      }
+    }
   });
 
   /**
@@ -990,10 +1065,10 @@ document.addEventListener('DOMContentLoaded', () => {
     renderListBar();
   }
 
-  async function createListNamed(name) {
+  async function createListNamed(name, description = '') {
     if (usingDevSession()) {
       const lists = await readDevLists();
-      const created = { id: 'dev-' + Date.now(), name };
+      const created = { id: 'dev-' + Date.now(), name, description };
       lists.push(created);
       await new Promise((resolve) => {
         try { chrome.storage.local.set({ devLists: lists }, resolve); }
@@ -1003,9 +1078,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return created;
     }
 
+    // description is the one note field the API has a home for; preferences
+    // has no field yet and stays local (see setNotesOpen).
     const created = await apiRequest('/api/lists', {
       method: 'POST',
-      body: { name, description: '' }
+      body: { name, description }
     });
     await loadLists();
     return created;
@@ -1086,106 +1163,44 @@ document.addEventListener('DOMContentLoaded', () => {
     el._hideTimer = setTimeout(() => el.classList.remove('is-visible'), 4000);
   }
 
-  // Save everything collected into the selected list.
-  const addToListBtn = document.getElementById('addToListBtn');
-  if (addToListBtn) {
-    addToListBtn.addEventListener('click', async () => {
-      if (!selectedListId) {
-        showCollectStatus('Choose a list first.', true);
-        return;
-      }
+  const collectBtn = document.getElementById('collectBtn');
 
-      const stored = await new Promise((resolve) => {
-        try {
-          chrome.storage.local.get({ savedProducts: [] }, (r) => resolve((r && r.savedProducts) || []));
-        } catch (e) { resolve([]); }
-      });
-
-      if (!stored.length) {
-        showCollectStatus('Nothing collected yet.', true);
-        return;
-      }
-
-      addToListBtn.disabled = true;
-
-      const { saved, failed } = await saveCollectedToList(selectedListId, stored);
-
-      if (saved && !failed) {
-        // Cleared only on a clean save — a partial one keeps everything, so
-        // nothing is lost while it is unclear what did and did not land. The
-        // emptied list IS the confirmation, so nothing is announced.
-        try { chrome.storage.local.set({ savedProducts: [] }); } catch (e) {}
-      } else if (saved && failed) {
-        showCollectStatus('Saved ' + saved + ', ' + failed + ' failed. Nothing was cleared.', true);
-      } else {
-        showCollectStatus('Could not save. Check you are signed in.', true);
-      }
-      addToListBtn.disabled = false;
-    });
-  }
-
-  /* ---------- Create a list, inline and on-brand ---------------------------
-     window.prompt() draws a native Chrome dialog — its own type, colours and
-     buttons, anchored to the top of the browser rather than the panel. This is
-     the same field treatment the rest of the panel uses.
-     ------------------------------------------------------------------------ */
-
-  const createListRow = document.getElementById('createListRow');
-  const createListInput = document.getElementById('createListInput');
-  const createListConfirm = document.getElementById('createListConfirm');
-  const createListCancel = document.getElementById('createListCancel');
-
-  function openCreateListRow() {
-    if (!createListRow) return;
-    createListRow.classList.add('is-open');
-    if (createListInput) {
-      createListInput.value = '';
-      createListInput.focus();
-    }
-  }
-
-  function closeCreateListRow() {
-    if (createListRow) createListRow.classList.remove('is-open');
-    // Whether cancelled or completed, "New List" stops being the live target.
-    pendingCreate = false;
-    renderListBar();
-  }
-
-  async function confirmCreateList() {
-    const name = (createListInput && createListInput.value.trim()) || '';
-    if (!name) {
-      if (createListInput) createListInput.focus();
+  /**
+   * Files everything collected into the selected list.
+   *
+   * There is no button for this any more: the footer's plus used to be a
+   * second press confirming where the items went, and with the list chosen in
+   * the body there is nothing left for it to confirm. So collecting files the
+   * items itself, as soon as the picker hands them back.
+   */
+  async function fileCollectedItems() {
+    if (!selectedListId) {
+      showCollectStatus('Choose a list first.', true);
       return;
     }
 
-    if (createListConfirm) createListConfirm.disabled = true;
+    const stored = await new Promise((resolve) => {
+      try {
+        chrome.storage.local.get({ savedProducts: [] }, (r) => resolve((r && r.savedProducts) || []));
+      } catch (e) { resolve([]); }
+    });
+    if (!stored.length) return;
 
-    try {
-      const created = await createListNamed(name);
-      const id = created?.id || created?.list_id || null;
-      selectedListId = id;
-      if (id && !availableLists.some((l) => String(l.id) === String(id))) {
-        availableLists.push({ id, name });
-      }
-      closeCreateListRow();   // clears pendingCreate and re-renders
-      renderListBar();
-    } catch (err) {
-      showCollectStatus(err.message || 'Could not create that list.', true);
-    } finally {
-      if (createListConfirm) createListConfirm.disabled = false;
+    const { saved, failed } = await saveCollectedToList(selectedListId, stored);
+
+    if (saved && !failed) {
+      // Cleared only on a clean save — a partial one keeps everything, so
+      // nothing is lost while it is unclear what did and did not land.
+      // The storage listener repaints the tiles when this lands.
+      try { chrome.storage.local.set({ savedProducts: [] }); } catch (e) {}
+    } else if (saved && failed) {
+      showCollectStatus('Saved ' + saved + ', ' + failed + ' failed. Nothing was cleared.', true);
+    } else {
+      showCollectStatus('Could not save. Check you are signed in.', true);
     }
   }
 
-  if (createListConfirm) createListConfirm.addEventListener('click', confirmCreateList);
-  if (createListCancel) createListCancel.addEventListener('click', closeCreateListRow);
-  if (createListInput) {
-    createListInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); confirmCreateList(); }
-      if (e.key === 'Escape') closeCreateListRow();
-    });
-    // The dropdown closes on any document click; typing in here must not.
-    createListInput.addEventListener('click', (e) => e.stopPropagation());
-  }
+
 
   loadLists();
 
@@ -1201,6 +1216,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const sidebarMinimizeBtn = document.getElementById('sidebarMinimizeBtn');
   if (sidebarMinimizeBtn) {
     sidebarMinimizeBtn.addEventListener('click', () => {
+      // The arrow goes up ONE level, and only closes the panel from the top.
+      // Checked outermost first, because more than one of these can be true at
+      // once — notes opened from inside a list leave that list open behind
+      // them, and the menu can be opened over either.
+      if (panelMenu && !panelMenu.hidden) {
+        setMenuOpen(false);
+        return;
+      }
+
+      if (notesView && !notesView.hidden) {
+        // Backing out of a creation abandons it, as Escape does.
+        const wasCreating = notesMode === 'create';
+        closeNotes();
+        if (wasCreating) endCreate();
+        return;
+      }
+
+      if (openListId) {
+        closeList();
+        return;
+      }
+
       window.parent.postMessage({ action: 'DECIDIO_MINIMIZE_SIDEBAR' }, '*');
     });
   }
@@ -1230,11 +1267,267 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sidebarMenuBtn) {
     sidebarMenuBtn.addEventListener('click', () => setMenuOpen(panelMenu && panelMenu.hidden));
   }
+
+  /* ------------------------------------------------------------------
+     NOTES
+     ------------------------------------------------------------------
+     The app's New Collection screen, per list. Notes are the list's own,
+     so they are keyed by list id and reloaded whenever the selected list
+     changes underneath the view.
+
+     Saving is debounced on every keystroke rather than deferred to a
+     close or a backgrounding: in the app that deferral is a known way to
+     lose an edit (CLAUDE.md, pending work 1), and a browser tab can be
+     closed at any moment with no equivalent of applicationDidEnterBackground.
+     ------------------------------------------------------------------ */
+  const notesView = document.getElementById('notesView');
+  const notesTitle = document.getElementById('notesTitle');
+  const notesDescription = document.getElementById('notesDescription');
+  const notesPreferences = document.getElementById('notesPreferences');
+  const notesSaved = document.getElementById('notesSaved');
+  const headerTitle = document.getElementById('headerTitle');
+  const notesOpenBtn = document.getElementById('notesOpenBtn');
+  const notesDoneBtn = document.getElementById('notesDoneBtn');
+
+  const notesKey = (listId) => 'listNotes_' + listId;
+  let notesSaveTimer = null;
+  let notesSavedTimer = null;
+  let notesListId = null;
+  // 'edit' saves as you type against an existing list; 'create' holds the
+  // name typed on the previous step and writes nothing until the check is
+  // pressed, because there is no list id to write against yet.
+  let notesMode = 'edit';
+
+  /** Grows a field to fit its text, so nothing scrolls inside a section. */
+  function autoGrow(field) {
+    if (!field) return;
+    field.style.height = 'auto';
+    field.style.height = field.scrollHeight + 'px';
+  }
+
+  function readNotes(listId) {
+    return new Promise((resolve) => {
+      const key = notesKey(listId);
+      try {
+        chrome.storage.local.get({ [key]: null }, (r) => resolve((r && r[key]) || {}));
+      } catch (e) { resolve({}); }
+    });
+  }
+
+  function flushNotes() {
+    if (notesSaveTimer) { clearTimeout(notesSaveTimer); notesSaveTimer = null; }
+    if (notesMode === 'create' || !notesListId) return;
+    const key = notesKey(notesListId);
+    const value = {
+      description: notesDescription ? notesDescription.value : '',
+      preferences: notesPreferences ? notesPreferences.value : '',
+      updatedAt: Date.now()
+    };
+    try { chrome.storage.local.set({ [key]: value }); } catch (e) {}
+
+    if (notesSaved) {
+      notesSaved.textContent = 'Saved';
+      notesSaved.classList.add('is-shown');
+      clearTimeout(notesSavedTimer);
+      notesSavedTimer = setTimeout(() => notesSaved.classList.remove('is-shown'), 1200);
+    }
+  }
+
+  function queueNotesSave() {
+    clearTimeout(notesSaveTimer);
+    notesSaveTimer = setTimeout(flushNotes, 400);
+  }
+
+  // The wordmark's size. A title is set at this to start with, and only ever
+  // steps down from it.
+  const HEADER_TITLE_MAX = 32;
+  const HEADER_TITLE_MIN = 18;
+
+  /**
+   * Shrinks a title until it fits the header row.
+   *
+   * Titles are list names, so their length is whatever the user typed. They
+   * are set at the wordmark's size and only stepped down when that would
+   * overflow, which keeps every short name — the usual case — identical in
+   * size to the wordmark it replaced.
+   */
+  function fitHeaderTitle() {
+    if (!headerTitle || headerTitle.hidden) return;
+
+    let size = HEADER_TITLE_MAX;
+    headerTitle.style.fontSize = size + 'px';
+    // scrollWidth only exceeds clientWidth once the text genuinely overflows,
+    // which is exactly the condition to shrink on.
+    while (headerTitle.scrollWidth > headerTitle.clientWidth && size > HEADER_TITLE_MIN) {
+      size -= 1;
+      headerTitle.style.fontSize = size + 'px';
+    }
+  }
+
+  /** Swaps the header's wordmark for a screen title, or back. */
+  function setHeaderTitle(text) {
+    if (!headerTitle || !sidebarPanel) return;
+    headerTitle.hidden = !text;
+    sidebarPanel.classList.toggle('is-titled', !!text);
+    if (text) {
+      headerTitle.firstChild.textContent = text;
+      fitHeaderTitle();
+    }
+  }
+
+  function closeNotes() {
+    if (!notesView) return;
+    flushNotes();
+    notesView.hidden = true;
+    notesMode = 'edit';
+    // Notes can be opened from inside a list, and closing them goes back to
+    // that list — so the header returns to its name, not to the wordmark.
+    setHeaderTitle(openListId ? listNameFor(openListId) : null);
+    if (notesDoneBtn) notesDoneBtn.hidden = true;
+    if (collectBtn) collectBtn.hidden = false;
+  }
+
+  /** Puts the view on screen, whichever mode filled it. */
+  function showNotes() {
+    setMenuOpen(false);
+    notesView.hidden = false;
+    if (notesDoneBtn) notesDoneBtn.hidden = false;
+    if (collectBtn) collectBtn.hidden = true;
+    // Sized only once visible — a hidden textarea has no scrollHeight.
+    autoGrow(notesDescription);
+    autoGrow(notesPreferences);
+    // Naming comes first when there is no name yet.
+    const first = notesMode === 'create' ? notesTitle : notesDescription;
+    if (first) first.focus();
+  }
+
+  /**
+   * Step two of creating a list: the name has been typed, nothing exists yet.
+   * Both fields start empty and the check creates the list.
+   */
+  function openNotesForCreate() {
+    if (!notesView) return;
+    notesMode = 'create';
+    notesListId = null;
+    setHeaderTitle('New Collection');
+    if (notesTitle) {
+      notesTitle.value = '';
+      notesTitle.readOnly = false;
+    }
+    if (notesDescription) notesDescription.value = '';
+    if (notesPreferences) notesPreferences.value = '';
+    if (notesSaved) notesSaved.classList.remove('is-shown');
+    showNotes();
+  }
+
+  /** Editing the notes of a list that already exists. */
+  async function openNotesForEdit() {
+    if (!notesView) return;
+    if (!selectedListId) {
+      showCollectStatus('Choose a list first.', true);
+      return;
+    }
+
+    notesMode = 'edit';
+    // Notes belong to whichever list is selected now, not whichever was
+    // selected when the view was last open.
+    notesListId = selectedListId;
+    const list = availableLists.find((l) => String(l.id) === String(selectedListId));
+    setHeaderTitle('Notes');
+    if (notesTitle) {
+      notesTitle.value = (list && list.name) || '';
+      notesTitle.readOnly = true;
+    }
+
+    const stored = await readNotes(notesListId);
+    if (notesDescription) notesDescription.value = stored.description || '';
+    if (notesPreferences) notesPreferences.value = stored.preferences || '';
+    showNotes();
+  }
+
+  /**
+   * The check at the bottom. In edit mode it just closes; in create mode it is
+   * the action that actually makes the list, so a failure has to keep the view
+   * up with everything typed still in it.
+   */
+  async function confirmNotes() {
+    if (notesMode !== 'create') {
+      closeNotes();
+      return;
+    }
+
+    // The name is the one required part, and it is on this screen now, so this
+    // is where it is checked.
+    const name = notesTitle ? notesTitle.value.trim() : '';
+    if (!name) {
+      if (notesTitle) notesTitle.focus();
+      showCollectStatus('Name your list first.', true);
+      return;
+    }
+
+    const description = notesDescription ? notesDescription.value.trim() : '';
+    const preferences = notesPreferences ? notesPreferences.value.trim() : '';
+
+    if (notesDoneBtn) notesDoneBtn.disabled = true;
+    try {
+      const created = await createListNamed(name, description);
+      const id = created?.id || created?.list_id || null;
+
+      if (id) {
+        selectedListId = id;
+        if (!availableLists.some((l) => String(l.id) === String(id))) {
+          availableLists.push({ id, name });
+        }
+        // Preferences have no field on the API, so they are kept locally
+        // against the id the list just got. Description is stored here too so
+        // reopening the notes shows what was typed without a round trip.
+        try {
+          chrome.storage.local.set({
+            [notesKey(id)]: { description, preferences, updatedAt: Date.now() }
+          });
+        } catch (e) {}
+      }
+
+      closeNotes();
+      endCreate();
+      renderListBar();
+      // A list you just described is one you want to be in.
+      if (id) openList(id);
+    } catch (err) {
+      showCollectStatus(err.message || 'Could not create that list.', true);
+    } finally {
+      if (notesDoneBtn) notesDoneBtn.disabled = false;
+    }
+  }
+
+  for (const field of [notesDescription, notesPreferences]) {
+    if (!field) continue;
+    field.addEventListener('input', () => { autoGrow(field); queueNotesSave(); });
+    field.addEventListener('blur', flushNotes);
+  }
+
+  if (notesOpenBtn) notesOpenBtn.addEventListener('click', openNotesForEdit);
+  if (notesDoneBtn) notesDoneBtn.addEventListener('click', confirmNotes);
+
+  // A closing tab gets one last synchronous chance to write.
+  window.addEventListener('pagehide', flushNotes);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && panelMenu && !panelMenu.hidden) {
+    if (e.key !== 'Escape') return;
+    if (notesView && !notesView.hidden) {
+      // Escaping out of creation abandons it — nothing has been made yet.
+      // Read the mode before closeNotes resets it.
+      const wasCreating = notesMode === 'create';
+      closeNotes();
+      if (wasCreating) endCreate();
+      return;
+    }
+    if (panelMenu && !panelMenu.hidden) {
       setMenuOpen(false);
       if (sidebarMenuBtn) sidebarMenuBtn.focus();
+      return;
     }
+    // Same ladder the back arrow walks.
+    if (openListId) closeList();
   });
 
   /**
@@ -1277,8 +1570,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Send payload to content script on active tab when user clicks "Add Product"
-  if (addProductBtn) {
-    addProductBtn.addEventListener('click', async () => {
+  if (collectBtn) {
+    collectBtn.addEventListener('click', async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab) {
         chrome.tabs.sendMessage(tab.id, {
@@ -1289,13 +1582,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
     });
-    // It is a div carrying role="button", so it gets a button's keys too.
-    addProductBtn.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        addProductBtn.click();
-      }
-    });
   }
 
   // Listen for messages from background/content scripts to restore sidebar state
@@ -1304,6 +1590,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (sidebarPanel) sidebarPanel.classList.remove('is-collapsed');
       if (toggleAnchor) toggleAnchor.style.display = '';
     }
+
+    // Collecting now files the items itself — see fileCollectedItems.
+    if (message.action === "RENDER_PICKED_PRODUCT") fileCollectedItems();
 
     // The picker's footer carousel can change the target list while the panel
     // is hidden; mirror it here so the dropdown does not disagree on return.
@@ -1425,12 +1714,6 @@ function displaySelectedProduct(imageUrl, productUrl, productTitle, container) {
   productTile.appendChild(thumbColumn);
   productTile.appendChild(textBlock);
   productTile.appendChild(removeBtn);
-
-  // Anchored AFTER the collected items. It used to be pinned first in the
-  // carousel (order 0) and last in the list (order 999), so it jumped from one
-  // end to the other when the view was switched.
-  const addBtn = document.getElementById('addProductBtn');
-  if (addBtn) addBtn.style.order = '999';
 
   productTile.style.order = existingTiles + 1;
   container.appendChild(productTile);

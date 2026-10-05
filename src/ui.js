@@ -100,18 +100,22 @@ function createFloatingToggleButton() {
     right: 24px;
     width: 56px;
     height: 56px;
-    /* Solid black, square, no blur or outline — the grey frosted plate was
-       chrome the app does not use anywhere. */
+    /* Solid black, no blur or outline — the grey frosted plate was chrome the
+       app does not use anywhere. Rounded to the same 22% the toolbar icon
+       carries, so the two read as one mark at two sizes. */
     background-color: #000000;
     border: none;
-    border-radius: 0;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #ffffff;
     font-family: "NHaasGroteskDSStd", Arial, sans-serif;
-    font-size: 26px;
+    /* Sized to fill the plate the way the icon's own glyph does, rather than
+       sitting as a small mark in the middle of it. */
+    font-size: 34px;
     font-weight: 900;
+    line-height: 1;
     cursor: pointer;
     z-index: 2147483647; /* Maximum z-index to ensure it sits above host page elements */
     user-select: none;
@@ -206,9 +210,16 @@ function activateExtensionUI() {
     // Clipped to the panel's own shape, which the panel reports once it has
     // laid out (see DECIDIO_PANEL_RECT in content.js). Without the clip the
     // transparent margins of this 430px column would keep eating clicks meant
-    // for the page. This first value is the workspace
-    // panel's default box, so nothing flashes before the report arrives.
-    clipPath: 'inset(88px 24px calc(25vh - 7px) 26px round 16px)',
+    // for the page. This first value is the workspace panel's default box, so
+    // nothing flashes before the report arrives.
+    //
+    // The bottom inset is derived from the panel's own height rather than
+    // guessed: the panel is top 88px, height calc((100vh - 108px) * 0.76), so
+    // its bottom edge sits at 100vh - 88 - (100vh - 108) * 0.76 from the
+    // bottom, i.e. 24vh - 6px. The old value (25vh - 7px) cut a whole 1vh
+    // above that, which clipped the last rows of a list — and anything that
+    // keeps the report from arriving leaves this value in place for good.
+    clipPath: 'inset(88px 24px calc(24vh - 6px) 26px round 16px)',
     transition: 'right 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
     pointerEvents: 'auto' // Re-enable interaction inside the iframe
   });

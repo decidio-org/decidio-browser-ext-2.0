@@ -76,6 +76,29 @@ function safeTabSendMessage(tabId, message, callback) {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
+  /* Screenshot of the visible tab, for collecting a picture the page will not
+     let us read any other way.
+
+     Canvas is the normal route, but drawing a cross-origin image onto one
+     taints it and toDataURL then throws — which is most of why some sites
+     give up no image at all. A tab capture is of the RENDERED page, so it is
+     subject to none of that: no CORS, no tainting, and it works for CSS
+     backgrounds, <canvas>, SVG and video frames that were never an <img> to
+     begin with. The cost is resolution (the viewport, not the source file),
+     so it is a fallback rather than the first choice.
+
+     Needs <all_urls> (granted) and must run here — captureVisibleTab is not
+     available to content scripts. */
+  if (request.action === "DECIDIO_CAPTURE_TAB") {
+    chrome.tabs.captureVisibleTab(null, { format: "png" }, (dataUrl) => {
+      // A capture can be refused: chrome:// and the Web Store are off limits
+      // whatever the permissions say, and captures are rate limited.
+      const err = chrome.runtime.lastError;
+      sendResponse(err ? { error: err.message } : { dataUrl });
+    });
+    return true;   // async sendResponse
+  }
+
   // Return the active/inactive state stored in chrome.storage.local
   if (request.action === "GET_EXTENSION_STATE") {
     chrome.storage.local.get({ isExtensionActive: false }, (data) => {

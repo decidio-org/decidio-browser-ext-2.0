@@ -36,7 +36,12 @@ const ProductPageExtractor = {
     // -------------------------------------------------------------
 
     // Strategy 1: Schema.org structured data (JSON-LD)
-    const jsonLdTitle = this.getJsonLdProductTitle();
+    // getTitleFromSchema lives in drivers.js — this used to call
+    // this.getJsonLdProductTitle(), which has never existed, so every page
+    // that fell through to here threw instead of continuing down the chain.
+    // The throw aborted the whole collect, which is why some sites gave up no
+    // name AND no picture. Guarded, so load order can never bring it back.
+    const jsonLdTitle = typeof getTitleFromSchema === 'function' ? getTitleFromSchema() : null;
     if (jsonLdTitle) return jsonLdTitle;
 
     // Strategy 2: Custom site driver selector (if defined)

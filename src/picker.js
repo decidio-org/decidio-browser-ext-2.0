@@ -46,6 +46,7 @@ class DecidioContentPicker {
     // queue is the source of truth for what gets saved rather than a silent
     // array filled in behind the user.
     this.queue = [];                // [{id, thumb, title, brand, productUrl, state, error}]
+    this.rail = null;               // compact collected list in the left margin
     this.identifyOpen = false;
     this.nextQueueId = 1;
   }
@@ -271,17 +272,9 @@ class DecidioContentPicker {
         height: 3px;
         background: #ffffff;
       }
-      /* The list carousel is page-0 chrome — ARFooter fades it out as you page
-         away from the camera, leaving just the plus. The rules go with it;
-         they frame the carousel, not the footer. */
-      .decidio-ar-strip, .decidio-ar-rule {
-        transition: opacity 0.3s ease;
-      }
-      .decidio-ar-footer.is-identifying .decidio-ar-strip,
-      .decidio-ar-footer.is-identifying .decidio-ar-rule {
-        opacity: 0;
-        pointer-events: none;
-      }
+      /* The rule used to frame the list carousel and faded out with it. The
+         carousel is gone — the list is chosen in the panel now — so the rule
+         is the footer's own top line and stays put on every page. */
 
       /* The carousel. ARListCarousel loops an infinite strip under a fixed
          centre; a page can scroll natively, so this is a scroller with the
@@ -377,7 +370,8 @@ class DecidioContentPicker {
         background: #ffffff;
         color: #000000;
         border: none;
-        border-radius: 0;
+        /* 12px, the radius the panel uses on its own controls. */
+        border-radius: 12px;
         padding: 8px 16px;
         font-family: "SFProDisplay", -apple-system, sans-serif;
         font-size: 14px;
@@ -385,6 +379,120 @@ class DecidioContentPicker {
         cursor: pointer;
       }
       .decidio-ar-done:hover { background: #f0f0f0; }
+
+      /* ---------- Collected rail (left margin) ----------------------------
+         The same list the Collected page shows, compacted into the margin so
+         what you have already taken stays in view while you take the next
+         one. Rows are the Collected page's rows at a smaller gauge: a
+         thumbnail, the brand above the name. The page itself is still there
+         for the full-size version and for retrying a failure.
+         -------------------------------------------------------------------- */
+      .decidio-ar-rail {
+        position: fixed;
+        left: 26px;
+        top: 88px;
+        bottom: 128px;
+        z-index: 2147483647;
+        width: 268px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        /* No ground of its own. The overlay already dims the page by 0.5, and
+           a panel on top of that was a second, darker opacity sitting inside
+           the first — two windows over one screen. The list simply sits on
+           the dim the overlay already laid down, so there is one surface. */
+        background: none;
+        border: none;
+        box-shadow: none;
+        /* Reserved space to LOOK at, not to touch. With pointer events it
+           swallowed every selection in the left 268px of the page — the
+           column covers real content, and framing something behind it has to
+           keep working. The Collected page is the one you interact with. */
+        pointer-events: none;
+        font-family: "SFProDisplay", -apple-system, BlinkMacSystemFont, sans-serif;
+        transition: opacity 0.25s ease;
+      }
+      .decidio-ar-rail:empty { display: none; }
+      .decidio-ar-rail-head {
+        flex: 0 0 auto;
+        padding: 0 0 10px;
+        font-family: "NHaasGroteskDSStd", sans-serif;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: #ffffff;
+        position: relative;
+      }
+      /* The rules stop short of the column's right edge rather than running
+         its full width — drawn as insets so the rows keep their own width and
+         the text is not pulled in with them. */
+      .decidio-ar-rail-head::after,
+      .decidio-ar-rail-row::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 72px;
+        bottom: 0;
+        height: 0.75px;
+        background: rgba(255, 255, 255, 0.22);
+      }
+      /* Newest at the top and the overflow simply clipped: the column cannot
+         be scrolled (see pointer-events above), so what it shows is the most
+         recent that fit. Everything is on the Collected page. */
+      .decidio-ar-rail-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .decidio-ar-rail-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 0;
+        position: relative;
+      }
+      .decidio-ar-rail-row:last-child::after { display: none; }
+      .decidio-ar-rail-thumb {
+        /* The Collected page's own 70x50 thumbnail. */
+        flex: 0 0 70px;
+        width: 70px;
+        height: 50px;
+        object-fit: cover;
+        display: block;
+        background: rgba(255, 255, 255, 0.14);
+      }
+      .decidio-ar-rail-text { display: flex; flex-direction: column; min-width: 0; }
+      .decidio-ar-rail-brand {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.6);
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .decidio-ar-rail-name {
+        font-size: 15px;
+        font-weight: 600;
+        color: #ffffff;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .decidio-ar-rail-row.is-pending .decidio-ar-rail-name,
+      .decidio-ar-rail-row.is-failed  .decidio-ar-rail-name {
+        color: rgba(255, 255, 255, 0.55);
+      }
+      /* The Collected page is the full-size version of this list, so the rail
+         stands down while that page is up rather than doubling it. */
+      .decidio-ar-rail.is-hidden { opacity: 0; }
+      /* And it clears out of the way of whatever is being framed behind it,
+         rather than sitting over the picture. Dropped to a trace instead of
+         to nothing, so it is clear it has moved aside and not vanished. */
+      .decidio-ar-rail.is-yielding { opacity: 0.12; }
 
       /* ---------- Vertical "Collect" hint --------------------------------
          ARCameraPage draws a 168pt NHaas Bold "Identify" rotated -90 down the
@@ -653,16 +761,7 @@ class DecidioContentPicker {
       this.footer = document.createElement('div');
       this.footer.className = 'decidio-ar-footer';
 
-      const names = this.lists.length
-        ? this.lists.map((l) => `
-            <button class="decidio-ar-name" data-list-id="${l.id}">${
-              String(l.name || 'Untitled list').replace(/[<>&]/g, '')
-            }</button>`).join('')
-        : '<span class="decidio-ar-empty">No lists yet</span>';
-
       this.footer.innerHTML = `
-        <div class="decidio-ar-rule"></div>
-        <div class="decidio-ar-strip">${names}</div>
         <div class="decidio-ar-rule"></div>
         <div class="decidio-ar-actions">
           <button class="decidio-ar-identify" id="decidio-identify">
@@ -689,23 +788,18 @@ class DecidioContentPicker {
         e.stopPropagation();
         e.preventDefault();
 
-        const name = e.target.closest('.decidio-ar-name');
-        if (name) {
-          this.selectedListId = name.dataset.listId;
-          this.updateCarouselSelection();
-          chrome.runtime.sendMessage({
-            action: 'DECIDIO_PICKER_LIST_CHANGED',
-            listId: this.selectedListId
-          });
-          return;
-        }
-
         if (e.target.closest('#decidio-plus')) this.commitBoxSelection();
         if (e.target.closest('#decidio-done')) this.finishBatchSelection();
         if (e.target.closest('#decidio-identify')) this.toggleIdentify();
       }, true);
 
       this.shadowRoot.appendChild(this.footer);
+
+      // The collected rail, in the left margin beside the live selection.
+      this.rail = document.createElement('div');
+      this.rail.className = 'decidio-ar-rail';
+      this.shadowRoot.appendChild(this.rail);
+      this.renderRail();
 
       // Page 2 of the app's AR flow, as a panel that slides up over the picker
       // rather than a page you scroll sideways to — a browser overlay has no
@@ -828,11 +922,42 @@ class DecidioContentPicker {
     // it lands on screen even though the box itself has not moved.
     if (this.isFrozen) {
       this.renderBox();
+      this.yieldRailTo(this.box && {
+        left: this.box.x - window.scrollX,
+        top: this.box.y - window.scrollY,
+        width: this.box.w,
+        height: this.box.h
+      });
       return;
     }
 
     this.checkElementAtCursor(this.lastMouseX, this.lastMouseY);
+    this.yieldRailTo(this.lastRect);
   };
+
+  /**
+   * elementFromPoint, but through shadow roots.
+   *
+   * The plain call stops at a shadow host, so on a site built out of web
+   * components every hit resolves to the custom element and never to the
+   * <img> inside it — the picker sees nothing to collect and no text to name
+   * it with. Walking the open roots gets to the real node. Closed roots have
+   * no way in and still return the host, which is the old behaviour.
+   *
+   * @param {number} x
+   * @param {number} y
+   * @returns {Element|null}
+   */
+  deepElementFromPoint(x, y) {
+    let node = document.elementFromPoint(x, y);
+    // Bounded: a pathological tree should not spin here.
+    for (let depth = 0; node && node.shadowRoot && depth < 12; depth++) {
+      const inner = node.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === node) break;
+      node = inner;
+    }
+    return node;
+  }
 
   /**
    * Performs hit-testing at target coordinates to identify valid product images under pointer.
@@ -855,7 +980,7 @@ class DecidioContentPicker {
     }
 
     // Ignore hovering over picker host container
-    let elementUnderneath = document.elementFromPoint(x, y);
+    let elementUnderneath = this.deepElementFromPoint(x, y);
     if (elementUnderneath && (elementUnderneath === this.hostElement || elementUnderneath.id === 'decidio-picker-host')) {
       this.currentTarget = null;
       this.updateHighlight(null);
@@ -1027,10 +1152,15 @@ class DecidioContentPicker {
       if (this.badge) this.badge.classList.remove('show');
       if (this.overlay) this.overlay.style.removeProperty('--decidio-cutout');
       this.lastRect = null;
+      this.yieldRailTo(null);
       return;
     }
 
     const rect = target.getBoundingClientRect();
+
+    // Before the unchanged-rect check below, which returns early: the column
+    // still has to get out of the way of a target it is sitting on.
+    this.yieldRailTo(rect);
 
     // Skip layout writes if target bounds haven't shifted
     if (
@@ -1278,27 +1408,95 @@ class DecidioContentPicker {
 
   /**
    * Second attempt at a crop for an image that tainted the canvas, by
-   * re-requesting it with CORS. Patches the already-collected item in place,
-   * so a slow or failed request never holds up the picker — and takes the
-   * geometry by argument, since the box itself is released the moment the
-   * item is collected.
+   * re-requesting it with CORS. Resolves to null when the server sends no
+   * CORS headers, which is the signal to fall back to a tab capture.
    *
    * @param {Element} node
    * @param {{sx:number, sy:number, sw:number, sh:number}} geom
-   * @param {{imageUrl: string|null}} item
+   * @returns {Promise<string|null>}
    */
-  recropWithCors(node, geom, item) {
+  recropWithCors(node, geom) {
     const src = node.currentSrc || node.src;
-    if (!src || src.startsWith('data:')) return;
+    if (!src || src.startsWith('data:')) return Promise.resolve(null);
 
-    const probe = new Image();
-    probe.crossOrigin = 'anonymous';
-    probe.onload = () => {
-      const cropped = this.drawCrop(probe, geom);
-      if (cropped) item.imageUrl = cropped;
-    };
-    probe.onerror = () => { /* no CORS headers — the full image stands */ };
-    probe.src = src;
+    return new Promise((resolve) => {
+      const probe = new Image();
+      probe.crossOrigin = 'anonymous';
+      probe.onload = () => resolve(this.drawCrop(probe, geom));
+      probe.onerror = () => resolve(null);   // no CORS headers — try a capture
+      probe.src = src;
+    });
+  }
+
+  /**
+   * Crops the framed region out of a screenshot of the tab.
+   *
+   * The way in when the page will not let its pictures be read: a capture is
+   * of the rendered page, so it works regardless of CORS, canvas tainting, or
+   * whether the thing was ever an <img>. Resolution is the viewport's, not
+   * the source file's, which is why this runs only after drawCrop has failed.
+   *
+   * The overlay has to stand down for the shot or the capture would include
+   * the dimming, the selection box and the collected column.
+   *
+   * @param {{x:number,y:number,w:number,h:number}} box - page coordinates.
+   * @returns {Promise<string|null>} data URL of the crop, or null.
+   */
+  async captureCrop(box) {
+    if (!box || !box.w || !box.h) return null;
+
+    const chrome_ = typeof chrome !== 'undefined' && chrome.runtime ? chrome : null;
+    if (!chrome_) return null;
+
+    const hidden = [this.overlay, this.highlightBox, this.footer, this.rail, this.badge]
+      .filter(Boolean);
+    const saved = hidden.map((el) => el.style.visibility);
+    hidden.forEach((el) => { el.style.visibility = 'hidden'; });
+
+    let shot = null;
+    try {
+      // Two frames: one for the hide to be painted, one for the capture to be
+      // taken against it. A single frame caught the overlay still up.
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      shot = await new Promise((resolve) => {
+        try {
+          chrome_.runtime.sendMessage({ action: 'DECIDIO_CAPTURE_TAB' }, (reply) => {
+            if (chrome_.runtime.lastError || !reply || reply.error) return resolve(null);
+            resolve(reply.dataUrl || null);
+          });
+        } catch (e) { resolve(null); }
+      });
+    } finally {
+      hidden.forEach((el, i) => { el.style.visibility = saved[i]; });
+    }
+    if (!shot) return null;
+
+    const img = await new Promise((resolve) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => resolve(null);
+      i.src = shot;
+    });
+    if (!img) return null;
+
+    // The capture is the VIEWPORT at device pixels, so the box has to be put
+    // back into viewport coordinates and then scaled by whatever ratio the
+    // shot came back at — reading it off the image rather than trusting
+    // devicePixelRatio, which disagrees on some zoom levels.
+    const scale = img.naturalWidth / window.innerWidth;
+    const vx = (box.x - window.scrollX) * scale;
+    const vy = (box.y - window.scrollY) * scale;
+    const vw = box.w * scale;
+    const vh = box.h * scale;
+
+    // Nothing off the edges of the shot: a box hanging past the viewport
+    // would otherwise draw transparent padding into the crop.
+    const sx = Math.max(0, Math.min(vx, img.naturalWidth));
+    const sy = Math.max(0, Math.min(vy, img.naturalHeight));
+    const sw = Math.max(1, Math.min(vw, img.naturalWidth - sx));
+    const sh = Math.max(1, Math.min(vh, img.naturalHeight - sy));
+
+    return this.drawCrop(img, { sx, sy, sw, sh });
   }
 
   beginDrag(e, mode) {
@@ -1475,7 +1673,7 @@ class DecidioContentPicker {
           const py = vy + (this.box.h * j) / STEPS;
           if (px < 0 || py < 0 || px > window.innerWidth || py > window.innerHeight) continue;
 
-          let node = document.elementFromPoint(px, py);
+          let node = this.deepElementFromPoint(px, py);
           if (!node || node === this.hostElement) continue;
 
           for (let depth = 0; node && depth < 6 && node !== document.body; depth++) {
@@ -1600,6 +1798,7 @@ class DecidioContentPicker {
 
     const el = this.resolveBoxContent();
     const picture = this.resolveBoxImage();
+    let needsCapture = null;
 
     // The item's identity and its picture are resolved separately on purpose.
     // resolveBoxContent needs an element mostly INSIDE the box to name the
@@ -1614,8 +1813,15 @@ class DecidioContentPicker {
       if (picture && picture.url) item.imageUrl = picture.url;
 
       // The box is a crop, as it is in the app — so what gets collected is the
-      // framed region, not the whole source image. Measured before the box is
-      // released below, since the CORS retry resolves long after that.
+      // framed region, not the whole source image.
+      //
+      // Three ways in, cheapest first. The canvas crop is exact and full
+      // resolution but throws on a cross-origin picture the site serves
+      // without CORS headers, which is most of why some sites gave up no
+      // image at all. Re-fetching with CORS rescues the ones whose server
+      // does allow it. A screenshot of the tab rescues the rest, and anything
+      // that was never an <img> in the first place.
+      const box = { ...this.box };
       if (picture && picture.node) {
         const geom = this.cropGeometry(picture.node, this.box);
         if (geom) {
@@ -1623,9 +1829,13 @@ class DecidioContentPicker {
           if (cropped) {
             item.imageUrl = cropped;
           } else {
-            this.recropWithCors(picture.node, geom, item);
+            needsCapture = { node: picture.node, geom };
           }
         }
+      } else {
+        // Nothing resolved as a picture at all — a CSS background, a canvas,
+        // an inline SVG. The shot does not care what drew it.
+        needsCapture = { node: null, geom: null };
       }
 
       // With no element to name it, fall back to the picture's own context.
@@ -1636,11 +1846,39 @@ class DecidioContentPicker {
         ) || null;
       }
 
-      this.enqueueForIdentify(item);
+      const entry = this.enqueueForIdentify(item);
+
+      // Both rescues land after the row is already on screen, so they patch
+      // the row itself rather than the item it was built from. The old code
+      // patched the item, which by then nothing was reading — the picture
+      // never reached the thumbnail.
+      if (needsCapture) this.rescuePicture(entry, needsCapture, box);
     }
 
     this.releaseSelection();
     this.updateFooterState();
+  }
+
+  /**
+   * Second and third attempts at a picture, for one the canvas would not give
+   * up. Runs after the row is on screen and updates it in place, so a slow or
+   * refused capture never holds up the picker.
+   *
+   * @param {Object} entry - the queue row to patch.
+   * @param {{node: Element|null, geom: Object|null}} what
+   * @param {{x:number,y:number,w:number,h:number}} box - page coordinates,
+   *   taken before the selection was released.
+   */
+  async rescuePicture(entry, what, box) {
+    let url = null;
+
+    if (what.node && what.geom) url = await this.recropWithCors(what.node, what.geom);
+    if (!url) url = await this.captureCrop(box);
+    if (!url) return;
+
+    entry.thumb = url;
+    this.renderIdentify();
+    this.renderRail();
   }
 
   /**
@@ -1664,7 +1902,90 @@ class DecidioContentPicker {
 
     this.queue.unshift(entry);
     this.renderIdentify();
+    this.renderRail();
     this.identify(entry);
+    return entry;
+  }
+
+  /**
+   * Stands the collected column down while what you are pointing at is behind
+   * it.
+   *
+   * The column sits over real page content, so an image under it cannot be
+   * seen while it is being framed. It is a record of what has already been
+   * taken, which matters less at that moment than the thing being taken, so
+   * it yields and comes back when the target moves away.
+   *
+   * @param {DOMRect|{left,top,width,height}|null} rect - What is highlighted,
+   *   in viewport coordinates, or null when nothing is.
+   */
+  yieldRailTo(rect) {
+    if (!this.rail) return;
+
+    const r = this.rail.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+
+    const hits = (a) => a && a.width && a.height &&
+      a.left < r.right && a.left + a.width > r.left &&
+      a.top < r.bottom && a.top + a.height > r.top;
+
+    // The cursor counts on its own, not only the thing under it. Hit-testing
+    // intermittently resolves to nothing — the pointer lands on a gap in a
+    // card, or on the overlay's own chrome — and deciding from the target
+    // alone let the column snap back over a picture the user was still on.
+    const cursorInside =
+      this.lastMouseX >= r.left && this.lastMouseX <= r.right &&
+      this.lastMouseY >= r.top && this.lastMouseY <= r.bottom;
+
+    this.rail.classList.toggle('is-yielding', cursorInside || hits(rect));
+  }
+
+  /**
+   * Paints the collected rail — the Collected page's list, compacted.
+   *
+   * Reads the same queue, so the two can never disagree about what has been
+   * taken. Rebuilt wholesale: it is a handful of rows and only changes when
+   * one is added or resolves.
+   */
+  renderRail() {
+    if (!this.rail) return;
+
+    const esc = (v) => String(v == null ? '' : v).replace(/[<>&"]/g, (c) => (
+      { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]
+    ));
+
+    const rows = this.queue.map((q) => {
+      const thumb = q.thumb
+        ? `<img class="decidio-ar-rail-thumb" src="${esc(q.thumb)}" alt="">`
+        : '<span class="decidio-ar-rail-thumb"></span>';
+
+      let brand = '';
+      let name;
+      if (q.state === 'complete') {
+        brand = q.brand ? `<span class="decidio-ar-rail-brand">${esc(q.brand)}</span>` : '';
+        name = esc(q.title);
+      } else if (q.state === 'pending') {
+        name = 'Identifying…';
+      } else {
+        name = 'Not identified';
+      }
+
+      return `<div class="decidio-ar-rail-row is-${q.state}">${thumb}
+          <span class="decidio-ar-rail-text">${brand}
+            <span class="decidio-ar-rail-name">${name}</span>
+          </span>
+        </div>`;
+    }).join('');
+
+    // :empty hides the whole column, so nothing is written while the queue is
+    // empty and the screen stays clear until something has been collected.
+    this.rail.innerHTML = rows
+      ? `<div class="decidio-ar-rail-head">Collected</div>
+         <div class="decidio-ar-rail-body">${rows}</div>`
+      : '';
+
+    // Doubling the Collected page with a smaller copy of itself helps nobody.
+    this.rail.classList.toggle('is-hidden', this.identifyOpen);
   }
 
   /**
@@ -1680,6 +2001,7 @@ class DecidioContentPicker {
       this.identifyPage.classList.toggle('is-open', this.identifyOpen);
     }
     if (this.footer) this.footer.classList.toggle('is-identifying', this.identifyOpen);
+    if (this.rail) this.rail.classList.toggle('is-hidden', this.identifyOpen);
   }
 
   /**
@@ -1809,6 +2131,7 @@ class DecidioContentPicker {
     }
 
     this.renderIdentify();
+    this.renderRail();
     this.updateFooterState();
   }
 

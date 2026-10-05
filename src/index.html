@@ -156,6 +156,17 @@ to Decidio<span class="blue-dot">.</span></h1>
                     </svg>
                     <span id="appearanceLabel">Switch to Aero</span>
                 </button>
+                <button class="panel-menu-item" id="queueOpenBtn">
+                    <svg class="panel-menu-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="5" cy="7" r="1.6" stroke="none"/>
+                        <circle cx="5" cy="12" r="1.6" stroke="none"/>
+                        <circle cx="5" cy="17" r="1.6" stroke="none"/>
+                        <line x1="10" y1="7" x2="19" y2="7"/>
+                        <line x1="10" y1="12" x2="19" y2="12"/>
+                        <line x1="10" y1="17" x2="19" y2="17"/>
+                    </svg>
+                    <span>Queue<span class="panel-menu-count" id="queueCount"></span></span>
+                </button>
                 <button class="panel-menu-item" id="notesOpenBtn">
                     <svg class="panel-menu-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke="none" d="M5 3.5h14v17H5z" opacity="0"/>
@@ -196,6 +207,21 @@ to Decidio<span class="blue-dot">.</span></h1>
                               spellcheck="false"></textarea>
                 </div>
                 <div class="notes-saved" id="notesSaved" aria-live="polite"></div>
+            </div>
+
+            <!-- Queue: what has been collected into this list but not yet
+                 named. After the app's own scan queue (ARSessionStore), laid
+                 out like the Specs screen — a heading, then rows of label and
+                 value separated by rules, with Decidio Purple carrying the
+                 state. -->
+            <div class="queue-view" id="queueView" hidden>
+                <!-- The header already says Queue; this names the list it is
+                     the queue for, as the notes screen does. -->
+                <div class="queue-title" id="queueTitle"></div>
+                <div class="queue-list" id="queueList"></div>
+                <div class="queue-empty" id="queueEmpty" hidden>
+                    Nothing waiting. Everything collected into this list has a name.
+                </div>
             </div>
 
             <!-- Main Body Content -->

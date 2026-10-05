@@ -886,6 +886,274 @@ document.addEventListener('DOMContentLoaded', () => {
   // list of lists" do not all have to change.
   const renderListBar = renderCollections;
 
+  /* ---------- Queue ---------------------------------------------------------
+     What was collected into a list but never got a name. The app keeps the
+     same thing in ARSessionStore and offers a retry per row; here the retry
+     re-reads the product page, which is the one source of a name that is
+     still available once the page the item was framed on has gone.
+     ------------------------------------------------------------------------ */
+  const queueView = document.getElementById('queueView');
+  const queueList = document.getElementById('queueList');
+  const queueEmpty = document.getElementById('queueEmpty');
+  const queueOpenBtn = document.getElementById('queueOpenBtn');
+  const queueCountEl = document.getElementById('queueCount');
+
+  const queueKey = (listId) => 'listQueue_' + listId;
+
+  function readQueue(listId) {
+    return new Promise((resolve) => {
+      const key = queueKey(listId);
+      try {
+        chrome.storage.local.get({ [key]: [] }, (r) => resolve((r && r[key]) || []));
+      } catch (e) { resolve([]); }
+    });
+  }
+
+  function writeQueue(listId, rows) {
+    return new Promise((resolve) => {
+      try { chrome.storage.local.set({ [queueKey(listId)]: rows }, resolve); }
+      catch (e) { resolve(); }
+    });
+  }
+
+  async function addToQueue(listId, items) {
+    const rows = await readQueue(listId);
+
+    // Anything that came with a name of its own goes into the list straight
+    // away — collecting should not need a second confirmation. The queue
+    // still records it, so it can be taken back out with the row's ×.
+    // Anything unnamed waits here instead; it has nothing to be filed under.
+    const ready = items.filter((it) => it.state ? it.state === 'complete' : !!it.productTitle);
+    if (ready.length) await saveCollectedToList(listId, ready);
+
+    for (const it of items) {
+      const isReady = ready.includes(it);
+      rows.push({
+        id: 'q' + Date.now() + Math.random().toString(36).slice(2, 7),
+        thumb: it.imageUrl || null,
+        title: it.productTitle || null,
+        productUrl: it.productUrl || null,
+        state: it.state === 'pending' ? 'pending' : (isReady ? 'added' : 'failed'),
+        error: it.error || null,
+        addedAt: Date.now()
+      });
+    }
+    await writeQueue(listId, rows);
+  }
+
+  /**
+   * Takes an item back out of a list.
+   *
+   * Matched on its product URL and name, because that is all the queue row
+   * carries. The cloud path would want the product id the API returned, which
+   * is not kept locally yet — so on a signed-in session the row leaves the
+   * queue but the item stays in the cloud list until that id is stored.
+   */
+  async function removeFromList(listId, row) {
+    const key = 'devListItems_' + listId;
+    const items = await new Promise((resolve) => {
+      try { chrome.storage.local.get({ [key]: [] }, (r) => resolve((r && r[key]) || [])); }
+      catch (e) { resolve([]); }
+    });
+
+    let dropped = false;
+    const kept = items.filter((it) => {
+      if (dropped) return true;                 // only the one copy
+      const same = (it.productUrl || null) === (row.productUrl || null)
+        && (it.productTitle || null) === (row.title || null);
+      if (same) { dropped = true; return false; }
+      return true;
+    });
+
+    await new Promise((resolve) => {
+      try { chrome.storage.local.set({ [key]: kept }, resolve); } catch (e) { resolve(); }
+    });
+  }
+
+  /** The number beside the menu entry, for the list in view. */
+  async function refreshQueueCount() {
+    if (!queueCountEl) return;
+    const id = openListId || selectedListId;
+    if (!id) { queueCountEl.textContent = ''; return; }
+    const rows = await readQueue(id);
+    queueCountEl.textContent = rows.length ? ' ' + rows.length : '';
+  }
+
+  function queueStateLabel(row) {
+    if (row.state === 'pending') return 'Identifying…';
+    if (row.state === 'added') return 'Added to list';
+    return row.error === 'No name found on the page' ? "Couldn't identify" : (row.error || "Couldn't identify");
+  }
+
+  async function renderQueue() {
+    if (!queueList) return;
+    const id = openListId || selectedListId;
+    const rows = id ? await readQueue(id) : [];
+
+    queueList.innerHTML = '';
+    if (queueEmpty) queueEmpty.hidden = rows.length > 0;
+
+    const esc = (v) => String(v == null ? '' : v).replace(/[<>&"]/g, (c) => (
+      { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]
+    ));
+
+    for (const row of rows) {
+      const el = document.createElement('div');
+      el.className = 'queue-row is-' + row.state;
+      el.dataset.id = row.id;
+      el.innerHTML = `
+        ${row.thumb ? `<img class="queue-thumb" src="${esc(row.thumb)}" alt="">`
+                    : '<span class="queue-thumb"></span>'}
+        <span class="queue-text">
+          <span class="queue-name">${esc(row.title || 'Unnamed item')}</span>
+          <span class="queue-state">${esc(queueStateLabel(row))}</span>
+        </span>
+        ${row.state === 'added'
+            ? ''
+            : (row.productUrl ? '<button class="queue-retry" data-id="' + esc(row.id) + '">Retry</button>' : '')}
+        <button class="queue-discard" data-id="${esc(row.id)}" aria-label="Remove" title="Remove">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
+          </svg>
+        </button>`;
+      queueList.appendChild(el);
+    }
+    refreshQueueCount();
+  }
+
+  /**
+   * Reads a name out of the product page itself.
+   *
+   * The page the item was framed on is long gone by the time anyone opens the
+   * queue, so the only thing left to ask is the product URL. Parsed the same
+   * way the picker parses a live page — structured data first, then the
+   * page's own title — rather than guessing from the URL.
+   *
+   * @param {string} url
+   * @returns {Promise<string|null>}
+   */
+  async function fetchTitleFor(url) {
+    let html;
+    try {
+      const res = await fetch(url, { credentials: 'omit' });
+      if (!res.ok) return null;
+      html = await res.text();
+    } catch (e) {
+      return null;   // blocked by CORS, offline, or the page is gone
+    }
+
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    for (const node of doc.querySelectorAll('script[type="application/ld+json"]')) {
+      try {
+        const data = JSON.parse(node.textContent);
+        const items = Array.isArray(data) ? data : (data['@graph'] || [data]);
+        for (const it of items) {
+          const t = it && it['@type'];
+          const types = Array.isArray(t) ? t : [t];
+          if ((types.includes('Product') || types.includes('IndividualProduct')) && it.name) {
+            return typeof it.name === 'string' ? it.name : null;
+          }
+        }
+      } catch (e) { /* malformed block — try the next */ }
+    }
+
+    const og = doc.querySelector('meta[property="og:title"]')?.getAttribute('content');
+    if (og && og.trim()) return og.trim();
+
+    const h1 = doc.querySelector('h1')?.textContent;
+    if (h1 && h1.trim()) return h1.trim().replace(/\s+/g, ' ');
+
+    const title = doc.querySelector('title')?.textContent;
+    return title && title.trim() ? title.trim() : null;
+  }
+
+  /** Retry one row: name it, and on success move it into the list. */
+  async function retryQueueRow(rowId, btn) {
+    const id = openListId || selectedListId;
+    if (!id) return;
+
+    const rows = await readQueue(id);
+    const row = rows.find((r) => r.id === rowId);
+    if (!row || !row.productUrl) return;
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Trying…'; }
+    const name = await fetchTitleFor(row.productUrl);
+
+    if (!name) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+      showCollectStatus("Still couldn't read that page.", true);
+      return;
+    }
+
+    // Now that it has a name it is filed, the same as one that arrived with
+    // one, and the row stays as the way to take it back out.
+    await saveCollectedToList(id, [{
+      imageUrl: row.thumb, productUrl: row.productUrl, productTitle: name
+    }]);
+    row.title = name;
+    row.state = 'added';
+    row.error = null;
+    await writeQueue(id, rows);
+    renderQueue();
+    // The list has gained a row, but refreshing it here would also reset the
+    // header to the list's name while the queue is still the screen in view.
+    // closeQueue refreshes instead, on the way back.
+  }
+
+  /**
+   * Throws a row away — and, for one that was filed on arrival, takes it back
+   * out of the list too. The × is the single undo for collecting something by
+   * mistake, so it has to undo the whole of it.
+   */
+  async function discardQueueRow(rowId) {
+    const id = openListId || selectedListId;
+    if (!id) return;
+
+    const rows = await readQueue(id);
+    const row = rows.find((r) => r.id === rowId);
+    if (row && row.state === 'added') await removeFromList(id, row);
+
+    await writeQueue(id, rows.filter((r) => r.id !== rowId));
+    renderQueue();
+  }
+
+  if (queueList) {
+    queueList.addEventListener('click', (e) => {
+      const retry = e.target.closest('.queue-retry');
+      if (retry) { retryQueueRow(retry.dataset.id, retry); return; }
+      const discard = e.target.closest('.queue-discard');
+      if (discard) discardQueueRow(discard.dataset.id);
+    });
+  }
+
+  function closeQueue() {
+    if (!queueView) return;
+    queueView.hidden = true;
+    if (sidebarPanel) sidebarPanel.classList.remove('is-queue');
+    // Anything the queue resolved went into the list, so the list is repainted
+    // on the way out rather than while it is still behind the queue.
+    if (openListId) openList(openListId);
+    else setHeaderTitle(null);
+  }
+
+  async function openQueue() {
+    if (!queueView) return;
+    if (!openListId && !selectedListId) {
+      showCollectStatus('Choose a list first.', true);
+      return;
+    }
+    setMenuOpen(false);
+    const t = document.getElementById('queueTitle');
+    if (t) t.textContent = listNameFor(openListId || selectedListId);
+    await renderQueue();
+    setHeaderTitle('Queue');
+    queueView.hidden = false;
+    if (sidebarPanel) sidebarPanel.classList.add('is-queue');
+  }
+
+  if (queueOpenBtn) queueOpenBtn.addEventListener('click', openQueue);
+
   /* ---------- An opened list ------------------------------------------------
      Tapping a name opens it: the header takes the list's name in place of
      "My Collections", the column of names gives way to that list's items, and
@@ -927,6 +1195,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const empty = document.getElementById('listEmpty');
     if (empty) empty.hidden = items.length > 0;
+    refreshQueueCount();
   }
 
   /** Back out of an opened list to the column of names. */
@@ -1186,18 +1455,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (!stored.length) return;
 
-    const { saved, failed } = await saveCollectedToList(selectedListId, stored);
-
-    if (saved && !failed) {
-      // Cleared only on a clean save — a partial one keeps everything, so
-      // nothing is lost while it is unclear what did and did not land.
-      // The storage listener repaints the tiles when this lands.
-      try { chrome.storage.local.set({ savedProducts: [] }); } catch (e) {}
-    } else if (saved && failed) {
-      showCollectStatus('Saved ' + saved + ', ' + failed + ' failed. Nothing was cleared.', true);
-    } else {
-      showCollectStatus('Could not save. Check you are signed in.', true);
-    }
+    // Everything the aperture collects lands in the list's queue first,
+    // named or not. The queue is where a batch is looked over before it is
+    // kept — each row can be added to the list or thrown away — rather than
+    // items appearing in the list the moment they are framed.
+    await addToQueue(selectedListId, stored);
+    try { chrome.storage.local.set({ savedProducts: [] }); } catch (e) {}
+    refreshQueueCount();
+    if (queueView && !queueView.hidden) renderQueue();
   }
 
 
@@ -1222,6 +1487,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // them, and the menu can be opened over either.
       if (panelMenu && !panelMenu.hidden) {
         setMenuOpen(false);
+        return;
+      }
+
+      if (queueView && !queueView.hidden) {
+        closeQueue();
         return;
       }
 
@@ -1513,6 +1783,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('pagehide', flushNotes);
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (queueView && !queueView.hidden) {
+      closeQueue();
+      return;
+    }
     if (notesView && !notesView.hidden) {
       // Escaping out of creation abandons it — nothing has been made yet.
       // Read the mode before closeNotes resets it.

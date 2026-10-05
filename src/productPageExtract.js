@@ -19,6 +19,9 @@ const ProductPageExtractor = {
     // Attempt to retrieve a site-specific driver (e.g., custom rules per store domain)
     const driver = typeof getActiveDriver === 'function' ? getActiveDriver() : null;
 
+    // Where the name that is about to be returned came from. Reset per call.
+    this.lastTitleSource = null;
+
     // -------------------------------------------------------------
     // LOCAL FIRST — anything near the clicked image beats page-level data
     // -------------------------------------------------------------
@@ -29,7 +32,16 @@ const ProductPageExtractor = {
     // element is therefore tried first, and only genuinely page-level clicks
     // fall through to page-level data.
     const localTitle = this.extractLocalTitle(targetImg, container);
-    if (localTitle) return localTitle;
+    if (localTitle) {
+      this.lastTitleSource = 'item';
+      return localTitle;
+    }
+
+    // Everything past here describes the PAGE, not the thing that was
+    // clicked. Recorded so the caller can tell a name that belongs to the
+    // item from one borrowed off the page around it — on a listing page the
+    // latter is the wrong name for every tile on it.
+    this.lastTitleSource = 'page';
 
     // -------------------------------------------------------------
     // PAGE-LEVEL FALLBACKS (main product of this page)

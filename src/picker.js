@@ -1735,12 +1735,20 @@ class DecidioContentPicker {
     const anchor = node && node.tagName === 'IMG' ? node : el;
     const title = ProductPageExtractor.extractTitle(anchor, container);
 
+    // A name taken off the page rather than off the item is the page's name,
+    // which on a listing is wrong for every tile on it. On a product page it
+    // IS the item's name, so only the listing case counts as unresolved.
+    const driver = typeof getActiveDriver === 'function' ? getActiveDriver() : null;
+    const onProductPage = !!(driver && typeof driver.isProductPage === 'function'
+      && driver.isProductPage());
+    const borrowed = ProductPageExtractor.lastTitleSource === 'page' && !onProductPage;
+
     const link = el.tagName === 'A' ? el : (el.closest('a[href]') || el.querySelector('a[href]'));
     const productUrl = (node && node.tagName === 'IMG')
       ? ProductPageExtractor.extractProductUrl(node, container)
       : (link ? link.href : location.href);
 
-    return { imageUrl: url, productUrl, productTitle: title || null };
+    return { imageUrl: url, productUrl, productTitle: title || null, borrowedTitle: borrowed };
   }
 
   /**
@@ -1896,6 +1904,8 @@ class DecidioContentPicker {
       productUrl: item.productUrl,
       title: item.productTitle,
       brand: null,
+      // True when the only name available described the page, not this item.
+      borrowedTitle: !!item.borrowedTitle,
       state: 'pending',
       error: null
     };
@@ -2055,9 +2065,18 @@ class DecidioContentPicker {
    * @returns {Array<{imageUrl: string|null, productUrl: string|null, productTitle: string|null}>}
    */
   identifiedItems() {
-    return this.queue
-      .filter((q) => q.state === 'complete')
-      .map((q) => ({ imageUrl: q.thumb, productUrl: q.productUrl, productTitle: q.title }));
+    // Everything, with its state — not just the rows that resolved. A row
+    // that failed to identify is still a thing the user framed and meant to
+    // keep; dropping it silently lost work. The panel files the resolved ones
+    // and parks the rest in that list's queue.
+    return this.queue.map((q) => ({
+      imageUrl: q.thumb,
+      productUrl: q.productUrl,
+      productTitle: q.title,
+      brand: q.brand || null,
+      state: q.state,
+      error: q.error || null
+    }));
   }
 
   /**
@@ -2124,7 +2143,16 @@ class DecidioContentPicker {
       // below (see ARIdentifyPage.itemRow).
       entry.brand = title.split(/\s+/)[0] || null;
       entry.title = title;
-      entry.state = 'complete';
+
+      // The page's own name stands in, but the item is not identified by it —
+      // so it goes to the list's queue to be finished, rather than into the
+      // list under the name of the page it happened to be found on.
+      if (entry.borrowedTitle) {
+        entry.state = 'failed';
+        entry.error = 'Named from the page';
+      } else {
+        entry.state = 'complete';
+      }
     } catch (err) {
       entry.state = 'failed';
       entry.error = err.message;

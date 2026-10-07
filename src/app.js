@@ -149,6 +149,18 @@ document.addEventListener('DOMContentLoaded', () => {
      const authWaitlist = document.getElementById('authWaitlist');
      const authWaitlistBtn = document.getElementById('authWaitlistBtn');
      const authWaitlistBack = document.getElementById('authWaitlistBack');
+
+     // Signup only, under everything else: joining the waiting list is what
+     // you do INSTEAD of signing up, so it sits at the end of the form rather
+     // than being somewhere you are sent after failing.
+     const authJoinWaitlistBtn = document.getElementById('authJoinWaitlistBtn');
+     if (authJoinWaitlistBtn) {
+       authJoinWaitlistBtn.addEventListener('click', () => {
+         clearAuthError();
+         showWaitlist();
+         if (authEmail && !authEmail.value.trim()) authEmail.focus();
+       });
+     }
      const authSubmitBtn = document.getElementById('authSubmitBtn');
      const authForgotBtn = document.getElementById('authForgotBtn');
      const authGoogleBtn = document.getElementById('authGoogleBtn');
@@ -249,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
          // flow, so it should read as done.
          const title = document.getElementById('authWaitlistTitle');
          const body = document.getElementById('authWaitlistBody');
-         if (title) title.textContent = "Thanks — you're on the list";
+         if (title) title.textContent = "Thanks, you're on the list";
          if (body) {
            body.textContent = "We'll email " + email + " as soon as a place opens up. "
              + "You can close this and come back with the code.";
@@ -257,15 +269,6 @@ document.addEventListener('DOMContentLoaded', () => {
          authWaitlistBtn.textContent = 'Added';
          authWaitlistBtn.disabled = true;
          if (authWaitlistBack) authWaitlistBack.textContent = 'Back to sign in';
-       });
-     }
-
-     // Direct route to the waiting list, without having to fail a code first.
-     const authNoCodeBtn = document.getElementById('authNoCodeBtn');
-     if (authNoCodeBtn) {
-       authNoCodeBtn.addEventListener('click', () => {
-         if (authError) authError.classList.remove('is-visible');
-         showWaitlist();
        });
      }
 
@@ -281,19 +284,21 @@ document.addEventListener('DOMContentLoaded', () => {
      function setAuthMode(mode) {
        authMode = mode;
        clearAuthError();
-   
+
        if (sidebarPanel) sidebarPanel.classList.toggle('is-signup', mode === 'signup');
-   
+
        if (mode === 'signup') {
          authSubmitBtn.textContent = 'Create account';
          authPassword.setAttribute('autocomplete', 'new-password');
          authSwitchLabel.textContent = 'Already have an account?';
          authSwitchBtn.textContent = 'Sign in';
+         if (authInvite) authInvite.focus();
        } else {
          authSubmitBtn.textContent = 'Sign in';
          authPassword.setAttribute('autocomplete', 'current-password');
          authSwitchLabel.textContent = 'No account?';
          authSwitchBtn.textContent = 'Sign up';
+
        }
      }
    
@@ -525,9 +530,14 @@ document.addEventListener('DOMContentLoaded', () => {
          // DEV_AUTH_BYPASS above for why this cannot fire in a store build.
          // The invite gate is checked before the bypass for signup, so the
          // flow can actually be exercised with the bypass on.
+         // The code is checked before anything is sent. A bad one is an error
+         // on the form rather than a trip to the waiting list — the waiting
+         // list has its own way in at the bottom of the form now, so landing
+         // there by failing is no longer the only route and no longer the
+         // automatic one.
          if (authMode === 'signup' && !isValidInviteCode(authInvite && authInvite.value)) {
            showAuthError('That invitation code was not recognised.');
-           showWaitlist();
+           if (authInvite) authInvite.focus();
            return;
          }
 
@@ -833,6 +843,51 @@ document.addEventListener('DOMContentLoaded', () => {
   // highlight for as long as it is the thing being acted on.
   let pendingCreate = false;
 
+  /* ---------- Recent use ----------------------------------------------------
+     Which lists were opened or added to most recently, so the three freshest
+     can lead My Collections — the app keeps the same thing
+     (UserListsStore.noteListUsed, recentCount). Device-only: it is about how
+     this browser has been used, not about the list itself, so it never goes
+     to the server.
+     ------------------------------------------------------------------------ */
+  const RECENT_COUNT = 3;
+  let recentUse = {};        // { [listId]: timestamp }
+
+  function loadRecentUse() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get({ listRecentUse: {} }, (r) => {
+          recentUse = (r && r.listRecentUse) || {};
+          resolve(recentUse);
+        });
+      } catch (e) { resolve({}); }
+    });
+  }
+
+  /** Marks a list as just used. Opening it or filing into it both count. */
+  function noteListUsed(listId) {
+    if (!listId) return;
+    recentUse[String(listId)] = Date.now();
+    try { chrome.storage.local.set({ listRecentUse: recentUse }); } catch (e) {}
+  }
+
+  /**
+   * Splits the lists into the most recently used and everything else.
+   *
+   * Only lists that have actually been used appear in Recent — before
+   * anything has been opened there is no "recent", and padding it out with
+   * arbitrary lists would say something untrue about them.
+   */
+  function splitByRecency(lists) {
+    const used = lists
+      .filter((l) => recentUse[String(l.id)])
+      .sort((a, b) => recentUse[String(b.id)] - recentUse[String(a.id)]);
+
+    const recent = used.slice(0, RECENT_COUNT);
+    const rest = lists.filter((l) => !recent.includes(l));
+    return { recent, rest };
+  }
+
   /**
    * Renders `availableLists` down the middle of the panel, after the app's own
    * My Collections. Replaced the footer's horizontal strip: that showed one
@@ -849,7 +904,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     host.innerHTML = '';
 
-    availableLists.forEach((list, i) => {
+    // New Collection leads the list, with a + where a number would be — the
+    // app's own My Collections sets it that way, as the first line of the
+    // same column rather than a control parked under it.
+    const add = document.createElement('button');
+    add.className = 'collection-name is-new';
+    add.dataset.value = 'create-new';
+    add.innerHTML = '<span class="collection-num">+</span>'
+      + '<span class="collection-label">New Collection</span>';
+    host.appendChild(add);
+
+    // Numbers run down the whole column rather than restarting per section,
+    // so a list's number is its position in My Collections however it is
+    // grouped.
+    let n = 0;
+    const row = (list) => {
+      n += 1;
       const btn = document.createElement('button');
       btn.className = 'collection-name';
       btn.dataset.value = list.id;
@@ -857,11 +927,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.add('is-selected');
       }
 
-      // "01." "02." — the numbered index the app's own My Collections sets
+      // "01" "02" — the numbered index the app's own My Collections sets
       // beside each name.
       const num = document.createElement('span');
       num.className = 'collection-num';
-      num.textContent = String(i + 1).padStart(2, '0') + '.';
+      num.textContent = String(n).padStart(2, '0');
 
       const label = document.createElement('span');
       label.className = 'collection-label';
@@ -870,16 +940,29 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.appendChild(num);
       btn.appendChild(label);
       host.appendChild(btn);
-    });
+    };
 
-    const add = document.createElement('button');
-    add.className = 'collection-name is-new';
-    add.dataset.value = 'create-new';
-    // Kept in the same two-column shape as the rows above, with the number
-    // slot empty, so every label starts on one line down the left.
-    add.innerHTML = '<span class="collection-num"></span>'
-      + '<span class="collection-label">New list</span>';
-    host.appendChild(add);
+    const heading = (text) => {
+      const h = document.createElement('div');
+      h.className = 'collections-heading';
+      h.textContent = text;
+      host.appendChild(h);
+    };
+
+    const { recent, rest } = splitByRecency(availableLists);
+
+    // Sections only once there is something to put in both — one heading over
+    // the whole column, or a Recent containing everything, says nothing.
+    if (recent.length && rest.length) {
+      heading('Recent');
+      recent.forEach(row);
+      heading('All');
+      rest.forEach(row);
+    } else {
+      availableLists.forEach(row);
+    }
+
+
   }
 
   // Kept under its old name so the many call sites that just mean "repaint the
@@ -973,52 +1056,137 @@ document.addEventListener('DOMContentLoaded', () => {
   /** The number beside the menu entry, for the list in view. */
   async function refreshQueueCount() {
     if (!queueCountEl) return;
-    const id = openListId || selectedListId;
-    if (!id) { queueCountEl.textContent = ''; return; }
-    const rows = await readQueue(id);
-    queueCountEl.textContent = rows.length ? ' ' + rows.length : '';
+    const groups = await readAllQueues();
+    const total = groups.reduce((n, g) => n + g.rows.length, 0);
+    queueCountEl.textContent = total ? ' ' + total : '';
   }
 
+  /**
+   * The value half of a queue row. An added row says nothing here — it carries
+   * the up arrow beside its × instead, where the row's other controls are.
+   */
   function queueStateLabel(row) {
     if (row.state === 'pending') return 'Identifying…';
-    if (row.state === 'added') return 'Added to list';
+    if (row.state === 'added') return '';
     return row.error === 'No name found on the page' ? "Couldn't identify" : (row.error || "Couldn't identify");
+  }
+
+  /**
+   * Every list's queue, newest list first in the order My Collections shows.
+   *
+   * The queue is reached from the menu, which is not inside any one list, so
+   * it shows the lot — otherwise what is waiting elsewhere is invisible until
+   * you happen to open that list.
+   *
+   * @returns {Promise<Array<{list: Object, rows: Array}>>}
+   */
+  async function readAllQueues() {
+    const out = [];
+    for (const list of availableLists) {
+      const rows = await readQueue(list.id);
+      if (rows.length) out.push({ list, rows });
+    }
+    return out;
   }
 
   async function renderQueue() {
     if (!queueList) return;
-    const id = openListId || selectedListId;
-    const rows = id ? await readQueue(id) : [];
+
+    const groups = await readAllQueues();
+    const total = groups.reduce((n, g) => n + g.rows.length, 0);
 
     queueList.innerHTML = '';
-    if (queueEmpty) queueEmpty.hidden = rows.length > 0;
+    if (queueEmpty) queueEmpty.hidden = total > 0;
 
     const esc = (v) => String(v == null ? '' : v).replace(/[<>&"]/g, (c) => (
       { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]
     ));
 
-    for (const row of rows) {
-      const el = document.createElement('div');
-      el.className = 'queue-row is-' + row.state;
-      el.dataset.id = row.id;
-      el.innerHTML = `
-        ${row.thumb ? `<img class="queue-thumb" src="${esc(row.thumb)}" alt="">`
-                    : '<span class="queue-thumb"></span>'}
-        <span class="queue-text">
-          <span class="queue-name">${esc(row.title || 'Unnamed item')}</span>
-          <span class="queue-state">${esc(queueStateLabel(row))}</span>
-        </span>
-        ${row.state === 'added'
-            ? ''
-            : (row.productUrl ? '<button class="queue-retry" data-id="' + esc(row.id) + '">Retry</button>' : '')}
-        <button class="queue-discard" data-id="${esc(row.id)}" aria-label="Remove" title="Remove">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
-          </svg>
-        </button>`;
-      queueList.appendChild(el);
+    for (const { list, rows } of groups) {
+      // The list a row belongs to is named once, over its rows, rather than
+      // repeated on each of them.
+      const head = document.createElement('div');
+      head.className = 'queue-group';
+      head.textContent = list.name || 'Untitled list';
+      queueList.appendChild(head);
+
+      for (const row of rows) {
+        const el = document.createElement('div');
+        el.className = 'queue-row is-' + row.state;
+        el.dataset.id = row.id;
+        el.dataset.list = list.id;
+        el.innerHTML = `
+          ${row.thumb ? `<img class="queue-thumb" src="${esc(row.thumb)}" alt="">`
+                      : '<span class="queue-thumb"></span>'}
+          <span class="queue-text">
+            <span class="queue-name">${esc(row.title || 'Unnamed item')}</span>
+            <span class="queue-state">${esc(queueStateLabel(row))}</span>
+          </span>
+          ${row.state === 'added'
+              ? ''
+              : (row.productUrl ? '<button class="queue-retry" data-id="' + esc(row.id) + '">Retry</button>' : '')}
+          <button class="queue-discard" data-id="${esc(row.id)}" aria-label="Remove" title="Remove">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
+            </svg>
+          </button>
+          <!-- Last on the row, pointing right: it sends the item onward to a
+               list, so it reads as the way out of the queue. -->
+          <button class="queue-move" data-id="${esc(row.id)}"
+                  aria-label="Send to a list" title="Send to a list">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <line x1="3" y1="12" x2="20" y2="12"/>
+              <polyline points="13,5 20,12 13,19"/>
+            </svg>
+          </button>`;
+        queueList.appendChild(el);
+
+        // The other lists, under the row, shown when Move is pressed. Built
+        // with the row rather than on demand so pressing Move is instant.
+        const picker = document.createElement('div');
+        picker.className = 'queue-destinations';
+        picker.dataset.for = row.id;
+        picker.hidden = true;
+        picker.innerHTML = availableLists
+          .filter((l) => String(l.id) !== String(list.id))
+          .map((l) => `<button class="queue-destination" data-id="${esc(row.id)}"
+                               data-from="${esc(list.id)}" data-to="${esc(l.id)}">${
+                        esc(l.name || 'Untitled list')}</button>`)
+          .join('') || '<span class="queue-no-destination">No other lists yet</span>';
+        queueList.appendChild(picker);
+      }
     }
+
     refreshQueueCount();
+  }
+
+  /**
+   * Moves one queued item to another list.
+   *
+   * A row that was already filed moves in the list too, not just in the
+   * queue — it is one item in two places, and leaving it in the old list
+   * would make the move a lie.
+   */
+  async function moveQueueRow(rowId, fromId, toId) {
+    const rows = await readQueue(fromId);
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) return;
+
+    if (row.state === 'added') {
+      await removeFromList(fromId, row);
+      await saveCollectedToList(toId, [{
+        imageUrl: row.thumb, productUrl: row.productUrl, productTitle: row.title
+      }]);
+    }
+
+    await writeQueue(fromId, rows.filter((r) => r.id !== rowId));
+    const target = await readQueue(toId);
+    target.push(row);
+    await writeQueue(toId, target);
+
+    noteListUsed(toId);
+    renderQueue();
+    if (openListId) openList(openListId);
   }
 
   /**
@@ -1069,8 +1237,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /** Retry one row: name it, and on success move it into the list. */
-  async function retryQueueRow(rowId, btn) {
-    const id = openListId || selectedListId;
+  async function retryQueueRow(rowId, btn, listId) {
+    const id = listId || openListId || selectedListId;
     if (!id) return;
 
     const rows = await readQueue(id);
@@ -1106,8 +1274,8 @@ document.addEventListener('DOMContentLoaded', () => {
    * out of the list too. The × is the single undo for collecting something by
    * mistake, so it has to undo the whole of it.
    */
-  async function discardQueueRow(rowId) {
-    const id = openListId || selectedListId;
+  async function discardQueueRow(rowId, listId) {
+    const id = listId || openListId || selectedListId;
     if (!id) return;
 
     const rows = await readQueue(id);
@@ -1120,10 +1288,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (queueList) {
     queueList.addEventListener('click', (e) => {
+      // Rows now come from every list, so which list a control acts on is
+      // read off the row rather than assumed to be the one in view.
+      const row = e.target.closest('.queue-row');
+      const listId = row && row.dataset.list;
+
       const retry = e.target.closest('.queue-retry');
-      if (retry) { retryQueueRow(retry.dataset.id, retry); return; }
+      if (retry) { retryQueueRow(retry.dataset.id, retry, listId); return; }
+
+      const move = e.target.closest('.queue-move');
+      if (move) {
+        const picker = queueList.querySelector(
+          `.queue-destinations[data-for="${CSS.escape(move.dataset.id)}"]`);
+        if (picker) {
+          const opening = picker.hidden;
+          // One open at a time: two lists of destinations on screen at once
+          // makes it unclear which row is being moved.
+          queueList.querySelectorAll('.queue-destinations').forEach((p) => { p.hidden = true; });
+          picker.hidden = !opening;
+        }
+        return;
+      }
+
+      const dest = e.target.closest('.queue-destination');
+      if (dest) { moveQueueRow(dest.dataset.id, dest.dataset.from, dest.dataset.to); return; }
+
       const discard = e.target.closest('.queue-discard');
-      if (discard) discardQueueRow(discard.dataset.id);
+      if (discard) discardQueueRow(discard.dataset.id, listId);
     });
   }
 
@@ -1139,13 +1330,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function openQueue() {
     if (!queueView) return;
-    if (!openListId && !selectedListId) {
-      showCollectStatus('Choose a list first.', true);
-      return;
-    }
     setMenuOpen(false);
     const t = document.getElementById('queueTitle');
-    if (t) t.textContent = listNameFor(openListId || selectedListId);
+    if (t) t.textContent = 'Waiting across your collections';
     await renderQueue();
     setHeaderTitle('Queue');
     queueView.hidden = false;
@@ -1180,6 +1367,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!listId) return;
     openListId = listId;
     selectedListId = listId;
+    noteListUsed(listId);
 
     setHeaderTitle(listNameFor(listId));
     if (sidebarPanel) sidebarPanel.classList.add('is-in-list');
@@ -1276,21 +1464,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /**
-   * The list every account starts with, so the dropdown is never empty and
-   * something can be collected into it before any list has been made.
-   */
-  const DEFAULT_LIST = { id: 'default', name: 'My Collection' };
-
-  /** Prepends the default list unless a list by that name already exists. */
-  function withDefaultList(lists) {
-    const has = lists.some((l) => (l.name || '').toLowerCase() === DEFAULT_LIST.name.toLowerCase());
-    return has ? lists : [DEFAULT_LIST, ...lists];
-  }
+  /* There is no default list any more. One was invented client-side so the
+     panel was never empty, but it existed nowhere else — not on the server,
+     not in the app — and it sat at the top of My Collections as a list nobody
+     had made. An account with no lists now shows none, and New list is the
+     way to get the first one. */
 
   async function loadLists() {
+    // Read before the first paint, or the opening render has no recency to
+    // group by and the sections appear a moment later.
+    await loadRecentUse();
+
     if (usingDevSession()) {
-      availableLists = withDefaultList(await readDevLists());
+      availableLists = await readDevLists();
       renderListBar();
       selectDefaultListIfNone();
       return;
@@ -1299,38 +1485,26 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await apiRequest('/api/lists');
       // The endpoint has been seen returning both a bare array and a wrapper;
       // accept either rather than depending on which.
-      availableLists = withDefaultList(
-        Array.isArray(data) ? data : (data?.lists || data?.items || []));
+      availableLists = Array.isArray(data) ? data : (data?.lists || data?.items || []);
       renderListBar();
       selectDefaultListIfNone();
     } catch (err) {
       // Not surfaced as an error banner: this fires on every panel open,
       // including when signed out. The default still stands so the section is
       // usable rather than blank.
-      availableLists = withDefaultList([]);
+      availableLists = [];
       renderListBar();
       selectDefaultListIfNone();
     }
   }
 
   /**
-   * Preselects "My Collection" so the plus works without picking a list first,
-   * and so the bar opens with a real name centred.
-   *
-   * Matched by NAME rather than by DEFAULT_LIST.id: when the backend returns a
-   * list already called "My Collection", withDefaultList keeps the server's
-   * copy and its own id, so the hardcoded 'default' id matched no button at
-   * all — nothing carried .is-selected, and the strip sat at scroll 0, which
-   * left "New List" sitting in the centre instead.
+   * Preselects the first list, so collecting works without picking one first.
+   * With no lists at all nothing is selected and the aperture says so.
    */
   function selectDefaultListIfNone() {
     if (selectedListId) return;
-
-    const preferred =
-      availableLists.find((l) => (l.name || '').toLowerCase() === DEFAULT_LIST.name.toLowerCase()) ||
-      availableLists[0];
-
-    if (preferred) selectedListId = preferred.id;
+    if (availableLists[0]) selectedListId = availableLists[0].id;
     renderListBar();
   }
 
@@ -1459,6 +1633,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // named or not. The queue is where a batch is looked over before it is
     // kept — each row can be added to the list or thrown away — rather than
     // items appearing in the list the moment they are framed.
+    noteListUsed(selectedListId);
     await addToQueue(selectedListId, stored);
     try { chrome.storage.local.set({ savedProducts: [] }); } catch (e) {}
     refreshQueueCount();
@@ -1467,7 +1642,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-  loadLists();
+  // The count has to be right before anything is opened, or the menu shows no
+  // queue until you happen to visit a list.
+  loadLists().then(refreshQueueCount);
 
   // Multi-select is always on; single/multi toggle removed
 

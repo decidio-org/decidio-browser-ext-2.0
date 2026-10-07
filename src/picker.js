@@ -140,6 +140,16 @@ class DecidioContentPicker {
 
     const style = document.createElement('style');
     style.textContent = `
+      /* Nothing in the overlay is text to read or copy — it is all controls
+         and labels on them. Without this, a click or a small drag on the
+         collected column or the footer selects its words, and the browser's
+         selection highlight over white type is unreadable. Set on the root so
+         it covers every part of the overlay, present and future. */
+      :host, :host * {
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
       .decidio-overlay {
         position: fixed;
         top: 0; 
@@ -181,46 +191,77 @@ class DecidioContentPicker {
       /* Inert while hovering so the hit-test underneath still sees the page;
          grabbable once frozen, when the box becomes the thing being handled. */
       .decidio-highlight-box.is-frozen {
-        pointer-events: auto;
-        /* 'copy' rather than 'move': clicking the box collects it, which is
-           the primary action now. Dragging it still moves it. */
-        cursor: copy;
+        pointer-events: none;      /* only the confirm button takes clicks */
         transition: none;
       }
 
-      /* Corner brackets — the AR view's CornerBracket, redrawn in CSS: 26x26,
-         4px stroke, rounded caps, Decidio Purple (#803065). Each is an L made
-         from two borders of a corner-anchored box, so it scales with nothing
-         and never distorts. Offset by -2px so the bracket sits over the white
-         stroke rather than inside it. */
-      .decidio-corner {
+      /* The confirm, in the middle of what is highlighted. A check in a ring,
+         at the footer's weight, and nothing else — no label, no plate. It is
+         the second click: the first highlights, this one keeps it. */
+      /* The button fills the highlight and shows the check at its centre.
+         A 56px target in the middle of a product photo is a small thing to
+         hit — the second click of a double-click lands wherever the first
+         one did, which is rarely dead centre — so the whole of what you
+         highlighted confirms it, and the check is what that target looks
+         like rather than the only part of it that works. */
+      .decidio-confirm {
         position: absolute;
-        width: 26px;
-        height: 26px;
-        border: 4px solid #803065;
-        border-radius: 3px;
-        pointer-events: none;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        margin: 0;
+        border: none;
+        background: none;
+        cursor: pointer;
+        line-height: 0;
       }
-      /* ARSelectionBox pads each 26pt bracket out to a 44pt touch target; the
-         same padding here via a transparent box drawn around the bracket. */
-      .decidio-highlight-box.is-frozen .decidio-corner {
+      .decidio-highlight-box.is-frozen .decidio-confirm {
+        display: flex;
         pointer-events: auto;
-        box-sizing: content-box;
-        padding: 9px;
-        margin: -9px;
       }
-      .decidio-highlight-box.is-frozen .decidio-corner.tl { cursor: nwse-resize; }
-      .decidio-highlight-box.is-frozen .decidio-corner.br { cursor: nwse-resize; }
-      .decidio-highlight-box.is-frozen .decidio-corner.tr { cursor: nesw-resize; }
-      .decidio-highlight-box.is-frozen .decidio-corner.bl { cursor: nesw-resize; }
-      .decidio-corner.tl { top: -2px; left: -2px;  border-right: none; border-bottom: none;
-                           border-top-left-radius: 12px; }
-      .decidio-corner.tr { top: -2px; right: -2px; border-left: none;  border-bottom: none;
-                           border-top-right-radius: 12px; }
-      .decidio-corner.bl { bottom: -2px; left: -2px;  border-right: none; border-top: none;
-                           border-bottom-left-radius: 12px; }
-      .decidio-corner.br { bottom: -2px; right: -2px; border-left: none;  border-top: none;
-                           border-bottom-right-radius: 12px; }
+      /* A filled disc, not an outline: a white hairline ring vanished against
+         a pale product photo, which is most of them. The disc carries its own
+         contrast whatever is behind it, and the check is drawn in Decidio
+         Purple on it. */
+      .decidio-confirm svg {
+        width: 64px;
+        height: 64px;
+        transition: transform 120ms ease;
+        filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.45));
+      }
+      .decidio-confirm svg circle {
+        fill: #ffffff;
+        stroke: none;
+      }
+      .decidio-confirm svg polyline {
+        fill: none;
+        stroke: #803065;              /* Decidio Purple */
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .decidio-confirm:hover svg { transform: scale(1.1); }
+      .decidio-confirm:active svg { transform: scale(0.95); }
+
+      /* ------------------------------------------------------------------
+         CROP — NOT SHIPPED
+         ------------------------------------------------------------------
+         The purple corner brackets and the drag-to-resize crop box that used
+         to live here are gone. A selection is now the highlight alone, and
+         what gets collected is the whole thing that was highlighted.
+
+         TODO (future work): bring the crop back as a Decidio Premium feature.
+         The machinery is still in this file and still correct — beginDrag,
+         applyDrag, handleDragMove, handleDragEnd, cropGeometry, drawCrop and
+         captureCrop all take a box and crop to it, and commitBoxSelection
+         already crops whenever this.box is tighter than the subject. What was
+         removed is only the chrome that let a box be dragged: four corner
+         brackets appended to the highlight box, each wired to
+         beginDrag(e, corner), plus a move handler on the box itself. Restore
+         those behind the entitlement check and the rest works as it did.
+         ------------------------------------------------------------------ */
       .decidio-hover-badge {
         position: fixed;
         top: 0;
@@ -337,33 +378,15 @@ class DecidioContentPicker {
         align-items: center;
         justify-content: center;
         padding-top: 20px;
+        /* The 40px aperture used to set this row's height. With it gone the
+           bar collapsed onto the two labels and sat hard against the bottom
+           edge, so the height it was giving is now stated. */
+        min-height: 44px;
       }
-      /* camera.aperture, 40pt white — matching the panel's own Collect
-         control. The app's AR footer uses plus.circle here; the aperture is
-         carried across from the panel so one symbol means "collect" on both
-         surfaces. */
-      .decidio-ar-plus {
-        background: none;
-        border: none;
-        padding: 0;
-        cursor: pointer;
-        opacity: 0.4;
-        transition: opacity 0.2s ease;
-      }
-      .decidio-ar-plus svg {
-        width: 40px;
-        height: 40px;
-        stroke: #ffffff;
-        stroke-width: 1.8;
-        stroke-linecap: round;
-        fill: none;
-      }
-      /* The blades step down from the ring, or they close the hexagon in the
-         middle at the ring's own weight. */
-      .decidio-ar-plus svg line { stroke-width: 1.3; }
-      /* Only live once a box is frozen — there is nothing to add before that. */
-      .decidio-ar-footer.is-frozen .decidio-ar-plus { opacity: 1; }
-
+      /* The footer's aperture is gone. It added whatever was framed, which is
+         now the check in the middle of the highlight itself — one control for
+         one action, and in the place the action is happening rather than at
+         the bottom of the screen. The footer is Collected and Done. */
       .decidio-ar-done {
         position: absolute;
         right: 20px;
@@ -389,7 +412,9 @@ class DecidioContentPicker {
          -------------------------------------------------------------------- */
       .decidio-ar-rail {
         position: fixed;
-        left: 26px;
+        /* On the right, where the panel lives — the page's own content tends
+           to start at the left margin, so the column sat over it there. */
+        right: 26px;
         top: 88px;
         bottom: 128px;
         z-index: 2147483647;
@@ -431,7 +456,7 @@ class DecidioContentPicker {
         content: '';
         position: absolute;
         left: 0;
-        right: 72px;
+        right: 34px;
         bottom: 0;
         height: 0.75px;
         background: rgba(255, 255, 255, 0.22);
@@ -451,6 +476,28 @@ class DecidioContentPicker {
         padding: 11px 0;
         position: relative;
       }
+      /* Take an item back out before the batch is ever saved. A ringed ×, as
+         the app draws its circled glyphs, so it reads as a control rather
+         than as a stray mark on the row. */
+      .decidio-ar-rail-remove {
+        flex: 0 0 auto;
+        margin-left: auto;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        line-height: 0;
+        pointer-events: auto;
+      }
+      .decidio-ar-rail-remove svg {
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.7);
+        stroke-width: 1.8;
+        stroke-linecap: round;
+      }
+      .decidio-ar-rail-remove:hover svg { stroke: #ffffff; }
       .decidio-ar-rail-row:last-child::after { display: none; }
       .decidio-ar-rail-thumb {
         /* The Collected page's own 70x50 thumbnail. */
@@ -488,7 +535,14 @@ class DecidioContentPicker {
       }
       /* The Collected page is the full-size version of this list, so the rail
          stands down while that page is up rather than doubling it. */
-      .decidio-ar-rail.is-hidden { opacity: 0; }
+      /* visibility, not just opacity: .is-yielding below sets its own opacity
+         at the same specificity and later in the sheet, so on its own an
+         opacity rule here lost and the column stayed faintly on screen over
+         the Collected page. */
+      .decidio-ar-rail.is-hidden {
+        opacity: 0;
+        visibility: hidden;
+      }
       /* And it clears out of the way of whatever is being framed behind it,
          rather than sitting over the picture. Dropped to a trace instead of
          to nothing, so it is clear it has moved aside and not vanished. */
@@ -726,21 +780,18 @@ class DecidioContentPicker {
     // Target highlight outline frame
     this.highlightBox = document.createElement('div');
     this.highlightBox.className = 'decidio-highlight-box';
-    // Four corner brackets, as ARSelectionBox draws. Children of the box so
-    // they follow it for free when updateHighlight moves/resizes it — no extra
-    // positioning work on the hot path.
-    ['tl', 'tr', 'bl', 'br'].forEach((corner) => {
-      const bracket = document.createElement('div');
-      bracket.className = `decidio-corner ${corner}`;
-      bracket.addEventListener('mousedown', (e) => this.beginDrag(e, corner));
-      this.highlightBox.appendChild(bracket);
-    });
-    // Anywhere else on the box moves it whole, as ARSelectionBox's moveGesture
-    // does on its stroked rectangle.
-    this.highlightBox.addEventListener('mousedown', (e) => {
-      if (e.target.classList.contains('decidio-corner')) return;
-      this.beginDrag(e, 'move');
-    });
+    // No corner brackets and no drag handles: cropping is held back for
+    // Premium (see the CROP note in the stylesheet above). The confirm button
+    // sits in the middle of the highlight instead.
+    this.confirmBtn = document.createElement('button');
+    this.confirmBtn.className = 'decidio-confirm';
+    this.confirmBtn.setAttribute('aria-label', 'Add to list');
+    this.confirmBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.25"/>
+        <polyline points="7.6,12.2 10.7,15.3 16.4,8.9"/>
+      </svg>`;
+    this.highlightBox.appendChild(this.confirmBtn);
     this.shadowRoot.appendChild(this.highlightBox);
 
     // Mouse-following badge indicator
@@ -767,17 +818,6 @@ class DecidioContentPicker {
           <button class="decidio-ar-identify" id="decidio-identify">
             Collected<span class="decidio-ar-count" id="decidio-count"></span>
           </button>
-          <button class="decidio-ar-plus" id="decidio-plus" aria-label="Add to list">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="9.25"/>
-              <line x1="12.00" y1="7.10"  x2="21.24" y2="12.43"/>
-              <line x1="16.24" y1="9.55"  x2="16.24" y2="20.22"/>
-              <line x1="16.24" y1="14.45" x2="7.00"  y2="19.78"/>
-              <line x1="12.00" y1="16.90" x2="2.76"  y2="11.57"/>
-              <line x1="7.76"  y1="14.45" x2="7.76"  y2="3.78"/>
-              <line x1="7.76"  y1="9.55"  x2="17.00" y2="4.22"/>
-            </svg>
-          </button>
           <button class="decidio-ar-done" id="decidio-done">Done</button>
         </div>
       `;
@@ -788,7 +828,6 @@ class DecidioContentPicker {
         e.stopPropagation();
         e.preventDefault();
 
-        if (e.target.closest('#decidio-plus')) this.commitBoxSelection();
         if (e.target.closest('#decidio-done')) this.finishBatchSelection();
         if (e.target.closest('#decidio-identify')) this.toggleIdentify();
       }, true);
@@ -798,6 +837,16 @@ class DecidioContentPicker {
       // The collected rail, in the left margin beside the live selection.
       this.rail = document.createElement('div');
       this.rail.className = 'decidio-ar-rail';
+      // The column is pointer-events: none so it never swallows a selection;
+      // the remove controls opt back in, and their clicks must not reach the
+      // page behind them.
+      this.rail.addEventListener('click', (e) => {
+        const btn = e.target.closest('.decidio-ar-rail-remove');
+        if (!btn) return;
+        e.stopPropagation();
+        e.preventDefault();
+        this.removeFromQueue(Number(btn.dataset.id));
+      }, true);
       this.shadowRoot.appendChild(this.rail);
       this.renderRail();
 
@@ -965,15 +1014,38 @@ class DecidioContentPicker {
    * @param {number} x - Viewport X coordinate.
    * @param {number} y - Viewport Y coordinate.
    */
+  /**
+   * Whether a point is over the collected column.
+   *
+   * Measured rather than hit-tested: the column is pointer-events: none so it
+   * never swallows a selection, which also means elementFromPoint looks
+   * straight through it and reports the page behind. Without this, running
+   * the cursor over the column highlighted whatever happened to be underneath
+   * it and a click there picked that up.
+   *
+   * @param {number} x
+   * @param {number} y
+   * @returns {boolean}
+   */
+  isOverRail(x, y) {
+    if (!this.rail || this.rail.classList.contains('is-hidden')) return false;
+    if (!this.rail.querySelector('.decidio-ar-rail-row')) return false;   // empty
+    const r = this.rail.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
   checkElementAtCursor(x, y) {
     // A locked selection owns the box until it is collected or dismissed —
     // tracking the cursor here would drag the highlight off the thing the user
     // is in the middle of adjusting.
     if (this.isFrozen) return;
 
-    // Ignore hovering over picker's own multi-selection UI pill
+    // Ignore hovering over picker's own multi-selection UI pill, or over the
+    // collected column — both are chrome, and neither should put a highlight
+    // round the page behind them.
     const shadowTarget = this.shadowRoot ? this.shadowRoot.elementFromPoint(x, y) : null;
-    if (shadowTarget && shadowTarget.closest('.decidio-ar-footer')) {
+    if ((shadowTarget && shadowTarget.closest('.decidio-ar-footer')) || this.isOverRail(x, y)) {
       this.currentTarget = null;
       this.updateHighlight(null);
       return;
@@ -1214,10 +1286,26 @@ class DecidioContentPicker {
     );
 
     const shadowTarget = this.shadowRoot ? this.shadowRoot.elementFromPoint(e.clientX, e.clientY) : null;
-    const clickedShadowUI = shadowTarget && shadowTarget.closest('.decidio-ar-footer');
+    const clickedShadowUI = shadowTarget &&
+      (shadowTarget.closest('.decidio-ar-footer') || shadowTarget.closest('.decidio-ar-rail'));
 
-    // Ignore click events originating on multi-selection UI controls
+    // Ignore click events originating on multi-selection UI controls. The
+    // collected column is listed too: its × has its own handler, and the
+    // stopPropagation below would otherwise swallow the click before the
+    // column ever saw it. isOverRail covers the rest of the column, which is
+    // pointer-events: none and so invisible to the hit test above.
     if (clickedInsidePill || clickedShadowUI) return;
+
+    // Over the collected column, but not on one of its own controls. The
+    // column is pointer-events: none, so without this the click goes straight
+    // through to the page — on a card that is a link, that navigates away and
+    // takes the whole picker with it. Default prevented, but NOT propagation:
+    // the column's own × listener sits below this one and still needs the
+    // event.
+    if (this.isOverRail(e.clientX, e.clientY)) {
+      e.preventDefault();
+      return;
+    }
 
     e.preventDefault();
     e.stopPropagation();
@@ -1237,11 +1325,11 @@ class DecidioContentPicker {
       const y = e.clientY + window.scrollY;
       const inside = x >= this.box.x && x <= this.box.x + this.box.w &&
                      y >= this.box.y && y <= this.box.y + this.box.h;
-      // Clicking the box you already framed collects it, so the common case
-      // never leaves the selection: click to frame, click again to keep. A
-      // drag that resized it came through justDragged above and never gets
-      // here, so adjusting still costs nothing. The footer plus and Enter do
-      // the same thing for anyone who reaches for them.
+      // The commit runs here rather than on the check's own listener. This is
+      // a CAPTURE listener on window and it calls stopPropagation above, so a
+      // click on the check never reached the button at all — the check looked
+      // dead. It is the face of the target, not the handler for it: the whole
+      // highlight commits, and a click outside drops it.
       if (inside) this.commitBoxSelection();
       else this.releaseSelection();
       return;
@@ -1662,7 +1750,11 @@ class DecidioContentPicker {
     // beneath. The footer matters most: it covers the bottom of the viewport,
     // so a box overlapping it lost those samples entirely and could resolve to
     // nothing at all. Stand the whole overlay down for the duration of the scan.
-    const interactive = [this.highlightBox, this.footer].filter(Boolean);
+    // confirmBtn is listed separately: it sets pointer-events: auto in CSS,
+    // and a child's own value is not overridden by standing its parent down.
+    // Left in, it covers the whole highlight and every sample resolved to the
+    // button instead of the page — the item came back named after the page.
+    const interactive = [this.highlightBox, this.confirmBtn, this.footer].filter(Boolean);
     const saved = interactive.map((el) => el.style.pointerEvents);
     interactive.forEach((el) => { el.style.pointerEvents = 'none'; });
 
@@ -1918,6 +2010,20 @@ class DecidioContentPicker {
   }
 
   /**
+   * Drops one row from the collected queue, before any of it is saved.
+   *
+   * @param {number} id - the row's queue id.
+   */
+  removeFromQueue(id) {
+    const before = this.queue.length;
+    this.queue = this.queue.filter((q) => q.id !== id);
+    if (this.queue.length === before) return;
+    this.renderIdentify();
+    this.renderRail();
+    this.updateFooterState();
+  }
+
+  /**
    * Stands the collected column down while what you are pointing at is behind
    * it.
    *
@@ -1939,15 +2045,18 @@ class DecidioContentPicker {
       a.left < r.right && a.left + a.width > r.left &&
       a.top < r.bottom && a.top + a.height > r.top;
 
-    // The cursor counts on its own, not only the thing under it. Hit-testing
-    // intermittently resolves to nothing — the pointer lands on a gap in a
-    // card, or on the overlay's own chrome — and deciding from the target
-    // alone let the column snap back over a picture the user was still on.
+    // Pointing AT the column brings it fully back rather than fading it: that
+    // is when its × is being reached for, and a column at 12% cannot be
+    // clicked on purpose. It only stands down for a target behind it that the
+    // cursor is somewhere else on.
     const cursorInside =
       this.lastMouseX >= r.left && this.lastMouseX <= r.right &&
       this.lastMouseY >= r.top && this.lastMouseY <= r.bottom;
 
-    this.rail.classList.toggle('is-yielding', cursorInside || hits(rect));
+    // Nothing to get out of the way of while the Collected page is covering
+    // the screen — and nothing to put back when it closes, either.
+    this.rail.classList.toggle('is-yielding',
+      !this.identifyOpen && !cursorInside && hits(rect));
   }
 
   /**
@@ -1984,6 +2093,14 @@ class DecidioContentPicker {
           <span class="decidio-ar-rail-text">${brand}
             <span class="decidio-ar-rail-name">${name}</span>
           </span>
+          <button class="decidio-ar-rail-remove" data-id="${q.id}"
+                  aria-label="Remove" title="Remove">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9.25"/>
+              <line x1="8.8" y1="8.8" x2="15.2" y2="15.2"/>
+              <line x1="15.2" y1="8.8" x2="8.8" y2="15.2"/>
+            </svg>
+          </button>
         </div>`;
     }).join('');
 

@@ -137,7 +137,10 @@
     font-weight: 900;
     font-size: 44px;
     line-height: 0.9;
-    letter-spacing: -0.02em;
+    /* Opened up from the -0.02em the rest of the display type carries. At 44px
+       Neue Haas Black the default tracking closes the counters up, and this is
+       the one place a headline is set large enough for it to show. */
+    letter-spacing: 0.01em;
     color: #FFFFFF;
     text-align: left;
     margin: 22px 0 22px 0;
@@ -292,7 +295,10 @@
     font-family: "NHaasGroteskDSStd", sans-serif;
     font-weight: 700;
     font-size: 40px;
-    letter-spacing: -0.01em;
+    /* Set like the sign-in headline — same tracking, same leading — so the
+       header reads as the same type on both screens. */
+    letter-spacing: 0.01em;
+    line-height: 0.9;
     color: #FFFFFF;
 }
 .decidio-sidebar:not(.is-auth) .brand-logo .blue-dot {
@@ -1358,9 +1364,16 @@
     flex-direction: column;
     padding: 16px 20px 150px;
     overflow-y: auto;
+    overflow-x: hidden;
+    /* The browser's own bar is a pale strip down the purple, hard against the
+       panel's rounded edge. Hidden, as every other scroller in the extension
+       hides its own; the screen is short and the rows plainly continue. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     background: var(--decidio-purple);
     border-top: none;
 }
+.decidio-sidebar:not(.is-auth) .queue-view::-webkit-scrollbar { width: 0; height: 0; }
 .decidio-sidebar:not(.is-auth) .queue-view[hidden] { display: none; }
 .decidio-sidebar:not(.is-auth) .queue-view:not([hidden]) ~ .sidebar-footer {
     position: relative;
@@ -1380,6 +1393,69 @@
     color: #FFFFFF;
     opacity: 0.72;
     margin-bottom: 14px;
+}
+
+/* The list a group of rows belongs to. Quiet, since the rows under it are
+   the content and this is only saying where they live. */
+.decidio-sidebar:not(.is-auth) .queue-group {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 16px 0 6px;
+}
+.decidio-sidebar:not(.is-auth) .queue-group:first-child { padding-top: 0; }
+
+/* Move: the header's arrow, pointing up. Drawn heavier than the header's
+   because it is a small control on a busy row rather than a 28px glyph in a
+   band of its own. */
+.decidio-sidebar:not(.is-auth) .queue-move {
+    flex: 0 0 auto;
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    line-height: 0;
+}
+.decidio-sidebar:not(.is-auth) .queue-move svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: #FFFFFF;
+    stroke-width: 3.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.decidio-sidebar:not(.is-auth) .queue-move:hover svg { opacity: 0.75; }
+
+/* The destinations, under the row they belong to. */
+.decidio-sidebar:not(.is-auth) .queue-destinations {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 2px 0 12px;
+}
+.decidio-sidebar:not(.is-auth) .queue-destinations[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .queue-destination {
+    background: rgba(255, 255, 255, 0.14);
+    border: none;
+    border-radius: 999px;
+    padding: 6px 13px;
+    cursor: pointer;
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    color: #FFFFFF;
+}
+.decidio-sidebar:not(.is-auth) .queue-destination:hover {
+    background: #FFFFFF;
+    color: var(--decidio-purple);
+}
+.decidio-sidebar:not(.is-auth) .queue-no-destination {
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
 }
 
 .decidio-sidebar:not(.is-auth) .queue-row {
@@ -1425,7 +1501,6 @@
        weight of white instead: in progress full, stalled dimmed. */
     color: #FFFFFF;
 }
-.decidio-sidebar:not(.is-auth) .queue-row.is-added .queue-state { color: rgba(255, 255, 255, 0.85); }
 .decidio-sidebar:not(.is-auth) .queue-row.is-failed .queue-state { color: rgba(255, 255, 255, 0.6); }
 .decidio-sidebar:not(.is-auth) .queue-row.is-failed .queue-name { color: rgba(255, 255, 255, 0.8); }
 
@@ -1486,7 +1561,7 @@
     margin-left: 6px;
     font-size: 13px;
     font-weight: 700;
-    color: var(--decidio-bright-purple);
+    color: var(--decidio-purple);
 }
 
 /* While the queue is up the whole panel is the purple page — the header's
@@ -1517,6 +1592,20 @@
 }
 .decidio-sidebar.is-queue:not(.is-auth) .header-title .blue-dot { color: #FFFFFF; }
 
+/* The panel's chrome is controls and labels, not text to read or copy, and a
+   drag across it leaves a selection highlight that makes the type hard to
+   read. Fields keep their selection — they are the one place text is being
+   worked on. */
+.decidio-sidebar:not(.is-auth) {
+    -webkit-user-select: none;
+    user-select: none;
+}
+.decidio-sidebar:not(.is-auth) input,
+.decidio-sidebar:not(.is-auth) textarea {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
 /* ==========================================================================
    MY COLLECTIONS
    The lists, set down the middle of the panel, after the app's own
@@ -1534,9 +1623,29 @@
 /* Two columns: the index, then the name. A fixed number column is what keeps
    every name starting on the same line down the left, however wide the
    numbers get. */
+/* Section label, after the app's own SectionHeaderRow: Neue Haas Medium 13,
+   quiet, with a rule running the width of the names under it. */
+.decidio-sidebar:not(.is-auth) .collections-heading {
+    font-family: "NHaasGroteskDSStd", sans-serif;
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    padding: 0 0 4px;
+    margin-top: 14px;
+    border-bottom: 0.75px solid var(--rule);
+}
+/* The first heading sits straight under New Collection, which already has
+   space above it. */
+.decidio-sidebar:not(.is-auth) .collections-heading:first-of-type { margin-top: 10px; }
+
 .decidio-sidebar:not(.is-auth) .collection-name {
     display: grid;
-    grid-template-columns: 34px 1fr;
+    /* The number column is sized to the digits themselves (two digits of
+       Neue Haas at 22px measure ~28px). Wider than that and a centred "+"
+       lands left of where the numbers actually sit, because they are right
+       aligned to the column's edge and the column has slack they don't use. */
+    grid-template-columns: 28px 1fr;
     align-items: baseline;
     gap: 8px;
     width: 100%;
@@ -1559,11 +1668,15 @@
    the name stays in the UI face, the index is typographic. */
 .decidio-sidebar:not(.is-auth) .collection-num {
     font-family: "NHaasGroteskDSStd", sans-serif;
-    font-size: 13px;
+    /* Set at the name's own size — it is part of the line, not an annotation
+       hanging off it. */
+    font-size: 22px;
     font-weight: 700;
     letter-spacing: 0.02em;
     color: var(--ink-faint);
-    text-align: left;
+    /* Right-aligned so the numbers run flush against the names and the + sits
+       on the same edge they do, as the app's My Collections sets them. */
+    text-align: right;
 }
 .decidio-sidebar:not(.is-auth) .collection-name.is-selected .collection-num {
     color: var(--ink-soft);
@@ -1581,11 +1694,23 @@
     outline-offset: 2px;
 }
 /* New list sits with the names but is plainly not one of them. */
+/* New Collection is the first line of the same column — same face, same
+   size, same white. What marks it out is the + in place of a number. */
 .decidio-sidebar:not(.is-auth) .collection-name.is-new {
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--decidio-blue);
-    margin-top: 10px;
+    color: var(--ink);
+}
+.decidio-sidebar:not(.is-auth) .collection-name.is-new .collection-num {
+    color: var(--ink);
+    /* Centred in the number column rather than right-aligned with it. A "+"
+       is one narrow glyph against two digits, so sharing their right edge
+       left it hanging off to one side of the column. */
+    text-align: center;
+    /* Set larger to MEASURE the same. At a shared 22px the + paints 11px tall
+       against the digits' 15.8px — a plus sits on the maths axis and uses far
+       less of its em than a figure does — so it has to be set ~1.44x to read
+       as the same size. */
+    font-size: 32px;
+    line-height: 0.6;
 }
 
 /* An opened list shows its items; the column of names steps aside. */
@@ -1600,7 +1725,7 @@
     color: var(--ink-faint);
 }
 .decidio-sidebar:not(.is-auth) .list-empty[hidden] { display: none; }
-.decidio-sidebar:not(.is-auth) .collection-name.is-new:hover { color: var(--ink); }
+.decidio-sidebar:not(.is-auth) .collection-name.is-new:hover { opacity: 0.75; }
 
 /* ---------- Footer -------------------------------------------------------
    One control now: the aperture. Same 40px glyph and 2.6 weight the plus had,
@@ -1768,8 +1893,10 @@
     font-family: "NHaasGroteskDSStd", sans-serif;
     font-weight: 700;
     font-size: 32px;
-    letter-spacing: -0.01em;
-    line-height: 1.1;
+    /* Same tracking and leading as the sign-in headline, so the two screens
+       set the brand's display type identically. */
+    letter-spacing: 0.01em;
+    line-height: 0.9;
     color: var(--ink);
     text-align: center;
     white-space: nowrap;

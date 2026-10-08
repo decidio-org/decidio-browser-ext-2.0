@@ -914,15 +914,7 @@ document.addEventListener('DOMContentLoaded', () => {
       + '<span class="collection-label">New Collection</span>';
     host.appendChild(add);
 
-    // A list's number is its place in All, and nothing else. Numbering the
-    // rendered order instead meant a list changed number the moment it was
-    // used — opening 05 renumbered it 01, and every list below it shifted —
-    // so the number said where a row happened to be sitting rather than
-    // which list it was.
-    const numberOf = new Map(availableLists.map((l, i) => [String(l.id), i + 1]));
-
     const row = (list) => {
-      const n = numberOf.get(String(list.id));
       const btn = document.createElement('button');
       btn.className = 'collection-name';
       btn.dataset.value = list.id;
@@ -931,11 +923,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.add('is-selected');
       }
 
-      // "01" "02" — the numbered index the app's own My Collections sets
-      // beside each name.
+      // No number beside the name. The column used to carry "01" "02" after
+      // the app's own My Collections; the empty slot the + sits in is kept so
+      // every name still starts on the same line as New Collection's.
       const num = document.createElement('span');
       num.className = 'collection-num';
-      num.textContent = String(n).padStart(2, '0');
 
       const label = document.createElement('span');
       label.className = 'collection-label';

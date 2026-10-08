@@ -181,7 +181,9 @@ class DecidioContentPicker {
         box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
         pointer-events: none;
         display: none;
-        border-radius: 12px;
+        /* Square. A rounded outline over a rectangular photo leaves the
+           picture's own corner poking out past the curve at each corner. */
+        border-radius: 0;
         transition: outline-color 0.25s ease;
         will-change: top, left, width, height;
       }
@@ -416,7 +418,12 @@ class DecidioContentPicker {
            to start at the left margin, so the column sat over it there. */
         right: 26px;
         top: 88px;
-        bottom: 128px;
+        /* Height follows the list rather than filling the screen. Pinned to a
+           bottom edge, the rule and Done sat at the foot of the viewport with
+           a field of nothing between them and a single row. The cap keeps a
+           long list clear of where the page's own bottom is. */
+        bottom: auto;
+        max-height: calc(100vh - 216px);
         z-index: 2147483647;
         width: 268px;
         display: flex;
@@ -440,6 +447,10 @@ class DecidioContentPicker {
       .decidio-ar-rail:empty { display: none; }
       .decidio-ar-rail-head {
         flex: 0 0 auto;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
         padding: 0 0 10px;
         font-family: "NHaasGroteskDSStd", sans-serif;
         font-size: 18px;
@@ -464,10 +475,50 @@ class DecidioContentPicker {
       /* Newest at the top and the overflow simply clipped: the column cannot
          be scrolled (see pointer-events above), so what it shows is the most
          recent that fit. Everything is on the Collected page. */
+      /* The count the bottom bar used to carry, now beside the word it counts. */
+      .decidio-ar-rail-count {
+        font-family: "SFProDisplay", -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      /* Done, under a rule, as the bottom bar had it. */
+      .decidio-ar-rail-foot {
+        flex: 0 0 auto;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 0.75px solid rgba(255, 255, 255, 0.28);
+      }
+      .decidio-ar-rail-done {
+        pointer-events: auto;
+        background: #ffffff;
+        color: #000000;
+        border: none;
+        border-radius: 12px;
+        padding: 9px 20px;
+        cursor: pointer;
+        font-family: "SFProDisplay", -apple-system, sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .decidio-ar-rail-done:hover { background: #f0f0f0; }
+
       .decidio-ar-rail-body {
-        flex: 1 1 auto;
+        /* Takes the space its rows need, and no more — it is what the column
+           sizes itself around. Past the cap the oldest rows are clipped; the
+           Collected page has them all. */
+        flex: 0 1 auto;
         min-height: 0;
         overflow: hidden;
+      }
+      /* Only once there are more rows than fit: the last one dissolves rather
+         than being cut through the middle, which is what a hard clip does to
+         a row of type and a thumbnail. */
+      .decidio-ar-rail-body.is-clipped {
+        -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent 100%);
+        mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent 100%);
       }
       .decidio-ar-rail-row {
         display: flex;
@@ -780,18 +831,11 @@ class DecidioContentPicker {
     // Target highlight outline frame
     this.highlightBox = document.createElement('div');
     this.highlightBox.className = 'decidio-highlight-box';
-    // No corner brackets and no drag handles: cropping is held back for
-    // Premium (see the CROP note in the stylesheet above). The confirm button
-    // sits in the middle of the highlight instead.
-    this.confirmBtn = document.createElement('button');
-    this.confirmBtn.className = 'decidio-confirm';
-    this.confirmBtn.setAttribute('aria-label', 'Add to list');
-    this.confirmBtn.innerHTML = `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="9.25"/>
-        <polyline points="7.6,12.2 10.7,15.3 16.4,8.9"/>
-      </svg>`;
-    this.highlightBox.appendChild(this.confirmBtn);
+    // No corner brackets, no drag handles and no confirm: cropping is held
+    // back for Premium (see the CROP note in the stylesheet above), and a
+    // click on a thing collects it outright. The check that used to sit in
+    // the middle only asked for a second press to agree with the first.
+    this.confirmBtn = null;
     this.shadowRoot.appendChild(this.highlightBox);
 
     // Mouse-following badge indicator
@@ -809,43 +853,24 @@ class DecidioContentPicker {
     // the app — the AR view puts the lists themselves at the bottom of the
     // screen and adds to whichever is centred.
     if (this.selectionMode === 'multi') {
-      this.footer = document.createElement('div');
-      this.footer.className = 'decidio-ar-footer';
+      // No bottom bar. Everything it carried — the count, Done, and the rule
+      // framing them — is in the collected column now, beside what is being
+      // collected rather than at the far edge of the screen.
+      this.footer = null;
 
-      this.footer.innerHTML = `
-        <div class="decidio-ar-rule"></div>
-        <div class="decidio-ar-actions">
-          <button class="decidio-ar-identify" id="decidio-identify">
-            Collected<span class="decidio-ar-count" id="decidio-count"></span>
-          </button>
-          <button class="decidio-ar-done" id="decidio-done">Done</button>
-        </div>
-      `;
-
-      // stopPropagation throughout: the window-level capture click handler
-      // would otherwise read a press on the footer as a click on the page.
-      this.footer.addEventListener('click', (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-
-        if (e.target.closest('#decidio-done')) this.finishBatchSelection();
-        if (e.target.closest('#decidio-identify')) this.toggleIdentify();
-      }, true);
-
-      this.shadowRoot.appendChild(this.footer);
-
-      // The collected rail, in the left margin beside the live selection.
       this.rail = document.createElement('div');
       this.rail.className = 'decidio-ar-rail';
       // The column is pointer-events: none so it never swallows a selection;
-      // the remove controls opt back in, and their clicks must not reach the
-      // page behind them.
+      // its controls opt back in, and their clicks must not reach the page
+      // behind them.
       this.rail.addEventListener('click', (e) => {
-        const btn = e.target.closest('.decidio-ar-rail-remove');
-        if (!btn) return;
+        const remove = e.target.closest('.decidio-ar-rail-remove');
+        const done = e.target.closest('.decidio-ar-rail-done');
+        if (!remove && !done) return;
         e.stopPropagation();
         e.preventDefault();
-        this.removeFromQueue(Number(btn.dataset.id));
+        if (remove) this.removeFromQueue(Number(remove.dataset.id));
+        else this.finishBatchSelection();
       }, true);
       this.shadowRoot.appendChild(this.rail);
       this.renderRail();
@@ -884,13 +909,9 @@ class DecidioContentPicker {
       this.hint.textContent = 'Collect';
       this.shadowRoot.appendChild(this.hint);
 
-      // getBoundingClientRect forces layout, so the footer measures correctly
-      // here without waiting a frame — which matters, since a rAF callback
-      // would not run at all while the tab is not painting.
-      const footerH = this.footer.getBoundingClientRect().height;
-      if (footerH) {
-        this.hint.style.setProperty('--decidio-hint-bottom', `${Math.round(footerH + 20)}px`);
-      }
+      // The hint used to be lifted clear of the bottom bar. There is no bar
+      // any more, so it sits on its own margin.
+      this.hint.style.setProperty('--decidio-hint-bottom', '40px');
 
       this.hintTimer = setTimeout(() => {
         if (this.hint) this.hint.classList.add('is-faded');
@@ -1355,7 +1376,11 @@ class DecidioContentPicker {
       return;
     }
 
+    // One click collects. freezeSelection still exists and still sizes a box
+    // to the subject — commitBoxSelection crops to this.box — so the Premium
+    // crop can put an adjust step back between these two lines.
     this.freezeSelection(this.currentTarget, e.clientX, e.clientY);
+    this.commitBoxSelection();
   };
 
   /**
@@ -2106,10 +2131,23 @@ class DecidioContentPicker {
 
     // :empty hides the whole column, so nothing is written while the queue is
     // empty and the screen stays clear until something has been collected.
+    const n = this.queue.length;
+
     this.rail.innerHTML = rows
-      ? `<div class="decidio-ar-rail-head">Collected</div>
-         <div class="decidio-ar-rail-body">${rows}</div>`
+      ? `<div class="decidio-ar-rail-head">
+           <span>Collected</span>
+           <span class="decidio-ar-rail-count">${n} item${n === 1 ? '' : 's'}</span>
+         </div>
+         <div class="decidio-ar-rail-body">${rows}</div>
+         <div class="decidio-ar-rail-foot">
+           <button class="decidio-ar-rail-done">Done</button>
+         </div>`
       : '';
+
+    // Whether the rows outgrew the cap can only be known once they are laid
+    // out, so the fade is set from the measurement rather than guessed at.
+    const body = this.rail.querySelector('.decidio-ar-rail-body');
+    if (body) body.classList.toggle('is-clipped', body.scrollHeight > body.clientHeight + 1);
 
     // Doubling the Collected page with a smaller copy of itself helps nobody.
     this.rail.classList.toggle('is-hidden', this.identifyOpen);
@@ -2319,6 +2357,9 @@ class DecidioContentPicker {
    * while a box is frozen, and the running count sits beside it.
    */
   updateFooterState() {
+    // The count lives in the collected column now; repainting it IS the
+    // update. Kept under its old name for the call sites.
+    this.renderRail();
     if (!this.footer) return;
 
     this.footer.classList.toggle('is-frozen', this.isFrozen);
@@ -2374,6 +2415,7 @@ class DecidioContentPicker {
     // Only identified rows are saved — a pending or failed one has no name to
     // file under, and the queue shows exactly which those are.
     const items = this.identifiedItems();
+    try { console.log('[decidio] Done pressed, sending', items.length, 'item(s)', items); } catch (e) {}
     chrome.runtime.sendMessage(
       items.length
         ? { action: "PRODUCT_IMAGES_BATCH_PICKED", items }

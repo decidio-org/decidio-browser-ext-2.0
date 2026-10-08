@@ -129,7 +129,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const incoming = request.items || request.products || [];
 
       const updatedList = [...existing, ...incoming];
+      console.log('[decidio] batch received:', incoming.length, 'incoming,', existing.length, 'already waiting');
       chrome.storage.local.set({ savedProducts: updatedList }, () => {
+        if (chrome.runtime.lastError) {
+          console.log('[decidio] savedProducts write FAILED:', chrome.runtime.lastError.message);
+        } else {
+          console.log('[decidio] savedProducts written, now', updatedList.length);
+        }
         safeRuntimeSendMessage({ action: "RENDER_PICKED_PRODUCT" });
       });
     });

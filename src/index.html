@@ -19,10 +19,15 @@
         <div class="sidebar-header">
             <button class="sidebar-minimize" id="sidebarMinimizeBtn"
                     aria-label="Back" title="Back">
-                <!-- arrow.left, as MyCollectionsHeader draws its back control:
-                     the keynote mockup shows a plain straight arrow, not the
-                     chevron Header.swift uses. -->
-                <svg viewBox="0 0 24 24" aria-hidden="true">
+                <!-- Two glyphs, one control. At the top level there is nothing
+                     behind My Collections, so it minimises and shows a minus;
+                     on every screen reached from there it goes back one level
+                     and shows the arrow. Swapped by .is-titled, which is set
+                     exactly when a screen title has replaced the wordmark. -->
+                <svg class="icon-minimize" viewBox="0 0 24 24" aria-hidden="true">
+                    <line x1="4" y1="12" x2="20" y2="12"/>
+                </svg>
+                <svg class="icon-back" viewBox="0 0 24 24" aria-hidden="true">
                     <line x1="21" y1="12" x2="4" y2="12"/>
                     <polyline points="11,5 4,12 11,19"/>
                 </svg>
@@ -165,7 +170,7 @@ to Decidio<span class="blue-dot">.</span></h1>
                         <line x1="10" y1="12" x2="19" y2="12"/>
                         <line x1="10" y1="17" x2="19" y2="17"/>
                     </svg>
-                    <span>Queue<span class="panel-menu-count" id="queueCount"></span></span>
+                    <span>Collected Items<span class="panel-menu-count" id="queueCount"></span></span>
                 </button>
                 <button class="panel-menu-item" id="notesOpenBtn">
                     <svg class="panel-menu-icon" viewBox="0 0 24 24" aria-hidden="true">

@@ -1087,9 +1087,14 @@
     stroke: #FFFFFF;
     stroke-width: 3.5;
 }
-/* Nudges each drawn stroke flush with the rules below: the paths start inset
-   within their own 24px viewBox — the arrow's head by 4 units, the bars by 3.
-   (The chevron this replaced started at 8, hence its much larger pull.) */
+/* One of the two is up at a time: the minus at the top level, the arrow on
+   any screen reached from it. */
+.decidio-sidebar:not(.is-auth) .sidebar-minimize .icon-back { display: none; }
+.decidio-sidebar.is-titled:not(.is-auth) .sidebar-minimize .icon-minimize { display: none; }
+.decidio-sidebar.is-titled:not(.is-auth) .sidebar-minimize .icon-back { display: block; }
+
+/* Nudges each drawn stroke flush with the rules below: both paths start 4
+   units inset within their own 24px viewBox. */
 .decidio-sidebar:not(.is-auth) .sidebar-minimize svg { margin-left: -2.92px; }
 .decidio-sidebar:not(.is-auth) .sidebar-menu-btn svg { margin-right: -1.25px; }
 
@@ -1351,11 +1356,9 @@
    Purple carries the state, the bright one for work in progress and the deep
    one for a row that needs a hand.
    ========================================================================== */
-/* Filled with Decidio Purple, as the app fills a whole page with it
-   (ARScanView's CameraDeniedPage, the Identify page's PurpleOverlayLayer):
-   #803065 edge to edge with white type on it, no matte showing through. The
-   header and the footer are the web's own and keep the panel's ground, so
-   the purple is the screen between them. */
+/* The panel's own matte, like every other screen. The purple fill this had
+   (after ARScanView's CameraDeniedPage) made the queue a different place
+   rather than another screen of the same panel. */
 .decidio-sidebar:not(.is-auth) .queue-view {
     position: absolute;
     inset: 0;
@@ -1370,7 +1373,7 @@
        hides its own; the screen is short and the rows plainly continue. */
     scrollbar-width: none;
     -ms-overflow-style: none;
-    background: var(--decidio-purple);
+    background: var(--field);
     border-top: none;
 }
 .decidio-sidebar:not(.is-auth) .queue-view::-webkit-scrollbar { width: 0; height: 0; }
@@ -1390,39 +1393,42 @@
     letter-spacing: -0.01em;
     line-height: 1.1;
     font-size: 18px;
-    color: #FFFFFF;
-    opacity: 0.72;
+    color: var(--ink-soft);
     margin-bottom: 14px;
 }
 
-/* The list a group of rows belongs to. Quiet, since the rows under it are
-   the content and this is only saying where they live. */
-.decidio-sidebar:not(.is-auth) .queue-group {
-    font-family: "NHaasGroteskDSStd", sans-serif;
-    font-weight: 500;
-    font-size: 13px;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.7);
-    padding: 16px 0 6px;
-}
-.decidio-sidebar:not(.is-auth) .queue-group:first-child { padding-top: 0; }
-
-/* Move: the header's arrow, pointing up. Drawn heavier than the header's
-   because it is a small control on a busy row rather than a 28px glyph in a
-   band of its own. */
+/* The destination, under the item's name: an arrow and the list it is going
+   to, as one control. Pressing it opens the other lists. */
 .decidio-sidebar:not(.is-auth) .queue-move {
-    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    align-self: flex-start;
+    max-width: 100%;
+    margin-top: 3px;
     background: none;
     border: none;
-    padding: 4px;
+    padding: 0;
     cursor: pointer;
     line-height: 0;
 }
+.decidio-sidebar:not(.is-auth) .queue-dest {
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    line-height: 1.2;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.decidio-sidebar:not(.is-auth) .queue-move:hover .queue-dest { color: var(--ink); }
 .decidio-sidebar:not(.is-auth) .queue-move svg {
-    width: 20px;
-    height: 20px;
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
     fill: none;
-    stroke: #FFFFFF;
+    stroke: var(--ink);
     stroke-width: 3.2;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -1438,7 +1444,7 @@
 }
 .decidio-sidebar:not(.is-auth) .queue-destinations[hidden] { display: none; }
 .decidio-sidebar:not(.is-auth) .queue-destination {
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--plate);
     border: none;
     border-radius: 999px;
     padding: 6px 13px;
@@ -1446,46 +1452,51 @@
     font-family: "SFProDisplay", -apple-system, sans-serif;
     font-weight: 600;
     font-size: 13px;
-    color: #FFFFFF;
+    color: var(--ink);
 }
 .decidio-sidebar:not(.is-auth) .queue-destination:hover {
-    background: #FFFFFF;
-    color: var(--decidio-purple);
+    background: var(--ink);
+    color: #000000;
 }
 .decidio-sidebar:not(.is-auth) .queue-no-destination {
     font-family: "SFProDisplay", -apple-system, sans-serif;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--ink-faint);
 }
 
 .decidio-sidebar:not(.is-auth) .queue-row {
     display: flex;
-    align-items: center;
+    /* Top, not centre: the × sits level with the top of the thumbnail and the
+       name, and the destination hangs below them. */
+    align-items: flex-start;
     gap: 12px;
     padding: 11px 0;
-    border-bottom: 0.75px solid rgba(255, 255, 255, 0.28);
+    position: relative;
+    border-bottom: 0.75px solid var(--rule);
 }
-.decidio-sidebar:not(.is-auth) .queue-row:first-child { border-top: 0.75px solid rgba(255, 255, 255, 0.28); }
+.decidio-sidebar:not(.is-auth) .queue-row:first-child { border-top: 0.75px solid var(--rule); }
 .decidio-sidebar:not(.is-auth) .queue-thumb {
     flex: 0 0 56px;
     width: 56px;
     height: 40px;
     object-fit: cover;
     display: block;
-    background: rgba(255, 255, 255, 0.16);
+    background: var(--plate);
 }
 .decidio-sidebar:not(.is-auth) .queue-text {
     display: flex;
     flex-direction: column;
     min-width: 0;
     flex: 1 1 auto;
+    /* Clear of the × in the corner. */
+    padding-right: 26px;
 }
 .decidio-sidebar:not(.is-auth) .queue-name {
     font-family: "SFProDisplay", -apple-system, sans-serif;
     font-weight: 600;
     font-size: 15px;
     line-height: 1.25;
-    color: #FFFFFF;
+    color: var(--ink);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1497,17 +1508,35 @@
     font-size: 11px;
     letter-spacing: 0.04em;
     line-height: 1.3;
-    /* Bright purple is unreadable on the deep one, so the states separate by
-       weight of white instead: in progress full, stalled dimmed. */
-    color: #FFFFFF;
+    /* The states separate by weight of ink: in progress full, stalled dimmed. */
+    color: var(--ink);
 }
-.decidio-sidebar:not(.is-auth) .queue-row.is-failed .queue-state { color: rgba(255, 255, 255, 0.6); }
-.decidio-sidebar:not(.is-auth) .queue-row.is-failed .queue-name { color: rgba(255, 255, 255, 0.8); }
+.decidio-sidebar:not(.is-auth) .queue-row.is-failed .queue-state { color: var(--ink-faint); }
+.decidio-sidebar:not(.is-auth) .queue-row.is-failed .queue-name { color: var(--ink-soft); }
 
-/* Retry. Plain purple type, no plate — the Specs screen has no buttons on it
-   and this should not be the first. */
+/* Add to list — the row's primary action, in the same capsule Retry uses. */
+.decidio-sidebar:not(.is-auth) .queue-add {
+    align-self: flex-start;
+    margin-top: 8px;
+    background: var(--ink);
+    border: none;
+    border-radius: 999px;
+    padding: 5px 14px;
+    cursor: pointer;
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    color: #000000;
+}
+.decidio-sidebar:not(.is-auth) .queue-add:hover { opacity: 0.85; }
+.decidio-sidebar:not(.is-auth) .queue-add[disabled] { opacity: 0.5; cursor: default; }
+
+/* Retry, as a capsule — the panel's own button treatment. */
 .decidio-sidebar:not(.is-auth) .queue-retry {
-    flex: 0 0 auto;
+    /* Hugs its label instead of stretching the width of the text column,
+       which is what a flex item does in a column by default. */
+    align-self: flex-start;
+    margin-top: 8px;
     background: none;
     border: none;
     padding: 4px 2px;
@@ -1515,9 +1544,9 @@
     font-family: "SFProDisplay", -apple-system, sans-serif;
     font-weight: 700;
     font-size: 13px;
-    /* The app's one button on a purple page is white type, white capsule. */
-    color: var(--decidio-purple);
-    background: #FFFFFF;
+    /* White capsule, black type — the panel's own button treatment. */
+    color: #000000;
+    background: var(--ink);
     border-radius: 999px;
     padding: 5px 14px;
 }
@@ -1527,12 +1556,14 @@
 /* Discard sits hard right of every row, after whatever action it has. Plain
    white rule-weight glyph, no plate — throwing something away should not be
    the loudest thing on the row. */
+/* Upper right of the row, level with the top of the thumbnail. */
 .decidio-sidebar:not(.is-auth) .queue-discard {
-    flex: 0 0 auto;
+    position: absolute;
+    top: 9px;
+    right: 0;
     background: none;
     border: none;
     padding: 4px;
-    margin-left: 2px;
     cursor: pointer;
     line-height: 0;
 }
@@ -1540,18 +1571,18 @@
     width: 16px;
     height: 16px;
     fill: none;
-    stroke: rgba(255, 255, 255, 0.65);
+    stroke: var(--ink-faint);
     stroke-width: 2.2;
     stroke-linecap: round;
 }
-.decidio-sidebar:not(.is-auth) .queue-discard:hover svg { stroke: #FFFFFF; }
+.decidio-sidebar:not(.is-auth) .queue-discard:hover svg { stroke: var(--ink); }
 
 .decidio-sidebar:not(.is-auth) .queue-empty {
     font-family: "SFProDisplay", -apple-system, sans-serif;
     font-weight: 500;
     font-size: 14px;
     line-height: 1.4;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--ink-faint);
 }
 .decidio-sidebar:not(.is-auth) .queue-empty[hidden] { display: none; }
 
@@ -1564,46 +1595,30 @@
     color: var(--decidio-purple);
 }
 
-/* While the queue is up the whole panel is the purple page — the header's
-   band and the footer's band included, so there is no black frame around it.
-   The panel's own rounded corners still clip it. */
-.decidio-sidebar.is-queue:not(.is-auth),
-.decidio-sidebar.is-queue:not(.is-auth) .sidebar-header,
-.decidio-sidebar.is-queue:not(.is-auth) .sidebar-footer,
-.decidio-sidebar.is-queue:not(.is-auth) .queue-view:not([hidden]) ~ .sidebar-footer {
-    background-color: var(--decidio-purple);
-}
-/* Rules and glyphs are white on it, not the matte's faint hairlines. */
-.decidio-sidebar.is-queue:not(.is-auth) .sidebar-header {
-    border-bottom-color: rgba(255, 255, 255, 0.28);
-}
-.decidio-sidebar.is-queue:not(.is-auth) .sidebar-footer {
-    border-top-color: rgba(255, 255, 255, 0.28);
-}
-.decidio-sidebar.is-queue:not(.is-auth) .btn-aperture,
-.decidio-sidebar.is-queue:not(.is-auth) .btn-check-circle {
-    stroke: #FFFFFF;
-}
-.decidio-sidebar.is-queue:not(.is-auth) .header-title,
-.decidio-sidebar.is-queue:not(.is-auth) .sidebar-minimize svg,
-.decidio-sidebar.is-queue:not(.is-auth) .sidebar-menu-btn svg {
-    color: #FFFFFF;
-    stroke: #FFFFFF;
-}
-.decidio-sidebar.is-queue:not(.is-auth) .header-title .blue-dot { color: #FFFFFF; }
+/* ---------- Opening a list ------------------------------------------------
+   The rows arrive one after another rather than all at once, after the way
+   the app brings an option in (OptionView's fade for a newly added option).
+   620ms a row, 130ms apart: each row is slow enough to be watched arriving
+   rather than appearing, and the gap is long enough that they read as a
+   sequence instead of one block easing in. The delay is set per row in JS,
+   since the count is not known here.
 
-/* The panel's chrome is controls and labels, not text to read or copy, and a
-   drag across it leaves a selection highlight that makes the type hard to
-   read. Fields keep their selection — they are the one place text is being
-   worked on. */
-.decidio-sidebar:not(.is-auth) {
-    -webkit-user-select: none;
-    user-select: none;
+   Reduce Motion turns it off rather than speeding it up — the point of the
+   setting is not to move things.
+   -------------------------------------------------------------------------- */
+@keyframes decidio-cascade {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
 }
-.decidio-sidebar:not(.is-auth) input,
-.decidio-sidebar:not(.is-auth) textarea {
-    -webkit-user-select: text;
-    user-select: text;
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile.is-cascading {
+    opacity: 0;
+    animation: decidio-cascade 620ms cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+    .decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile.is-cascading {
+        opacity: 1;
+        animation: none;
+    }
 }
 
 /* ==========================================================================

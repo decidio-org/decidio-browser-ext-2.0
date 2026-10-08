@@ -914,15 +914,19 @@ document.addEventListener('DOMContentLoaded', () => {
       + '<span class="collection-label">New Collection</span>';
     host.appendChild(add);
 
-    // Numbers run down the whole column rather than restarting per section,
-    // so a list's number is its position in My Collections however it is
-    // grouped.
-    let n = 0;
+    // A list's number is its place in All, and nothing else. Numbering the
+    // rendered order instead meant a list changed number the moment it was
+    // used — opening 05 renumbered it 01, and every list below it shifted —
+    // so the number said where a row happened to be sitting rather than
+    // which list it was.
+    const numberOf = new Map(availableLists.map((l, i) => [String(l.id), i + 1]));
+
     const row = (list) => {
-      n += 1;
+      const n = numberOf.get(String(list.id));
       const btn = document.createElement('button');
       btn.className = 'collection-name';
       btn.dataset.value = list.id;
+      // The same list appears in Recent and again in All; both rows select it.
       if (!pendingCreate && String(list.id) === String(selectedListId)) {
         btn.classList.add('is-selected');
       }
@@ -949,18 +953,20 @@ document.addEventListener('DOMContentLoaded', () => {
       host.appendChild(h);
     };
 
-    const { recent, rest } = splitByRecency(availableLists);
+    const { recent } = splitByRecency(availableLists);
 
-    // Sections only once there is something to put in both — one heading over
-    // the whole column, or a Recent containing everything, says nothing.
-    if (recent.length && rest.length) {
+    // Recent is a shortcut to the top of All, not a section cut out of it:
+    // All lists every list, in its own order, whether or not it was used
+    // lately. A list taken out of All when it became recent went missing from
+    // the place it is looked for.
+    //
+    // Only worth drawing when it is actually shorter than the whole list.
+    if (recent.length && recent.length < availableLists.length) {
       heading('Recent');
       recent.forEach(row);
       heading('All');
-      rest.forEach(row);
-    } else {
-      availableLists.forEach(row);
     }
+    availableLists.forEach(row);
 
 
   }
@@ -1006,17 +1012,36 @@ document.addEventListener('DOMContentLoaded', () => {
     // away — collecting should not need a second confirmation. The queue
     // still records it, so it can be taken back out with the row's ×.
     // Anything unnamed waits here instead; it has nothing to be filed under.
-    const ready = items.filter((it) => it.state ? it.state === 'complete' : !!it.productTitle);
-    if (ready.length) await saveCollectedToList(listId, ready);
+    // Collecting does both: the item goes into the list, and Collected Items
+    // keeps a row for it so there is always somewhere to see what was taken
+    // and undo it.
+    //
+    // The filing is allowed to fail; the record of it is not. saveCollectedToList
+    // talks to the API when signed in, and letting an error from it escape
+    // meant no row was ever written — the items vanished with nothing in
+    // Collected Items to show for them.
+    const named = items.filter((it) => it.state ? it.state === 'complete' : !!it.productTitle);
+    let filed = false;
+    if (named.length) {
+      try {
+        const res = await saveCollectedToList(listId, named);
+        filed = !!(res && res.saved);
+      } catch (e) {
+        filed = false;
+      }
+    }
 
     for (const it of items) {
-      const isReady = ready.includes(it);
+      const isReady = named.includes(it);
       rows.push({
         id: 'q' + Date.now() + Math.random().toString(36).slice(2, 7),
         thumb: it.imageUrl || null,
         title: it.productTitle || null,
         productUrl: it.productUrl || null,
-        state: it.state === 'pending' ? 'pending' : (isReady ? 'added' : 'failed'),
+        // 'added' once it is in the list, 'ready' when it has a name but the
+        // list write did not land, 'failed' when it has no name yet.
+        state: it.state === 'pending' ? 'pending'
+             : (isReady ? (filed ? 'added' : 'ready') : 'failed'),
         error: it.error || null,
         addedAt: Date.now()
       });
@@ -1067,6 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   function queueStateLabel(row) {
     if (row.state === 'pending') return 'Identifying…';
+    if (row.state === 'ready') return 'Not in the list yet';
     if (row.state === 'added') return '';
     return row.error === 'No name found on the page' ? "Couldn't identify" : (row.error || "Couldn't identify");
   }
@@ -1081,11 +1107,37 @@ document.addEventListener('DOMContentLoaded', () => {
    * @returns {Promise<Array<{list: Object, rows: Array}>>}
    */
   async function readAllQueues() {
+    // Read the stored queues themselves rather than walking availableLists.
+    // Walking the lists meant a queue whose list is no longer in that array —
+    // the old client-side "My Collection" that was removed, a list deleted
+    // after something was queued into it, or lists that simply have not
+    // loaded yet — was skipped, and its items were invisible with no sign
+    // anything was missing.
+    const all = await new Promise((resolve) => {
+      try { chrome.storage.local.get(null, (r) => resolve(r || {})); }
+      catch (e) { resolve({}); }
+    });
+
+    const byId = new Map(availableLists.map((l) => [String(l.id), l]));
     const out = [];
-    for (const list of availableLists) {
-      const rows = await readQueue(list.id);
-      if (rows.length) out.push({ list, rows });
+
+    for (const key of Object.keys(all)) {
+      if (!key.startsWith('listQueue_')) continue;
+      const rows = all[key] || [];
+      if (!rows.length) continue;
+
+      const id = key.slice('listQueue_'.length);
+      // A queue with no list left to belong to still gets shown, named for
+      // what it is, so its items can be moved somewhere real or thrown away.
+      out.push({ list: byId.get(id) || { id, name: 'Not in a list' }, rows });
     }
+
+    // The lists' own order, with any orphans after them.
+    out.sort((a, b) => {
+      const ia = availableLists.findIndex((l) => String(l.id) === String(a.list.id));
+      const ib = availableLists.findIndex((l) => String(l.id) === String(b.list.id));
+      return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
+    });
     return out;
   }
 
@@ -1103,46 +1155,51 @@ document.addEventListener('DOMContentLoaded', () => {
     ));
 
     for (const { list, rows } of groups) {
-      // The list a row belongs to is named once, over its rows, rather than
-      // repeated on each of them.
-      const head = document.createElement('div');
-      head.className = 'queue-group';
-      head.textContent = list.name || 'Untitled list';
-      queueList.appendChild(head);
-
       for (const row of rows) {
         const el = document.createElement('div');
         el.className = 'queue-row is-' + row.state;
         el.dataset.id = row.id;
         el.dataset.list = list.id;
+
+        // The list is named on the row, under the item, rather than once over
+        // a group of them: a row is a thing and the list it is going to, and
+        // reading one should not mean looking up the column for a heading.
+        const label = queueStateLabel(row);
+        const state = label
+          ? `<span class="queue-state">${esc(label)}</span>` : '';
+        // Added: already in the list, nothing to do but remove it. Ready: it
+        // has a name but never reached the list, so offer to send it. Failed:
+        // it needs a name first.
+        const action = row.state === 'ready'
+          ? `<button class="queue-add" data-id="${esc(row.id)}">Add to list</button>`
+          : (row.state === 'failed' && row.productUrl
+              ? `<button class="queue-retry" data-id="${esc(row.id)}">Retry</button>` : '');
+
         el.innerHTML = `
           ${row.thumb ? `<img class="queue-thumb" src="${esc(row.thumb)}" alt="">`
                       : '<span class="queue-thumb"></span>'}
           <span class="queue-text">
             <span class="queue-name">${esc(row.title || 'Unnamed item')}</span>
-            <span class="queue-state">${esc(queueStateLabel(row))}</span>
+            ${state}
+            <button class="queue-move" data-id="${esc(row.id)}"
+                    aria-label="Send to another list" title="Send to another list">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <line x1="3" y1="12" x2="20" y2="12"/>
+                <polyline points="13,5 20,12 13,19"/>
+              </svg>
+              <span class="queue-dest">${esc(list.name || 'Untitled list')}</span>
+            </button>
+            ${action}
           </span>
-          ${row.state === 'added'
-              ? ''
-              : (row.productUrl ? '<button class="queue-retry" data-id="' + esc(row.id) + '">Retry</button>' : '')}
           <button class="queue-discard" data-id="${esc(row.id)}" aria-label="Remove" title="Remove">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
             </svg>
-          </button>
-          <!-- Last on the row, pointing right: it sends the item onward to a
-               list, so it reads as the way out of the queue. -->
-          <button class="queue-move" data-id="${esc(row.id)}"
-                  aria-label="Send to a list" title="Send to a list">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <line x1="3" y1="12" x2="20" y2="12"/>
-              <polyline points="13,5 20,12 13,19"/>
-            </svg>
           </button>`;
         queueList.appendChild(el);
 
-        // The other lists, under the row, shown when Move is pressed. Built
-        // with the row rather than on demand so pressing Move is instant.
+        // The other lists, under the row, shown when the destination is
+        // pressed. Built with the row so pressing it is instant.
         const picker = document.createElement('div');
         picker.className = 'queue-destinations';
         picker.dataset.for = row.id;
@@ -1185,6 +1242,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await writeQueue(toId, target);
 
     noteListUsed(toId);
+    await markCascadePending(toId);
     renderQueue();
     if (openListId) openList(openListId);
   }
@@ -1254,13 +1312,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Now that it has a name it is filed, the same as one that arrived with
-    // one, and the row stays as the way to take it back out.
-    await saveCollectedToList(id, [{
-      imageUrl: row.thumb, productUrl: row.productUrl, productTitle: name
-    }]);
+    // Named, not filed: it joins the rows waiting to be added, which is the
+    // same decision every other row gets.
     row.title = name;
-    row.state = 'added';
+    row.state = 'ready';
     row.error = null;
     await writeQueue(id, rows);
     renderQueue();
@@ -1274,6 +1329,37 @@ document.addEventListener('DOMContentLoaded', () => {
    * out of the list too. The × is the single undo for collecting something by
    * mistake, so it has to undo the whole of it.
    */
+  /**
+   * Sends one row into its list. The row leaves the queue — it is no longer
+   * waiting for anything.
+   */
+  async function addQueueRow(rowId, listId, btn) {
+    const id = listId || openListId || selectedListId;
+    if (!id) return;
+
+    const rows = await readQueue(id);
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) return;
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+    try {
+      const res = await saveCollectedToList(id, [{
+        imageUrl: row.thumb, productUrl: row.productUrl, productTitle: row.title
+      }]);
+      if (res && res.failed && !res.saved) throw new Error('save failed');
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to list'; }
+      showCollectStatus('Could not add that to the list.', true);
+      return;
+    }
+
+    await writeQueue(id, rows.filter((r) => r.id !== rowId));
+    await markCascadePending(id);
+    noteListUsed(id);
+    renderQueue();
+    if (openListId === id) openList(id);
+  }
+
   async function discardQueueRow(rowId, listId) {
     const id = listId || openListId || selectedListId;
     if (!id) return;
@@ -1310,6 +1396,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      const addBtn = e.target.closest('.queue-add');
+      if (addBtn) { addQueueRow(addBtn.dataset.id, listId, addBtn); return; }
+
       const dest = e.target.closest('.queue-destination');
       if (dest) { moveQueueRow(dest.dataset.id, dest.dataset.from, dest.dataset.to); return; }
 
@@ -1321,7 +1410,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function closeQueue() {
     if (!queueView) return;
     queueView.hidden = true;
-    if (sidebarPanel) sidebarPanel.classList.remove('is-queue');
     // Anything the queue resolved went into the list, so the list is repainted
     // on the way out rather than while it is still behind the queue.
     if (openListId) openList(openListId);
@@ -1334,9 +1422,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const t = document.getElementById('queueTitle');
     if (t) t.textContent = 'Waiting across your collections';
     await renderQueue();
-    setHeaderTitle('Queue');
+    setHeaderTitle('Collected Items');
     queueView.hidden = false;
-    if (sidebarPanel) sidebarPanel.classList.add('is-queue');
   }
 
   if (queueOpenBtn) queueOpenBtn.addEventListener('click', openQueue);
@@ -1351,6 +1438,49 @@ document.addEventListener('DOMContentLoaded', () => {
   function listNameFor(id) {
     const list = availableLists.find((l) => String(l.id) === String(id));
     return (list && list.name) || 'Untitled list';
+  }
+
+  /* ---------- Cascade, once ------------------------------------------------
+     The rows arrive one after another the first time a list is opened after
+     something was put in it, and then not again. Running it on every open
+     made it chrome — a thing the list does — rather than what it is, which is
+     the list showing you what just landed.
+
+     Kept in storage rather than in memory: the panel is an iframe and is
+     reloaded often enough that an in-memory flag would be lost between
+     collecting and opening.
+     ------------------------------------------------------------------------ */
+  const CASCADE_KEY = 'listsAwaitingCascade';
+
+  function readCascadePending() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get({ [CASCADE_KEY]: [] },
+          (r) => resolve((r && r[CASCADE_KEY]) || []));
+      } catch (e) { resolve([]); }
+    });
+  }
+
+  /** Marks a list as having something new to show next time it is opened. */
+  async function markCascadePending(listId) {
+    if (!listId) return;
+    const ids = await readCascadePending();
+    if (ids.includes(String(listId))) return;
+    ids.push(String(listId));
+    try { chrome.storage.local.set({ [CASCADE_KEY]: ids }); } catch (e) {}
+  }
+
+  /** True once, then false — reading it is what spends it. */
+  async function takeCascadePending(listId) {
+    const ids = await readCascadePending();
+    if (!ids.includes(String(listId))) return false;
+    await new Promise((resolve) => {
+      try {
+        chrome.storage.local.set(
+          { [CASCADE_KEY]: ids.filter((id) => id !== String(listId)) }, resolve);
+      } catch (e) { resolve(); }
+    });
+    return true;
   }
 
   /** The items filed into a list. */
@@ -1379,6 +1509,26 @@ document.addEventListener('DOMContentLoaded', () => {
       [...items].reverse().forEach((it) => {
         displaySelectedProduct(it.imageUrl, it.productUrl, it.productTitle || 'Product', productsContainer);
       });
+
+      // Cascade them in, but only on the first open after something was
+      // added. The delay is per row and set here because the CSS cannot know
+      // how many there are; capped so a long list does not spend a second and
+      // a half arriving.
+      if (await takeCascadePending(listId)) {
+        const tiles = [...productsContainer.querySelectorAll('.collected-product-tile')];
+        tiles.forEach((tile, i) => {
+          tile.classList.add('is-cascading');
+          tile.style.animationDelay = Math.min(i * 130, 1300) + 'ms';
+        });
+        // The class is only there to run the animation once; left on, a later
+        // repaint would replay it.
+        setTimeout(() => {
+          tiles.forEach((t) => {
+            t.classList.remove('is-cascading');
+            t.style.animationDelay = '';
+          });
+        }, 2400);
+      }
     }
 
     const empty = document.getElementById('listEmpty');
@@ -1617,30 +1767,142 @@ document.addEventListener('DOMContentLoaded', () => {
    * items itself, as soon as the picker hands them back.
    */
   async function fileCollectedItems() {
-    if (!selectedListId) {
-      showCollectStatus('Choose a list first.', true);
-      return;
-    }
+    // Never drop a collect. This used to stop here when no list was selected,
+    // which from the AR overlay looked exactly like collecting doing nothing:
+    // the items were gone and the only explanation was a line of text on a
+    // panel that was off screen at the time. Fall back to the first list, and
+    // failing that to a holding queue that Collected Items shows as "Not in a
+    // list", where the rows can be sent somewhere real.
+    const targetId = selectedListId
+      || (availableLists[0] && availableLists[0].id)
+      || 'unfiled';
+    if (!selectedListId) selectedListId = availableLists[0] ? availableLists[0].id : null;
 
     const stored = await new Promise((resolve) => {
       try {
         chrome.storage.local.get({ savedProducts: [] }, (r) => resolve((r && r.savedProducts) || []));
       } catch (e) { resolve([]); }
     });
+    try { console.log('[decidio] filing', stored.length, 'item(s) into', targetId); } catch (e) {}
     if (!stored.length) return;
 
     // Everything the aperture collects lands in the list's queue first,
     // named or not. The queue is where a batch is looked over before it is
     // kept — each row can be added to the list or thrown away — rather than
     // items appearing in the list the moment they are framed.
-    noteListUsed(selectedListId);
-    await addToQueue(selectedListId, stored);
-    try { chrome.storage.local.set({ savedProducts: [] }); } catch (e) {}
+    noteListUsed(targetId);
+    await markCascadePending(targetId);
+    await addToQueue(targetId, stored);
+
+    /* Take out exactly what was just filed, and WAIT for it.
+       This used to blank the whole key and not wait. Both halves lost
+       collects, intermittently, which is the worst way to lose them:
+         - A batch that landed while the filing above was running was wiped
+           by a clear that had read the key before it arrived. Collecting
+           twice quickly dropped the second one.
+         - The clear was fire-and-forget, so the next collect could be
+           written and then overwritten by a clear still in flight.
+       Background appends, so the batch just filed is the first
+       `stored.length` entries; anything past them arrived since and is
+       somebody else's to file. */
+    const left = await new Promise((resolve) => {
+      try {
+        chrome.storage.local.get({ savedProducts: [] }, (r) => {
+          const now = (r && r.savedProducts) || [];
+          const rest = now.slice(stored.length);
+          chrome.storage.local.set({ savedProducts: rest }, () => resolve(rest));
+        });
+      } catch (e) { resolve([]); }
+    });
+
+    try { console.log('[decidio] filed', stored.length, 'into', targetId, '-', left.length, 'still waiting'); } catch (e) {}
     refreshQueueCount();
     if (queueView && !queueView.hidden) renderQueue();
+
+    // Collecting while a list is open is the common way to add to it, and
+    // the list has to show what just arrived. Without this the items were
+    // filed correctly and the screen did not move — which reads as collecting
+    // being broken, since the list you are looking at is the one you were
+    // adding to. openList repaints it, and spends the cascade flag that
+    // addToQueue just set, so the new rows arrive the way they do anywhere
+    // else.
+    if (openListId && String(openListId) === String(targetId)) {
+      openList(openListId);
+    }
   }
 
 
+
+  /* Collecting is filed from TWO places on purpose.
+
+     The RENDER_PICKED_PRODUCT message is the fast path, but it is a single
+     message to a panel that may not be listening when it arrives — the iframe
+     reloads, the service worker sleeps, the panel was closed mid-collect — and
+     if it is missed the items sit in savedProducts and appear nowhere at all,
+     which looks exactly like collecting doing nothing.
+
+     So the storage itself is watched as well: anything that lands in
+     savedProducts gets filed, whoever put it there. fileCollectedItems clears
+     the key when it is done, so the two paths cannot double-file. */
+  let filingNow = false;
+  async function fileCollectedItemsOnce() {
+    // Already running: note that there is more to do rather than dropping
+    // this call. The pass in flight read the key before this batch landed, so
+    // without the re-check below the batch would sit there unfiled.
+    if (filingNow) { filingNow = 'again'; return; }
+    filingNow = true;
+    try {
+      // Loop until the key is empty. Each pass files what it read and leaves
+      // anything that arrived since, so a second collect during a slow first
+      // one is picked up here instead of waiting for another event.
+      for (let pass = 0; pass < 8; pass++) {
+        filingNow = true;
+        await fileCollectedItems();
+        const left = await new Promise((resolve) => {
+          try { chrome.storage.local.get({ savedProducts: [] }, (r) => resolve(((r && r.savedProducts) || []).length)); }
+          catch (e) { resolve(0); }
+        });
+        if (!left) break;
+      }
+    } finally { filingNow = false; }
+  }
+
+  /* Nothing above is allowed to be the only way a collect gets filed.
+
+     The message can miss a panel that is reloading, and the storage event
+     needs this script to have been evaluated before the write landed — a
+     batch arriving inside either window was filed by nobody and stayed in
+     savedProducts for good, which is exactly what "sometimes it works" looks
+     like. So the key is also simply looked at, on a timer and whenever the
+     panel comes back to the foreground. It costs one storage read and does
+     nothing at all unless something is actually waiting. */
+  async function drainCollected() {
+    const waiting = await new Promise((resolve) => {
+      try { chrome.storage.local.get({ savedProducts: [] }, (r) => resolve(((r && r.savedProducts) || []).length)); }
+      catch (e) { resolve(0); }
+    });
+    if (waiting) fileCollectedItemsOnce();
+  }
+
+  try {
+    setInterval(drainCollected, 2000);
+    window.addEventListener('focus', drainCollected);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) drainCollected();
+    });
+  } catch (e) { /* the message and storage paths still run */ }
+
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes.savedProducts) return;
+      const items = changes.savedProducts.newValue || [];
+      if (items.length) fileCollectedItemsOnce();
+    });
+  } catch (e) { /* no storage events here — the message path still runs */ }
+
+  // And anything already waiting when the panel opens, from a collect whose
+  // message arrived while this panel was not there to hear it.
+  fileCollectedItemsOnce();
 
   // The count has to be right before anything is opened, or the menu shows no
   // queue until you happen to visit a list.
@@ -2043,7 +2305,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Collecting now files the items itself — see fileCollectedItems.
-    if (message.action === "RENDER_PICKED_PRODUCT") fileCollectedItems();
+    if (message.action === "RENDER_PICKED_PRODUCT") {
+      try { console.log('[decidio] panel got RENDER_PICKED_PRODUCT'); } catch (e) {}
+      fileCollectedItemsOnce();
+    }
 
     // The picker's footer carousel can change the target list while the panel
     // is hidden; mirror it here so the dropdown does not disagree on return.

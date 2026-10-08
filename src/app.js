@@ -983,7 +983,6 @@ document.addEventListener('DOMContentLoaded', () => {
      ------------------------------------------------------------------------ */
   const queueView = document.getElementById('queueView');
   const queueList = document.getElementById('queueList');
-  const queueEmpty = document.getElementById('queueEmpty');
   const queueOpenBtn = document.getElementById('queueOpenBtn');
   const queueCountEl = document.getElementById('queueCount');
 
@@ -1148,7 +1147,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const total = groups.reduce((n, g) => n + g.rows.length, 0);
 
     queueList.innerHTML = '';
-    if (queueEmpty) queueEmpty.hidden = total > 0;
 
     const esc = (v) => String(v == null ? '' : v).replace(/[<>&"]/g, (c) => (
       { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]

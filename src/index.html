@@ -197,7 +197,7 @@ to Decidio<span class="blue-dot">.</span></h1>
                 <div class="notes-section">
                     <label class="notes-label" for="notesDescription">Description.</label>
                     <textarea class="notes-field" id="notesDescription" rows="1"
-                              placeholder="Optional. What is this list for?"
+                              placeholder="What is this collection for?"
                               spellcheck="false"></textarea>
                 </div>
                 <!-- Preferences is not prose about the list: it is the criteria
@@ -208,7 +208,7 @@ to Decidio<span class="blue-dot">.</span></h1>
                 <div class="notes-section">
                     <label class="notes-label" for="notesPreferences">Preferences.</label>
                     <textarea class="notes-field" id="notesPreferences" rows="1"
-                              placeholder="Colours, sizes, materials, price — what makes one of these right for you?"
+                              placeholder="What matters most when you choose?"
                               spellcheck="false"></textarea>
                 </div>
                 <div class="notes-saved" id="notesSaved" aria-live="polite"></div>
@@ -224,9 +224,9 @@ to Decidio<span class="blue-dot">.</span></h1>
                      the queue for, as the notes screen does. -->
                 <div class="queue-title" id="queueTitle"></div>
                 <div class="queue-list" id="queueList"></div>
-                <div class="queue-empty" id="queueEmpty" hidden>
-                    Nothing waiting. Everything collected into this list has a name.
-                </div>
+                <!-- No empty-state line here on purpose: an empty Collected
+                     Items page is self-evident, and a sentence explaining it
+                     read as a notice about something being wrong. -->
             </div>
 
             <!-- Main Body Content -->

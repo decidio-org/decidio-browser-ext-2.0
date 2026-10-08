@@ -1577,14 +1577,6 @@
 }
 .decidio-sidebar:not(.is-auth) .queue-discard:hover svg { stroke: var(--ink); }
 
-.decidio-sidebar:not(.is-auth) .queue-empty {
-    font-family: "SFProDisplay", -apple-system, sans-serif;
-    font-weight: 500;
-    font-size: 14px;
-    line-height: 1.4;
-    color: var(--ink-faint);
-}
-.decidio-sidebar:not(.is-auth) .queue-empty[hidden] { display: none; }
 
 /* The count beside the menu entry, so the queue announces itself without
    having to be opened. */

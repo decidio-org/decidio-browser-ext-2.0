@@ -77,6 +77,7 @@ class DecidioContentPicker {
    * @param {'single' | 'multi'} [mode='single'] - Selection mode operation.
    */
   start(mode = 'single', lists = [], selectedListId = null) {
+    decidioTrace('overlay opened', { wasAlreadyOpen: !!this.isActive, list: selectedListId });
     if (this.isActive) this.stop();
     this.isActive = true;
     this.selectionMode = mode;
@@ -1374,6 +1375,7 @@ class DecidioContentPicker {
 
     // Handle clicks outside valid image targets
     if (!this.currentTarget) {
+      decidioTrace('click hit nothing collectable', { x: e.clientX, y: e.clientY });
       if (this.selectionMode === 'single') {
         chrome.runtime.sendMessage({ action: "DECIDIO_PICKER_CANCELLED" });
         this.stop();
@@ -2044,6 +2046,7 @@ class DecidioContentPicker {
     };
 
     this.queue.unshift(entry);
+    decidioTrace('item collected', { title: entry.title, borrowedTitle: entry.borrowedTitle });
     this.renderIdentify();
     this.renderRail();
     this.identify(entry);
@@ -2432,7 +2435,10 @@ class DecidioContentPicker {
     // Only identified rows are saved — a pending or failed one has no name to
     // file under, and the queue shows exactly which those are.
     const items = this.identifiedItems();
-    decidioTrace('Done pressed', { sending: items.length, titles: items.map((i) => i.productTitle) });
+    decidioTrace('Done pressed', {
+      sending: items.length,
+      items: items.map((i) => ({ title: i.productTitle, state: i.state, error: i.error }))
+    });
     chrome.runtime.sendMessage(
       items.length
         ? { action: "PRODUCT_IMAGES_BATCH_PICKED", items }

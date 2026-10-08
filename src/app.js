@@ -1451,6 +1451,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (queueOpenBtn) queueOpenBtn.addEventListener('click', openQueue);
 
+  /* Temporary: the collect trace, shown in the panel (see index.html). It
+     re-reads while open so a collect made with it up appears as it lands. */
+  (() => {
+    const btn = document.getElementById('debugLogBtn');
+    const view = document.getElementById('debugLog');
+    const text = document.getElementById('debugLogText');
+    if (!btn || !view || !text) return;
+    let timer = null;
+    const paint = () => {
+      try {
+        chrome.storage.local.get({ decidioTrace: [] }, (r) => {
+          const lines = (r && r.decidioTrace) || [];
+          text.textContent = lines.length ? lines.join('\n') : 'Nothing logged yet. Collect something, then come back.';
+          text.scrollTop = text.scrollHeight;
+        });
+      } catch (e) { text.textContent = 'Could not read the log: ' + e.message; }
+    };
+    btn.addEventListener('click', () => {
+      if (typeof setMenuOpen === 'function') setMenuOpen(false);
+      view.hidden = false;
+      paint();
+      clearInterval(timer);
+      timer = setInterval(paint, 1000);
+    });
+    document.getElementById('debugLogClose').addEventListener('click', () => {
+      view.hidden = true;
+      clearInterval(timer);
+    });
+    document.getElementById('debugLogClear').addEventListener('click', () => {
+      try { chrome.storage.local.set({ decidioTrace: [] }, paint); } catch (e) {}
+    });
+  })();
+
   /* ---------- An opened list ------------------------------------------------
      Tapping a name opens it: the header takes the list's name in place of
      "My Collections", the column of names gives way to that list's items, and
@@ -2359,6 +2392,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (collectBtn) {
     collectBtn.addEventListener('click', async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      decidioTrace('aperture pressed', { tab: tab ? tab.id : null, list: selectedListId });
       if (tab) {
         chrome.tabs.sendMessage(tab.id, {
           action: "START_DECIDIO_PICKER",

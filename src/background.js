@@ -129,12 +129,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const incoming = request.items || request.products || [];
 
       const updatedList = [...existing, ...incoming];
-      console.log('[decidio] batch received:', incoming.length, 'incoming,', existing.length, 'already waiting');
+      decidioTrace('batch received', { incoming: incoming.length, alreadyWaiting: existing.length });
       chrome.storage.local.set({ savedProducts: updatedList }, () => {
         if (chrome.runtime.lastError) {
-          console.log('[decidio] savedProducts write FAILED:', chrome.runtime.lastError.message);
+          decidioTrace('WRITE FAILED', { error: chrome.runtime.lastError.message });
         } else {
-          console.log('[decidio] savedProducts written, now', updatedList.length);
+          decidioTrace('savedProducts written', { total: updatedList.length });
         }
         safeRuntimeSendMessage({ action: "RENDER_PICKED_PRODUCT" });
       });
@@ -147,6 +147,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
    -------------------------------------------------------------------------- */
 
 // Handles browser action icon clicks to toggle extension state on/off
+const DECIDIO_TRACE_TAG = 'worker';
+
+/* --------------------------------------------------------------------------
+   TRACE — a shared, readable record of a collect's journey.
+
+   A collect crosses three contexts (page, service worker, panel), each with
+   its own console, so a report of "it didn't save" meant asking for three
+   separate consoles and usually getting one. Every hop writes a line here
+   instead, and the whole trip can be read back in one place:
+
+     chrome.storage.local.get('decidioTrace', r => console.log(r.decidioTrace.join('\n')))
+
+   Capped, best-effort, and never allowed to throw into the path it is
+   watching.
+   -------------------------------------------------------------------------- */
+function decidioTrace(msg, data) {
+  try {
+    const line = new Date().toLocaleTimeString() + '  ' + DECIDIO_TRACE_TAG + '  ' + msg
+      + (data === undefined ? '' : '  ' + JSON.stringify(data));
+    chrome.storage.local.get({ decidioTrace: [] }, (r) => {
+      try {
+        const log = ((r && r.decidioTrace) || []).concat(line).slice(-120);
+        chrome.storage.local.set({ decidioTrace: log });
+      } catch (e) {}
+    });
+  } catch (e) {}
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
   // Guard against system, browser extension store, and blank internal pages
   if (!tab || !tab.id || tab.url?.startsWith("chrome://") || tab.url?.startsWith("edge://")) return;

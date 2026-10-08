@@ -7,6 +7,22 @@
  * Renders an isolated Shadow DOM overlay with dynamic clip-path target highlighting
  * and supports both single-item and batch-item picking modes.
  */
+/* Every hop of a collect writes here, so the whole trip reads in one place.
+   See the note in background.js. */
+const DECIDIO_TRACE_TAG = 'page  ';
+function decidioTrace(msg, data) {
+  try {
+    const line = new Date().toLocaleTimeString() + '  ' + DECIDIO_TRACE_TAG + '  ' + msg
+      + (data === undefined ? '' : '  ' + JSON.stringify(data));
+    chrome.storage.local.get({ decidioTrace: [] }, (r) => {
+      try {
+        const log = ((r && r.decidioTrace) || []).concat(line).slice(-120);
+        chrome.storage.local.set({ decidioTrace: log });
+      } catch (e) {}
+    });
+  } catch (e) {}
+}
+
 class DecidioContentPicker {
   /**
    * Initializes instance state, DOM element references, and animation frame throttling flags.
@@ -2408,6 +2424,7 @@ class DecidioContentPicker {
   /**
    * Emits collected batch selection payload to background runtime and closes picker.
    */
+
   finishBatchSelection() {
     // Leaving with nothing collected is a cancel, not an empty batch — the
     // panel restores either way, but an empty PRODUCT_IMAGES_BATCH_PICKED
@@ -2415,7 +2432,7 @@ class DecidioContentPicker {
     // Only identified rows are saved — a pending or failed one has no name to
     // file under, and the queue shows exactly which those are.
     const items = this.identifiedItems();
-    try { console.log('[decidio] Done pressed, sending', items.length, 'item(s)', items); } catch (e) {}
+    decidioTrace('Done pressed', { sending: items.length, titles: items.map((i) => i.productTitle) });
     chrome.runtime.sendMessage(
       items.length
         ? { action: "PRODUCT_IMAGES_BATCH_PICKED", items }

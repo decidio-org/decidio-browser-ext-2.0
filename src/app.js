@@ -1138,70 +1138,103 @@ document.addEventListener('DOMContentLoaded', () => {
     const groups = await readAllQueues();
     const total = groups.reduce((n, g) => n + g.rows.length, 0);
 
+    /* Rows collected since this page was last looked at run the arrow once,
+       to say where the item is on its way to. Marked by time rather than by
+       a flag on the row: the mark is about this screen having been seen, not
+       about the item, and a row that has been watched travel should not do it
+       again on every later visit. renderQueue only ever runs with the page
+       up, so reading it here is reading it as it is shown. */
+    const seenAt = await new Promise((resolve) => {
+      try { chrome.storage.local.get({ queueSeenAt: 0 }, (r) => resolve((r && r.queueSeenAt) || 0)); }
+      catch (e) { resolve(0); }
+    });
+    let freshCount = 0;
+
     queueList.innerHTML = '';
 
     const esc = (v) => String(v == null ? '' : v).replace(/[<>&"]/g, (c) => (
       { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]
     ));
 
+    // Newest first, across every list. Rows name their own list, so nothing
+    // depends on them sitting in groups, and what was just collected is what
+    // you came here to see.
+    const ordered = [];
     for (const { list, rows } of groups) {
-      for (const row of rows) {
-        const el = document.createElement('div');
-        el.className = 'queue-row is-' + row.state;
-        el.dataset.id = row.id;
-        el.dataset.list = list.id;
+      for (const row of rows) ordered.push({ list, row });
+    }
+    ordered.sort((a, b) => (b.row.addedAt || 0) - (a.row.addedAt || 0));
 
-        // The list is named on the row, under the item, rather than once over
-        // a group of them: a row is a thing and the list it is going to, and
-        // reading one should not mean looking up the column for a heading.
-        const label = queueStateLabel(row);
-        const state = label
-          ? `<span class="queue-state">${esc(label)}</span>` : '';
-        // Added: already in the list, nothing to do but remove it. Ready: it
-        // has a name but never reached the list, so offer to send it. Failed:
-        // it needs a name first.
-        const action = row.state === 'ready'
-          ? `<button class="queue-add" data-id="${esc(row.id)}">Add to list</button>`
-          : (row.state === 'failed' && row.productUrl
-              ? `<button class="queue-retry" data-id="${esc(row.id)}">Retry</button>` : '');
+    for (const { list, row } of ordered) {
+      const el = document.createElement('div');
+      el.className = 'queue-row is-' + row.state;
+      el.dataset.id = row.id;
+      el.dataset.list = list.id;
 
-        el.innerHTML = `
-          ${row.thumb ? `<img class="queue-thumb" src="${esc(row.thumb)}" alt="">`
-                      : '<span class="queue-thumb"></span>'}
-          <span class="queue-text">
-            <span class="queue-name">${esc(row.title || 'Unnamed item')}</span>
-            ${state}
-            <button class="queue-move" data-id="${esc(row.id)}"
-                    aria-label="Send to another list" title="Send to another list">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <line x1="3" y1="12" x2="20" y2="12"/>
-                <polyline points="13,5 20,12 13,19"/>
-              </svg>
-              <span class="queue-dest">${esc(list.name || 'Untitled list')}</span>
-            </button>
-            ${action}
-          </span>
-          <button class="queue-discard" data-id="${esc(row.id)}" aria-label="Remove" title="Remove">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
-            </svg>
-          </button>`;
-        queueList.appendChild(el);
-
-        // The other lists, under the row, shown when the destination is
-        // pressed. Built with the row so pressing it is instant.
-        const picker = document.createElement('div');
-        picker.className = 'queue-destinations';
-        picker.dataset.for = row.id;
-        picker.hidden = true;
-        picker.innerHTML = availableLists
-          .filter((l) => String(l.id) !== String(list.id))
-          .map((l) => `<button class="queue-destination" data-id="${esc(row.id)}"
-                               data-from="${esc(list.id)}" data-to="${esc(l.id)}">${
-                        esc(l.name || 'Untitled list')}</button>`)
-          .join('') || '<span class="queue-no-destination">No other lists yet</span>';
-        queueList.appendChild(picker);
+      // New since the last visit: travel the arrow, one row after another
+      // so a batch reads as a batch rather than everything moving at once.
+      if ((row.addedAt || 0) > seenAt) {
+        el.classList.add('is-fresh');
+        el.style.setProperty('--queue-arrow-delay', Math.min(freshCount * 110, 1100) + 'ms');
+        freshCount++;
       }
+
+      // The list is named on the row, under the item, rather than once over
+      // a group of them: a row is a thing and the list it is going to, and
+      // reading one should not mean looking up the column for a heading.
+      const label = queueStateLabel(row);
+      const state = label
+        ? `<span class="queue-state">${esc(label)}</span>` : '';
+      // Added: already in the list, nothing to do but remove it. Ready: it
+      // has a name but never reached the list, so offer to send it. Failed:
+      // it needs a name first.
+      const action = row.state === 'ready'
+        ? `<button class="queue-add" data-id="${esc(row.id)}">Add to list</button>`
+        : (row.state === 'failed' && row.productUrl
+            ? `<button class="queue-retry" data-id="${esc(row.id)}">Retry</button>` : '');
+
+      el.innerHTML = `
+        ${row.thumb ? `<img class="queue-thumb" src="${esc(row.thumb)}" alt="">`
+                    : '<span class="queue-thumb"></span>'}
+        <span class="queue-text">
+          <span class="queue-name">${esc(row.title || 'Unnamed item')}</span>
+          ${state}
+          <button class="queue-move" data-id="${esc(row.id)}"
+                  aria-label="Send to another list" title="Send to another list">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <line x1="3" y1="12" x2="20" y2="12"/>
+              <polyline points="13,5 20,12 13,19"/>
+            </svg>
+            <span class="queue-dest">${esc(list.name || 'Untitled list')}</span>
+          </button>
+          ${action}
+        </span>
+        <button class="queue-discard" data-id="${esc(row.id)}" aria-label="Remove" title="Remove">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
+          </svg>
+        </button>`;
+      queueList.appendChild(el);
+
+      // The other lists, under the row, shown when the destination is
+      // pressed. Built with the row so pressing it is instant.
+      const picker = document.createElement('div');
+      picker.className = 'queue-destinations';
+      picker.dataset.for = row.id;
+      picker.hidden = true;
+      picker.innerHTML = availableLists
+        .filter((l) => String(l.id) !== String(list.id))
+        .map((l) => `<button class="queue-destination" data-id="${esc(row.id)}"
+                             data-from="${esc(list.id)}" data-to="${esc(l.id)}">${
+                      esc(l.name || 'Untitled list')}</button>`)
+        .join('') || '<span class="queue-no-destination">No other lists yet</span>';
+      queueList.appendChild(picker);
+    }
+
+    // Seen now. Anything already on screen has had its run; only what arrives
+    // after this moment is new next time.
+    if (freshCount) {
+      try { chrome.storage.local.set({ queueSeenAt: Date.now() }); } catch (e) {}
     }
 
     refreshQueueCount();
@@ -1756,7 +1789,51 @@ document.addEventListener('DOMContentLoaded', () => {
    * the body there is nothing left for it to confirm. So collecting files the
    * items itself, as soon as the picker hands them back.
    */
+
+  /* Every hop of a collect writes here, so the whole trip reads in one place.
+     See the note in background.js. */
+  const DECIDIO_TRACE_TAG = 'panel ';
+  function decidioTrace(msg, data) {
+    try {
+      const line = new Date().toLocaleTimeString() + '  ' + DECIDIO_TRACE_TAG + '  ' + msg
+        + (data === undefined ? '' : '  ' + JSON.stringify(data));
+      chrome.storage.local.get({ decidioTrace: [] }, (r) => {
+        try {
+          const log = ((r && r.decidioTrace) || []).concat(line).slice(-120);
+          chrome.storage.local.set({ decidioTrace: log });
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
+  /* The lists, loaded once and shared.
+
+     Lazy rather than assigned at the end of this script: the load-time filing
+     call runs before that point, so a promise created down there is still
+     null when the filer needs it. */
+  let listsReady = null;
+  function ensureLists() {
+    if (!listsReady) listsReady = loadLists();
+    return listsReady;
+  }
+
   async function fileCollectedItems() {
+    /* Wait for the lists before choosing one.
+
+       This runs at panel load and on a timer, both of which can land before
+       loadLists has resolved. With availableLists still empty the fallback
+       chain below reached 'unfiled', so a collect that was waiting when the
+       panel opened was filed into the holding queue — it showed as "Not in a
+       list" and never reached the list the user was actually in, which is
+       indistinguishable from the collect being lost.
+
+       The bare await first puts the rest of this function in a microtask, so
+       the script finishes evaluating before loadLists is ever called from
+       here — called during evaluation it would reach declarations that do not
+       exist yet. */
+    await Promise.resolve();
+    try { await ensureLists(); } catch (e) {}
+
     // Never drop a collect. This used to stop here when no list was selected,
     // which from the AR overlay looked exactly like collecting doing nothing:
     // the items were gone and the only explanation was a line of text on a
@@ -1773,7 +1850,10 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.storage.local.get({ savedProducts: [] }, (r) => resolve((r && r.savedProducts) || []));
       } catch (e) { resolve([]); }
     });
-    try { console.log('[decidio] filing', stored.length, 'item(s) into', targetId); } catch (e) {}
+    decidioTrace('panel filing', {
+      found: stored.length, into: targetId,
+      selected: selectedListId, open: openListId, knownLists: availableLists.length
+    });
     if (!stored.length) return;
 
     // Everything the aperture collects lands in the list's queue first,
@@ -1805,7 +1885,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (e) { resolve([]); }
     });
 
-    try { console.log('[decidio] filed', stored.length, 'into', targetId, '-', left.length, 'still waiting'); } catch (e) {}
+    decidioTrace('filed', { count: stored.length, into: targetId, stillWaiting: left.length });
     refreshQueueCount();
     if (queueView && !queueView.hidden) renderQueue();
 
@@ -1896,7 +1976,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // The count has to be right before anything is opened, or the menu shows no
   // queue until you happen to visit a list.
-  loadLists().then(refreshQueueCount);
+  // One shared promise for "the lists are known". Filing waits on it, so a
+  // collect that is already waiting when the panel opens cannot be filed
+  // before there is a list to file it into.
+  ensureLists().then(refreshQueueCount);
 
   // Multi-select is always on; single/multi toggle removed
 
@@ -2296,7 +2379,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Collecting now files the items itself — see fileCollectedItems.
     if (message.action === "RENDER_PICKED_PRODUCT") {
-      try { console.log('[decidio] panel got RENDER_PICKED_PRODUCT'); } catch (e) {}
+      decidioTrace('panel got message');
       fileCollectedItemsOnce();
     }
 

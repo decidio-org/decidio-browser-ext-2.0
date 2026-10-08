@@ -760,38 +760,18 @@ document.addEventListener('DOMContentLoaded', () => {
     renderBadgeCount(toggleAnchor, totalProducts);
   }
 
-  /**
-   * Clears existing DOM tiles and re-renders the complete list from storage data.
-   * @param {Array<Object>} savedProducts - Array of product objects from chrome.storage.
-   */
-  function syncUIFromStorageArray(savedProducts) {
-    if (!productsContainer) return;
+  /* savedProducts is NOT drawn any more.
 
-    // Flush existing DOM elements before repopulating
-    const oldTiles = productsContainer.querySelectorAll('.collected-product-tile');
-    oldTiles.forEach(tile => tile.remove());
-
-    // Reverse array so newer additions preserve visually correct stack order
-    const reversedProducts = [...savedProducts].reverse();
-    reversedProducts.forEach((prod) => {
-      displaySelectedProduct(prod.imageUrl, prod.productUrl, prod.productTitle || "Product", productsContainer);
-    });
-
-    updateLogoBadge(savedProducts.length);
-  }
-
-  // Fetch initial saved products from local storage on load
-  chrome.storage.local.get({ savedProducts: [] }, (result) => {
-    syncUIFromStorageArray(result.savedProducts);
-  });
-
-  // Real-time synchronization across instances when extension storage updates
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && changes.savedProducts) {
-      const updatedProductsList = changes.savedProducts.newValue || [];
-      syncUIFromStorageArray(updatedProductsList);
-    }
-  });
+     It used to be the panel's content, so it was painted at load and
+     repainted on every change. It is now only an inbox that collects pass
+     through on their way into a list — and it shares productsContainer with
+     the open list. So every collect painted the incoming batch over the
+     list, then the filing emptied the inbox and this repaint wiped every
+     tile, the list's included. When that wipe landed after the list had
+     redrawn itself, the list showed "Nothing in this list yet" with the
+     items saved, until the next collect redrew it; when it landed before,
+     the tiles flashed up, vanished, then cascaded in. The open list is the
+     only thing drawn here now (openList). */
 
   // Handle tile deletion via event delegation on the product container
   if (productsContainer) {
@@ -818,11 +798,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateLogoBadge();
 
-        // Persist deletion changes back to Chrome extension local storage
-        chrome.storage.local.get({ savedProducts: [] }, (result) => {
-          const updatedList = result.savedProducts.filter(p => p.productUrl !== urlToRemove);
-          chrome.storage.local.set({ savedProducts: updatedList });
-        });
+        // Out of the open list, which is what the tile is showing. This used
+        // to delete from savedProducts — the inbox collects pass through —
+        // so the item was gone from the screen and still in the list, and
+        // came back the next time the list opened.
+        if (openListId) {
+          removeFromList(openListId, {
+            productUrl: urlToRemove || null,
+            title: productTile.getAttribute('data-product-title') || null
+          });
+        }
       }
     });
   }
@@ -1451,39 +1436,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (queueOpenBtn) queueOpenBtn.addEventListener('click', openQueue);
 
-  /* Temporary: the collect trace, shown in the panel (see index.html). It
-     re-reads while open so a collect made with it up appears as it lands. */
-  (() => {
-    const btn = document.getElementById('debugLogBtn');
-    const view = document.getElementById('debugLog');
-    const text = document.getElementById('debugLogText');
-    if (!btn || !view || !text) return;
-    let timer = null;
-    const paint = () => {
-      try {
-        chrome.storage.local.get({ decidioTrace: [] }, (r) => {
-          const lines = (r && r.decidioTrace) || [];
-          text.textContent = lines.length ? lines.join('\n') : 'Nothing logged yet. Collect something, then come back.';
-          text.scrollTop = text.scrollHeight;
-        });
-      } catch (e) { text.textContent = 'Could not read the log: ' + e.message; }
-    };
-    btn.addEventListener('click', () => {
-      if (typeof setMenuOpen === 'function') setMenuOpen(false);
-      view.hidden = false;
-      paint();
-      clearInterval(timer);
-      timer = setInterval(paint, 1000);
-    });
-    document.getElementById('debugLogClose').addEventListener('click', () => {
-      view.hidden = true;
-      clearInterval(timer);
-    });
-    document.getElementById('debugLogClear').addEventListener('click', () => {
-      try { chrome.storage.local.set({ decidioTrace: [] }, paint); } catch (e) {}
-    });
-  })();
-
   /* ---------- An opened list ------------------------------------------------
      Tapping a name opens it: the header takes the list's name in place of
      "My Collections", the column of names gives way to that list's items, and
@@ -1558,7 +1510,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setHeaderTitle(listNameFor(listId));
     if (sidebarPanel) sidebarPanel.classList.add('is-in-list');
 
+    // Both reads happen BEFORE any tile is built. The cascade check used to
+    // come after the tiles were on the page, and the await in it let the
+    // browser paint them fully visible first — so they showed, vanished when
+    // the cascade class snapped them to transparent, then cascaded in. Known
+    // up front, every tile is created already hidden and the first frame
+    // shows nothing until the cascade brings it.
     const items = await readListItems(listId);
+    const cascade = await takeCascadePending(listId);
+
     if (productsContainer) {
       productsContainer.querySelectorAll('.collected-product-tile').forEach((t) => t.remove());
       // Newest first, the order the collected rows already use.
@@ -1566,24 +1526,26 @@ document.addEventListener('DOMContentLoaded', () => {
         displaySelectedProduct(it.imageUrl, it.productUrl, it.productTitle || 'Product', productsContainer);
       });
 
-      // Cascade them in, but only on the first open after something was
-      // added. The delay is per row and set here because the CSS cannot know
-      // how many there are; capped so a long list does not spend a second and
-      // a half arriving.
-      if (await takeCascadePending(listId)) {
+      // Cascade them in, only on the first open after something was added.
+      // The step is per row and set here because the CSS cannot know how many
+      // there are; capped so a long list does not keep arriving for seconds.
+      if (cascade) {
+        const STEP = 85;
+        const CAP = 900;
+        const DURATION = 760;
         const tiles = [...productsContainer.querySelectorAll('.collected-product-tile')];
         tiles.forEach((tile, i) => {
+          tile.style.animationDelay = Math.min(i * STEP, CAP) + 'ms';
           tile.classList.add('is-cascading');
-          tile.style.animationDelay = Math.min(i * 130, 1300) + 'ms';
         });
         // The class is only there to run the animation once; left on, a later
-        // repaint would replay it.
+        // repaint would replay it. Removed once the last tile has landed.
         setTimeout(() => {
           tiles.forEach((t) => {
             t.classList.remove('is-cascading');
             t.style.animationDelay = '';
           });
-        }, 2400);
+        }, CAP + DURATION + 100);
       }
     }
 
@@ -1794,8 +1756,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return { saved, failed };
   }
 
-  /** One-line feedback under the Collect area — saving has no other signal. */
-  function showCollectStatus(message, isError) {
+  /** One-line feedback under the Collect area — saving has no other signal.
+   *  A sticky message stays until replaced, for a state that will not clear
+   *  on its own. */
+  function showCollectStatus(message, isError, sticky) {
     let el = document.getElementById('collectStatus');
     if (!el) {
       el = document.createElement('div');
@@ -1809,35 +1773,42 @@ document.addEventListener('DOMContentLoaded', () => {
     el.classList.toggle('is-error', Boolean(isError));
     el.classList.add('is-visible');
     clearTimeout(el._hideTimer);
-    el._hideTimer = setTimeout(() => el.classList.remove('is-visible'), 4000);
+    if (!sticky) el._hideTimer = setTimeout(() => el.classList.remove('is-visible'), 4000);
+  }
+
+  /* Whether this panel has been cut off from the extension.
+
+     Reloading or updating the extension orphans the panel in every open tab:
+     it stays on screen, lists and all, looking exactly as it did, but every
+     chrome.* call throws "Extension context invalidated". The aperture then
+     does nothing and nothing is filed — collecting looks broken with no sign
+     why. background.js injects a fresh copy into open tabs on reload; this is
+     for any tab that copy could not reach. */
+  function extensionGone() {
+    try { return !(chrome.runtime && chrome.runtime.id); } catch (e) { return true; }
+  }
+  function showUpdatedNotice() {
+    showCollectStatus('Decidio was updated. Refresh this page to keep collecting.', true, true);
   }
 
   const collectBtn = document.getElementById('collectBtn');
 
-  /**
-   * Files everything collected into the selected list.
-   *
-   * There is no button for this any more: the footer's plus used to be a
-   * second press confirming where the items went, and with the list chosen in
-   * the body there is nothing left for it to confirm. So collecting files the
-   * items itself, as soon as the picker hands them back.
-   */
-
-  /* Every hop of a collect writes here, so the whole trip reads in one place.
-     See the note in background.js. */
-  const DECIDIO_TRACE_TAG = 'panel ';
-  function decidioTrace(msg, data) {
+  /* Which tab this panel lives in. Collects are stamped with the tab they
+     came from and each panel files only its own (see fileCollectedItems). */
+  let myTabId = null;
+  const myTabReady = new Promise((resolve) => {
+    // Never wait on the answer for long. Filing waits on this, and an
+    // unanswered question would hold every collect forever; with no tab
+    // known the panel files everything waiting, as it did before.
+    setTimeout(() => resolve(myTabId), 1500);
     try {
-      const line = new Date().toLocaleTimeString() + '  ' + DECIDIO_TRACE_TAG + '  ' + msg
-        + (data === undefined ? '' : '  ' + JSON.stringify(data));
-      chrome.storage.local.get({ decidioTrace: [] }, (r) => {
-        try {
-          const log = ((r && r.decidioTrace) || []).concat(line).slice(-120);
-          chrome.storage.local.set({ decidioTrace: log });
-        } catch (e) {}
+      chrome.runtime.sendMessage({ action: 'DECIDIO_WHICH_TAB' }, (r) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        myTabId = r && r.tabId != null ? r.tabId : null;
+        resolve(myTabId);
       });
-    } catch (e) {}
-  }
+    } catch (e) { resolve(null); }
+  });
 
   /* The lists, loaded once and shared.
 
@@ -1850,7 +1821,20 @@ document.addEventListener('DOMContentLoaded', () => {
     return listsReady;
   }
 
+  /**
+   * Files everything collected into the selected list.
+   *
+   * There is no button for this any more: the footer's plus used to be a
+   * second press confirming where the items went, and with the list chosen in
+   * the body there is nothing left for it to confirm. So collecting files the
+   * items itself, as soon as the picker hands them back.
+   */
   async function fileCollectedItems() {
+    // On the dev session the panel saves nothing: the overlay hands each
+    // batch straight to the background, which files it and confirms (see
+    // DECIDIO_SAVE_COLLECTED). This path is only for a signed-in session,
+    // which files through the API.
+    if (usingDevSession()) return;
     /* Wait for the lists before choosing one.
 
        This runs at panel load and on a timer, both of which can land before
@@ -1866,70 +1850,87 @@ document.addEventListener('DOMContentLoaded', () => {
        exist yet. */
     await Promise.resolve();
     try { await ensureLists(); } catch (e) {}
+    try { await myTabReady; } catch (e) {}
 
-    // Never drop a collect. This used to stop here when no list was selected,
-    // which from the AR overlay looked exactly like collecting doing nothing:
-    // the items were gone and the only explanation was a line of text on a
-    // panel that was off screen at the time. Fall back to the first list, and
-    // failing that to a holding queue that Collected Items shows as "Not in a
-    // list", where the rows can be sent somewhere real.
-    const targetId = selectedListId
+    // Never drop a collect. An item with no list of its own (collected before
+    // items carried one) falls back to this panel's list, then the first
+    // list, then the holding queue that Collected Items shows as "Not in a
+    // list".
+    const fallbackId = selectedListId
       || (availableLists[0] && availableLists[0].id)
       || 'unfiled';
     if (!selectedListId) selectedListId = availableLists[0] ? availableLists[0].id : null;
 
-    const stored = await new Promise((resolve) => {
+    const all = await new Promise((resolve) => {
       try {
         chrome.storage.local.get({ savedProducts: [] }, (r) => resolve((r && r.savedProducts) || []));
       } catch (e) { resolve([]); }
     });
-    decidioTrace('panel filing', {
-      found: stored.length, into: targetId,
-      selected: selectedListId, open: openListId, knownLists: availableLists.length
+
+    /* Only this tab's collects.
+
+       Every tab with Decidio on has a panel, and every panel watches
+       savedProducts. Before this, whichever panel noticed a batch first filed
+       it — into ITS selected list — so items collected in one tab regularly
+       landed in a list selected in another, and the panel you were looking at
+       found nothing. The background stamps each item with the tab it came
+       from; the panel in that tab is the one that files it.
+
+       An item nobody has claimed after a while (its tab was closed, or it
+       predates the stamp) is fair game for any panel, so nothing is stranded.
+       It still goes to the list it was collected for, whoever files it. */
+    const ORPHANED_AFTER = 15000;
+    const now = Date.now();
+    const mine = all.filter((it) => {
+      if (it.tabId == null || myTabId == null) return true;
+      if (it.tabId === myTabId) return true;
+      return (now - (it.pickedAt || 0)) > ORPHANED_AFTER;
     });
-    if (!stored.length) return;
+    if (!mine.length) return;
+
+    // Each item to the list it was collected for, grouped so a batch is one
+    // write per list. A list that has since been deleted falls back rather
+    // than filing into nothing.
+    const known = new Set(availableLists.map((l) => String(l.id)));
+    const groups = new Map();
+    for (const it of mine) {
+      const dest = it.listId && known.has(String(it.listId)) ? String(it.listId) : fallbackId;
+      if (!groups.has(dest)) groups.set(dest, []);
+      groups.get(dest).push(it);
+    }
 
     // Everything the aperture collects lands in the list's queue first,
-    // named or not. The queue is where a batch is looked over before it is
-    // kept — each row can be added to the list or thrown away — rather than
-    // items appearing in the list the moment they are framed.
-    noteListUsed(targetId);
-    await markCascadePending(targetId);
-    await addToQueue(targetId, stored);
+    // named or not, and the named ones go straight into the list as well.
+    for (const [listId, items] of groups) {
+      noteListUsed(listId);
+      await markCascadePending(listId);
+      await addToQueue(listId, items);
+    }
 
-    /* Take out exactly what was just filed, and WAIT for it.
-       This used to blank the whole key and not wait. Both halves lost
-       collects, intermittently, which is the worst way to lose them:
-         - A batch that landed while the filing above was running was wiped
-           by a clear that had read the key before it arrived. Collecting
-           twice quickly dropped the second one.
-         - The clear was fire-and-forget, so the next collect could be
-           written and then overwritten by a clear still in flight.
-       Background appends, so the batch just filed is the first
-       `stored.length` entries; anything past them arrived since and is
-       somebody else's to file. */
-    const left = await new Promise((resolve) => {
+    /* Take out exactly what was filed — by id — and wait for it.
+       Removing by position assumed this panel was the only one touching the
+       key; with a panel per tab it could take out another tab's batch. Items
+       without an id (from before ids existed) are matched by identity. */
+    const filedIds = new Set(mine.map((it) => it.pid).filter(Boolean));
+    await new Promise((resolve) => {
       try {
         chrome.storage.local.get({ savedProducts: [] }, (r) => {
-          const now = (r && r.savedProducts) || [];
-          const rest = now.slice(stored.length);
+          const cur = (r && r.savedProducts) || [];
+          const rest = cur.filter((it) => (it.pid ? !filedIds.has(it.pid) : !mine.includes(it)
+            && !mine.some((m) => !m.pid && m.productUrl === it.productUrl && m.productTitle === it.productTitle)));
           chrome.storage.local.set({ savedProducts: rest }, () => resolve(rest));
         });
       } catch (e) { resolve([]); }
     });
 
-    decidioTrace('filed', { count: stored.length, into: targetId, stillWaiting: left.length });
     refreshQueueCount();
     if (queueView && !queueView.hidden) renderQueue();
 
     // Collecting while a list is open is the common way to add to it, and
-    // the list has to show what just arrived. Without this the items were
-    // filed correctly and the screen did not move — which reads as collecting
-    // being broken, since the list you are looking at is the one you were
-    // adding to. openList repaints it, and spends the cascade flag that
-    // addToQueue just set, so the new rows arrive the way they do anywhere
-    // else.
-    if (openListId && String(openListId) === String(targetId)) {
+    // the list has to show what just arrived. openList repaints it and spends
+    // the cascade flag set above, so the new rows arrive the way they do
+    // anywhere else.
+    if (openListId && groups.has(String(openListId))) {
       openList(openListId);
     }
   }
@@ -1980,6 +1981,8 @@ document.addEventListener('DOMContentLoaded', () => {
      panel comes back to the foreground. It costs one storage read and does
      nothing at all unless something is actually waiting. */
   async function drainCollected() {
+    // Also how an orphaned panel finds out, before anyone presses anything.
+    if (extensionGone()) { showUpdatedNotice(); return; }
     const waiting = await new Promise((resolve) => {
       try { chrome.storage.local.get({ savedProducts: [] }, (r) => resolve(((r && r.savedProducts) || []).length)); }
       catch (e) { resolve(0); }
@@ -2003,6 +2006,50 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   } catch (e) { /* no storage events here — the message path still runs */ }
 
+  /* Redraw from storage, whoever wrote it.
+
+     On the dev session the background worker files every collect (see
+     background.js), so this panel never does the writing — it finds out the
+     way every other tab does, from the storage change, and redraws what it is
+     showing: the open list, Collected Items and its count. Coalesced, since
+     one filing changes several keys at once. */
+  let pendingRedraw = {};
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      const keys = Object.keys(changes);
+
+      // Recency is kept in memory too; take the worker's update instead of
+      // overwriting it with a stale copy the next time a list is used.
+      if (changes.listRecentUse && changes.listRecentUse.newValue) {
+        recentUse = changes.listRecentUse.newValue;
+      }
+
+      const listChanged = openListId && keys.includes('devListItems_' + openListId);
+      const queueChanged = keys.some((k) => k.startsWith('listQueue_'));
+      if (!listChanged && !queueChanged && !changes.listRecentUse) return;
+
+      // Coalesced on a microtask, not a timer: a tab in the background has
+      // its timers throttled or frozen, and a timer here left another tab's
+      // Collected Items count stale until it happened to redraw.
+      pendingRedraw.list = pendingRedraw.list || listChanged;
+      pendingRedraw.queue = pendingRedraw.queue || queueChanged;
+      pendingRedraw.recent = pendingRedraw.recent || !!changes.listRecentUse;
+      if (pendingRedraw.scheduled) return;
+      pendingRedraw.scheduled = true;
+      Promise.resolve().then(() => {
+        const todo = pendingRedraw;
+        pendingRedraw = {};
+        if (todo.queue) {
+          refreshQueueCount();
+          if (queueView && !queueView.hidden) renderQueue();
+        }
+        if (todo.list && openListId) openList(openListId);
+        else if (!openListId && todo.recent) renderListBar();
+      });
+    });
+  } catch (e) { /* no storage events — RENDER_PICKED_PRODUCT still redraws */ }
+
   // And anything already waiting when the panel opens, from a collect whose
   // message arrived while this panel was not there to hear it.
   fileCollectedItemsOnce();
@@ -2012,6 +2059,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // One shared promise for "the lists are known". Filing waits on it, so a
   // collect that is already waiting when the panel opens cannot be filed
   // before there is a list to file it into.
+  // The debug log is gone; drop what it left in storage.
+  try { chrome.storage.local.remove('decidioTrace'); } catch (e) {}
   ensureLists().then(refreshQueueCount);
 
   // Multi-select is always on; single/multi toggle removed
@@ -2391,8 +2440,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Send payload to content script on active tab when user clicks "Add Product"
   if (collectBtn) {
     collectBtn.addEventListener('click', async () => {
+      if (extensionGone()) { showUpdatedNotice(); return; }
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      decidioTrace('aperture pressed', { tab: tab ? tab.id : null, list: selectedListId });
       if (tab) {
         chrome.tabs.sendMessage(tab.id, {
           action: "START_DECIDIO_PICKER",
@@ -2413,7 +2462,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Collecting now files the items itself — see fileCollectedItems.
     if (message.action === "RENDER_PICKED_PRODUCT") {
-      decidioTrace('panel got message');
+      // The redraw itself comes from the storage change (see "Redraw from
+      // storage"); doing it here as well ran openList twice at once, and the
+      // second run cut the cascade off halfway.
       fileCollectedItemsOnce();
     }
 
@@ -2454,6 +2505,7 @@ function displaySelectedProduct(imageUrl, productUrl, productTitle, container) {
   const productTile = document.createElement('div');
   productTile.className = 'collected-product-tile';
   productTile.setAttribute('data-product-url', productUrl);
+  productTile.setAttribute('data-product-title', productTitle || '');
 
   // Thumbnail — fixed 70x50, cover-cropped, square corners.
   const imgWrapper = document.createElement('div');

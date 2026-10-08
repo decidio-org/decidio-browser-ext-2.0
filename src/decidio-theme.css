@@ -1618,13 +1618,22 @@
    Reduce Motion turns it off rather than speeding it up — the point of the
    setting is not to move things.
    -------------------------------------------------------------------------- */
+/* Smoother than it was: a shorter rise (8px, not 14) over a longer time on
+   a long, soft ease-out, so each tile glides the last stretch rather than
+   arriving with a jolt. Opacity leads the movement slightly — a tile is
+   mostly there before it has finished settling — which reads as one
+   continuous fade-and-settle instead of a fade and then a slide.
+   `both`, not `forwards`: during its delay a tile holds the first frame
+   (invisible) instead of showing at full opacity and then vanishing. */
 @keyframes decidio-cascade {
-    from { opacity: 0; transform: translateY(14px); }
-    to   { opacity: 1; transform: none; }
+    0%   { opacity: 0; transform: translateY(8px); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: none; }
 }
 .decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile.is-cascading {
     opacity: 0;
-    animation: decidio-cascade 620ms cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    will-change: opacity, transform;
+    animation: decidio-cascade 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
     .decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile.is-cascading {
@@ -2170,42 +2179,3 @@
 }
 .decidio-sidebar:not(.is-auth) .add-collect-glyph line { stroke-width: 1.9; }
 
-/* Temporary debug log (see index.html). Covers the panel, plain monospace,
-   newest line last so it reads in the order things happened. */
-.debug-log {
-    position: absolute;
-    inset: 0;
-    z-index: 50;
-    display: flex;
-    flex-direction: column;
-    background: #0d0d0d;
-    color: #e8e8e8;
-    border-radius: inherit;
-}
-.debug-log[hidden] { display: none; }
-.debug-log-bar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 14px 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.12);
-}
-.debug-log-btn {
-    background: #fff;
-    color: #000;
-    border: none;
-    border-radius: 999px;
-    padding: 5px 14px;
-    font: 600 12px -apple-system, sans-serif;
-    cursor: pointer;
-}
-.debug-log-text {
-    flex: 1 1 auto;
-    margin: 0;
-    padding: 10px 14px 16px;
-    overflow: auto;
-    font: 10.5px/1.45 ui-monospace, Menlo, monospace;
-    white-space: pre-wrap;
-    word-break: break-word;
-    user-select: text;
-}

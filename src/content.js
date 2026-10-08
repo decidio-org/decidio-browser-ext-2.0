@@ -22,8 +22,31 @@
                   e.reason && (e.reason.stack || e.reason.message || e.reason));
   });
 
-  // Guard against redundant script injections on the same web page
-  if (window.decidioContentScriptInjected) return;
+  // Guard against redundant script injections on the same web page — but
+  // only against a copy that still works. A copy left over from before the
+  // extension was reloaded is orphaned: its panel and overlay are still on
+  // the page, but it can no longer reach the extension, so every collect
+  // through it goes nowhere. That copy is taken out and replaced instead of
+  // being deferred to (background.js injects the replacement on reload).
+  const previousAlive = (() => {
+    try { return typeof window.decidioOwnerAlive === 'function' && window.decidioOwnerAlive(); }
+    catch (e) { return false; }
+  })();
+  if (window.decidioContentScriptInjected && previousAlive) return;
+
+  if (window.decidioContentScriptInjected
+      || document.getElementById('decidio-extension-root')
+      || document.getElementById('decidio-picker-host')) {
+    // The overlay first: an open one holds capture listeners on the window
+    // that would swallow every click on the page.
+    try { if (window.decidioPickerInstance) window.decidioPickerInstance.stop(); } catch (e) {}
+    for (const id of ['decidio-picker-host', 'decidio-extension-root', 'decidio-main-frame',
+                      'decidio-toggle-btn', 'decidioToggle']) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
+    window.decidioContentScriptInjected = false;
+  }
 
   // Initialize content picker instance on global scope for cross-script access
   window.decidioPickerInstance = new DecidioContentPicker();
@@ -35,6 +58,9 @@
   // re-injection would return early rather than retry. Now a throw leaves the
   // flag unset and the next injection gets a clean attempt.
   window.decidioContentScriptInjected = true;
+  // Lets a later injection ask whether this copy can still reach the
+  // extension (see the guard above). extensionAlive is hoisted from below.
+  window.decidioOwnerAlive = extensionAlive;
 
   /**
    * Whether this content script can still reach its extension.

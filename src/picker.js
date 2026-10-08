@@ -7,22 +7,6 @@
  * Renders an isolated Shadow DOM overlay with dynamic clip-path target highlighting
  * and supports both single-item and batch-item picking modes.
  */
-/* Every hop of a collect writes here, so the whole trip reads in one place.
-   See the note in background.js. */
-const DECIDIO_TRACE_TAG = 'page  ';
-function decidioTrace(msg, data) {
-  try {
-    const line = new Date().toLocaleTimeString() + '  ' + DECIDIO_TRACE_TAG + '  ' + msg
-      + (data === undefined ? '' : '  ' + JSON.stringify(data));
-    chrome.storage.local.get({ decidioTrace: [] }, (r) => {
-      try {
-        const log = ((r && r.decidioTrace) || []).concat(line).slice(-120);
-        chrome.storage.local.set({ decidioTrace: log });
-      } catch (e) {}
-    });
-  } catch (e) {}
-}
-
 class DecidioContentPicker {
   /**
    * Initializes instance state, DOM element references, and animation frame throttling flags.
@@ -77,7 +61,6 @@ class DecidioContentPicker {
    * @param {'single' | 'multi'} [mode='single'] - Selection mode operation.
    */
   start(mode = 'single', lists = [], selectedListId = null) {
-    decidioTrace('overlay opened', { wasAlreadyOpen: !!this.isActive, list: selectedListId });
     if (this.isActive) this.stop();
     this.isActive = true;
     this.selectionMode = mode;
@@ -90,6 +73,8 @@ class DecidioContentPicker {
     this.selectedListId = selectedListId;
     this.queue = [];
     this.identifyOpen = false;
+    this.saving = false;
+    this.saveError = null;
 
     // Minimize extension sidebar to clear screen real estate
     if (typeof minimizeSidebar === 'function') minimizeSidebar();
@@ -521,6 +506,15 @@ class DecidioContentPicker {
         font-weight: 600;
       }
       .decidio-ar-rail-done:hover { background: #f0f0f0; }
+      .decidio-ar-rail-done[disabled] { opacity: 0.6; cursor: default; }
+      .decidio-ar-rail-error {
+        margin: 0 0 10px;
+        color: #ff8a80;
+        font-family: "SFProDisplay", -apple-system, sans-serif;
+        font-size: 12.5px;
+        font-weight: 500;
+        line-height: 1.35;
+      }
 
       .decidio-ar-rail-body {
         /* Takes the space its rows need, and no more — it is what the column
@@ -971,8 +965,36 @@ class DecidioContentPicker {
   /**
    * Tracks mouse position and schedules requestAnimationFrame update.
    */
+  /**
+   * Shuts the overlay down if this copy has been cut off from the extension.
+   *
+   * Reloading the extension leaves this code running in any open tab, but
+   * unable to reach the extension. An overlay that was open at that moment
+   * kept its window-level listeners, and handleClick swallows clicks
+   * (preventDefault + stopPropagation) — so every click on the page died
+   * there, including Done on the fresh overlay a re-injected copy put up.
+   * Done looked fine and did nothing. A cut-off copy now stands down the
+   * first time it sees any input, and lets that input through.
+   *
+   * @returns {boolean} true if it shut down (the caller should do nothing).
+   */
+  standDownIfOrphaned() {
+    let alive = false;
+    try { alive = Boolean(chrome.runtime && chrome.runtime.id); } catch (e) { alive = false; }
+    if (alive) return false;
+    try { this.stop(); } catch (e) {
+      // stop() can fail partway once the extension is gone; the listeners
+      // are what matter, so take them off directly.
+      this.isActive = false;
+      try { this.detachEventListeners(); } catch (e2) {}
+      if (this.hostElement) { try { this.hostElement.remove(); } catch (e3) {} }
+    }
+    return true;
+  }
+
   handleMouseMove = (e) => {
     if (!this.isActive) return;
+    if (this.standDownIfOrphaned()) return;
     this.lastMouseX = e.clientX;
     this.lastMouseY = e.clientY;
 
@@ -1316,6 +1338,7 @@ class DecidioContentPicker {
    */
   handleClick = (e) => {
     if (!this.isActive) return;
+    if (this.standDownIfOrphaned()) return;   // let the click through untouched
 
     // Check click target within Shadow DOM elements
     const path = e.composedPath ? e.composedPath() : [];
@@ -1375,7 +1398,6 @@ class DecidioContentPicker {
 
     // Handle clicks outside valid image targets
     if (!this.currentTarget) {
-      decidioTrace('click hit nothing collectable', { x: e.clientX, y: e.clientY });
       if (this.selectionMode === 'single') {
         chrome.runtime.sendMessage({ action: "DECIDIO_PICKER_CANCELLED" });
         this.stop();
@@ -1407,6 +1429,7 @@ class DecidioContentPicker {
    * selection so it can be adjusted without reaching for the pill.
    */
   handleKeyDown = (e) => {
+    if (this.isActive && this.standDownIfOrphaned()) return;
     if (e.key === 'Escape') {
       if (this.isFrozen) {
         e.preventDefault();
@@ -1527,11 +1550,25 @@ class DecidioContentPicker {
    */
   drawCrop(source, g) {
     try {
+      /* Stored, not just shown, so it has to be small.
+
+         Crops were full source resolution as PNG — often several hundred KB
+         to over a megabyte each, kept twice (the list and Collected Items).
+         Extension storage holds 10 MB by default, so a handful of collects
+         filled it and from then on every save failed. Capped at 800px on the
+         long edge (the panel shows them at a fraction of that) and encoded
+         as JPEG: tens of KB instead. */
+      const MAX = 800;
+      const scale = Math.min(1, MAX / Math.max(g.sw, g.sh));
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(g.sw));
-      canvas.height = Math.max(1, Math.round(g.sh));
-      canvas.getContext('2d').drawImage(source, g.sx, g.sy, g.sw, g.sh, 0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL('image/png');
+      canvas.width = Math.max(1, Math.round(g.sw * scale));
+      canvas.height = Math.max(1, Math.round(g.sh * scale));
+      const ctx = canvas.getContext('2d');
+      // JPEG has no transparency; a cut-out product shot gets white, not black.
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(source, g.sx, g.sy, g.sw, g.sh, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', 0.85);
     } catch (e) {
       return null;   // tainted canvas, or a video with no frame yet
     }
@@ -2046,7 +2083,6 @@ class DecidioContentPicker {
     };
 
     this.queue.unshift(entry);
-    decidioTrace('item collected', { title: entry.title, borrowedTitle: entry.borrowedTitle });
     this.renderIdentify();
     this.renderRail();
     this.identify(entry);
@@ -2159,7 +2195,9 @@ class DecidioContentPicker {
          </div>
          <div class="decidio-ar-rail-body">${rows}</div>
          <div class="decidio-ar-rail-foot">
-           <button class="decidio-ar-rail-done">Done</button>
+           ${this.saveError ? `<p class="decidio-ar-rail-error">${esc(this.saveError)}</p>` : ''}
+           <button class="decidio-ar-rail-done"${this.saving ? ' disabled' : ''}>${
+             this.saving ? 'Saving…' : (this.saveError ? 'Try again' : 'Done')}</button>
          </div>`
       : '';
 
@@ -2198,6 +2236,7 @@ class DecidioContentPicker {
    */
   handleWheel = (e) => {
     if (!this.isActive || this.isFrozen || !this.identifyPage) return;
+    if (this.standDownIfOrphaned()) return;
     if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
 
     e.preventDefault();
@@ -2249,7 +2288,13 @@ class DecidioContentPicker {
       productTitle: q.title,
       brand: q.brand || null,
       state: q.state,
-      error: q.error || null
+      error: q.error || null,
+      // The list this was collected FOR, fixed at the moment the overlay
+      // opened. Filing used to read the destination off whichever panel
+      // happened to pick the batch up — and every tab with Decidio on has a
+      // panel, each with its own list selected, so items landed in another
+      // tab's list about as often as in this one.
+      listId: this.selectedListId || null
     }));
   }
 
@@ -2429,21 +2474,68 @@ class DecidioContentPicker {
    */
 
   finishBatchSelection() {
-    // Leaving with nothing collected is a cancel, not an empty batch — the
-    // panel restores either way, but an empty PRODUCT_IMAGES_BATCH_PICKED
-    // would still read as a completed save downstream.
-    // Only identified rows are saved — a pending or failed one has no name to
-    // file under, and the queue shows exactly which those are.
+    // Leaving with nothing collected is a cancel, not an empty save.
     const items = this.identifiedItems();
-    decidioTrace('Done pressed', {
-      sending: items.length,
-      items: items.map((i) => ({ title: i.productTitle, state: i.state, error: i.error }))
-    });
-    chrome.runtime.sendMessage(
-      items.length
-        ? { action: "PRODUCT_IMAGES_BATCH_PICKED", items }
-        : { action: "DECIDIO_PICKER_CANCELLED" }
-    );
-    this.stop();
+    if (!items.length) {
+      try { chrome.runtime.sendMessage({ action: "DECIDIO_PICKER_CANCELLED" }); } catch (e) {}
+      this.stop();
+      return;
+    }
+    if (this.saving) return;            // a second Done while the first is in flight
+
+    /* Saved, or told why not — never neither.
+
+       This used to send the batch and close in the same breath, whether or
+       not anything received it. A tab left running an old copy after the
+       extension reloaded, a background that was asleep, two tabs filing at
+       once: every one of those lost the collect silently, the overlay closed
+       as if it had worked, and the list simply did not have the items.
+
+       Now the background files the batch and answers, and only "saved"
+       closes the overlay. Anything else — an error, no answer, no connection
+       at all — keeps the overlay open with the items still in the column and
+       says it could not save, so nothing is ever lost without a word. */
+    this.saving = true;
+    this.saveError = null;
+    this.renderRail();
+
+    let settled = false;
+    const fail = (why) => {
+      if (settled) return;
+      settled = true;
+      this.saving = false;
+      this.saveError = why;
+      this.renderRail();
+    };
+    const timer = setTimeout(() => fail("Couldn't save — no answer from Decidio."), 6000);
+
+    try {
+      chrome.runtime.sendMessage(
+        { action: "DECIDIO_SAVE_COLLECTED", listId: this.selectedListId || null, items },
+        (reply) => {
+          clearTimeout(timer);
+          if (settled) return;
+          const err = chrome.runtime.lastError;
+          if (err || !reply || !reply.ok) {
+            // Say what actually went wrong. A blanket "refresh the page" sent
+            // people round in circles when the cause was something a refresh
+            // could never fix, like storage being full.
+            const why = (err && err.message) || (reply && reply.error) || '';
+            fail(/quota/i.test(why)
+              ? "Couldn't save: Decidio's storage is full."
+              : (why ? "Couldn't save: " + why : "Couldn't save. Refresh this page and try again."));
+            return;
+          }
+          settled = true;
+          this.saving = false;
+          this.stop();
+        }
+      );
+    } catch (e) {
+      // Thrown at once when this copy has been cut off from the extension
+      // (it was reloaded while this page stayed open).
+      clearTimeout(timer);
+      fail("Decidio was updated. Refresh this page, then collect again.");
+    }
   }
 }

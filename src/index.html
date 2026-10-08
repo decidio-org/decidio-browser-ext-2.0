@@ -181,25 +181,6 @@ to Decidio<span class="blue-dot">.</span></h1>
                     </svg>
                     <span>Notes</span>
                 </button>
-                <!-- Temporary: shows the collect trace in the panel itself, so
-                     a failed add can be screenshotted instead of read out of
-                     devtools. Remove with the trace once adding is settled. -->
-                <button class="panel-menu-item" id="debugLogBtn">
-                    <svg class="panel-menu-icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <circle cx="12" cy="12" r="8"/>
-                        <line x1="12" y1="8" x2="12" y2="13"/>
-                        <circle cx="12" cy="16.2" r="0.9" stroke="none"/>
-                    </svg>
-                    <span>Debug Log</span>
-                </button>
-            </div>
-
-            <div class="debug-log" id="debugLog" hidden>
-                <div class="debug-log-bar">
-                    <button class="debug-log-btn" id="debugLogClear">Clear</button>
-                    <button class="debug-log-btn" id="debugLogClose">Close</button>
-                </div>
-                <pre class="debug-log-text" id="debugLogText"></pre>
             </div>
 
             <!-- Notes, after the app's New Collection screen: the list name in

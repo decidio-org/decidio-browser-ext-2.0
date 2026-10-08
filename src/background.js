@@ -71,6 +71,90 @@ function safeTabSendMessage(tabId, message, callback) {
 }
 
 /* --------------------------------------------------------------------------
+   FILING COLLECTED ITEMS
+   --------------------------------------------------------------------------
+
+   Filing used to happen in the panel, and every tab with Decidio on has its
+   own panel. Filing is read-the-list, add, write-it-back, so two panels doing
+   it at once overwrote each other: an item ended up in the list but not in
+   Collected Items, or in neither, depending on which write landed last. It
+   happened only sometimes, and only with more than one tab open.
+
+   The worker is a single instance shared by every tab. Each batch is filed
+   here, one after another, and the list, Collected Items, the cascade flag
+   and recency are written in ONE storage write so nothing can land half
+   done. Panels only redraw from storage.
+
+   Dev session only: that is local storage end to end. A signed-in session
+   files through the API from the panel, as before. */
+
+// Mirrors DEV_AUTH_BYPASS in app.js — the two must agree.
+const DEV_AUTH_BYPASS = true;
+function devSession() {
+  try { return DEV_AUTH_BYPASS && !('update_url' in chrome.runtime.getManifest()); }
+  catch (e) { return false; }
+}
+
+let filingChain = Promise.resolve();
+function fileInBackground(items) {
+  // Strictly one batch at a time. A batch that fails must not stop the next.
+  filingChain = filingChain.then(() => fileNow(items), () => fileNow(items));
+  return filingChain;
+}
+
+async function fileNow(items) {
+  const { devLists = [] } = await chrome.storage.local.get({ devLists: [] });
+  const known = new Set(devLists.map((l) => String(l.id)));
+  // An item collected for a list that has since gone falls back to the first
+  // list, or to the holding queue Collected Items shows as "Not in a list".
+  const fallback = devLists[0] ? String(devLists[0].id) : 'unfiled';
+
+  const groups = new Map();
+  for (const it of items) {
+    const dest = it.listId && known.has(String(it.listId)) ? String(it.listId) : fallback;
+    if (!groups.has(dest)) groups.set(dest, []);
+    groups.get(dest).push(it);
+  }
+
+  const keys = ['listsAwaitingCascade', 'listRecentUse'];
+  for (const id of groups.keys()) keys.push('devListItems_' + id, 'listQueue_' + id);
+  const cur = await chrome.storage.local.get(keys);
+
+  const now = Date.now();
+  const out = {};
+  const cascade = Array.isArray(cur.listsAwaitingCascade) ? cur.listsAwaitingCascade.slice() : [];
+  const recent = Object.assign({}, cur.listRecentUse || {});
+
+  for (const [id, its] of groups) {
+    // Named items go into the list as well; anything without a name waits in
+    // Collected Items, where it can be retried or sent somewhere.
+    const named = its.filter((it) => (it.state ? it.state === 'complete' : !!it.productTitle));
+    out['devListItems_' + id] = (cur['devListItems_' + id] || []).concat(named.map((it) => ({
+      imageUrl: it.imageUrl || null,
+      productUrl: it.productUrl || null,
+      productTitle: it.productTitle || null,
+      brand: it.brand || null
+    })));
+    out['listQueue_' + id] = (cur['listQueue_' + id] || []).concat(its.map((it) => ({
+      id: 'q' + now + Math.random().toString(36).slice(2, 7),
+      thumb: it.imageUrl || null,
+      title: it.productTitle || null,
+      productUrl: it.productUrl || null,
+      state: it.state === 'pending' ? 'pending' : (named.includes(it) ? 'added' : 'failed'),
+      error: it.error || null,
+      addedAt: now
+    })));
+    if (!cascade.includes(id)) cascade.push(id);
+    recent[id] = now;
+  }
+  out.listsAwaitingCascade = cascade;
+  out.listRecentUse = recent;
+
+  await chrome.storage.local.set(out);
+  return [...groups.keys()];
+}
+
+/* --------------------------------------------------------------------------
    MESSAGE HANDLERS (CONTENT SCRIPT & APP UI COMMUNICATION)
    -------------------------------------------------------------------------- */
 
@@ -99,6 +183,55 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;   // async sendResponse
   }
 
+  /* Done in the overlay. The one way a collect is saved.
+
+     Files the batch and answers only once it is written: {ok: true} closes
+     the overlay, anything else keeps it open with the items and an error.
+     `return true` holds the message open — and the worker awake — until the
+     answer is sent. */
+  if (request.action === "DECIDIO_SAVE_COLLECTED") {
+    const fromTab = sender && sender.tab ? sender.tab.id : null;
+    const stamp = Date.now();
+    const items = (request.items || []).map((it, i) => ({
+      ...it,
+      listId: request.listId || it.listId || null,
+      tabId: fromTab,
+      pid: stamp + '-' + i + '-' + Math.random().toString(36).slice(2, 7),
+      pickedAt: stamp
+    }));
+
+    const reply = (ok, extra) => {
+      try { sendResponse(Object.assign({ ok }, extra || {})); } catch (e) {}
+      // The panel was minimised for collecting; this brings it back.
+      safeRuntimeSendMessage({ action: "RENDER_PICKED_PRODUCT" });
+    };
+
+    if (devSession()) {
+      fileInBackground(items).then(
+        (listIds) => reply(true, { listIds }),
+        (err) => reply(false, { error: String((err && err.message) || err) })
+      );
+    } else {
+      // Signed in: the panel files through the API, so the batch waits for
+      // it in savedProducts as before.
+      chrome.storage.local.get({ savedProducts: [] }, (r) => {
+        const updated = ((r && r.savedProducts) || []).concat(items);
+        chrome.storage.local.set({ savedProducts: updated }, () => {
+          const err = chrome.runtime.lastError;
+          reply(!err, err ? { error: err.message } : undefined);
+        });
+      });
+    }
+    return true;
+  }
+
+  // A panel asking which tab it lives in, so it files only that tab's
+  // collects. An extension frame inside a tab is given that tab as sender.
+  if (request.action === "DECIDIO_WHICH_TAB") {
+    sendResponse({ tabId: sender && sender.tab ? sender.tab.id : null });
+    return;
+  }
+
   // Return the active/inactive state stored in chrome.storage.local
   if (request.action === "GET_EXTENSION_STATE") {
     chrome.storage.local.get({ isExtensionActive: false }, (data) => {
@@ -124,18 +257,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } 
   // Save multiple picked products in batch to storage and trigger UI re-render
   else if (request.action === "PRODUCT_IMAGES_BATCH_PICKED") {
+    // Every item is stamped with the tab it was collected in and an id of its
+    // own. Each tab with Decidio on has its own panel, and all of them watch
+    // savedProducts; the tab says which panel owns the batch, and the id lets
+    // that panel take out exactly what it filed and nothing else.
+    const fromTab = sender && sender.tab ? sender.tab.id : null;
+    const stamp = Date.now();
     chrome.storage.local.get({ savedProducts: [] }, (result) => {
       const existing = result.savedProducts || [];
-      const incoming = request.items || request.products || [];
+      const incoming = (request.items || request.products || []).map((it, i) => ({
+        ...it,
+        tabId: fromTab,
+        pid: stamp + '-' + i + '-' + Math.random().toString(36).slice(2, 7),
+        pickedAt: stamp
+      }));
+
+      // On the local dev session the worker files the batch itself. It is
+      // the one context every tab shares, so filing here happens once, in
+      // order, instead of in whichever tab's panel noticed first.
+      if (devSession()) {
+        fileInBackground(incoming).finally(() => {
+          safeRuntimeSendMessage({ action: "RENDER_PICKED_PRODUCT" });
+        });
+        return;
+      }
 
       const updatedList = [...existing, ...incoming];
-      decidioTrace('batch received', { incoming: incoming.length, alreadyWaiting: existing.length });
       chrome.storage.local.set({ savedProducts: updatedList }, () => {
-        if (chrome.runtime.lastError) {
-          decidioTrace('WRITE FAILED', { error: chrome.runtime.lastError.message });
-        } else {
-          decidioTrace('savedProducts written', { total: updatedList.length });
-        }
         safeRuntimeSendMessage({ action: "RENDER_PICKED_PRODUCT" });
       });
     });
@@ -146,34 +294,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
    TOOLBAR ACTION & TAB LIFECYCLE LISTENERS
    -------------------------------------------------------------------------- */
 
-// Handles browser action icon clicks to toggle extension state on/off
-const DECIDIO_TRACE_TAG = 'worker';
-
-/* --------------------------------------------------------------------------
-   TRACE — a shared, readable record of a collect's journey.
-
-   A collect crosses three contexts (page, service worker, panel), each with
-   its own console, so a report of "it didn't save" meant asking for three
-   separate consoles and usually getting one. Every hop writes a line here
-   instead, and the whole trip can be read back in one place:
-
-     chrome.storage.local.get('decidioTrace', r => console.log(r.decidioTrace.join('\n')))
-
-   Capped, best-effort, and never allowed to throw into the path it is
-   watching.
-   -------------------------------------------------------------------------- */
-function decidioTrace(msg, data) {
-  try {
-    const line = new Date().toLocaleTimeString() + '  ' + DECIDIO_TRACE_TAG + '  ' + msg
-      + (data === undefined ? '' : '  ' + JSON.stringify(data));
-    chrome.storage.local.get({ decidioTrace: [] }, (r) => {
-      try {
-        const log = ((r && r.decidioTrace) || []).concat(line).slice(-120);
-        chrome.storage.local.set({ decidioTrace: log });
-      } catch (e) {}
-    });
-  } catch (e) {}
+/* A reload or update orphans the copy of the content scripts in every open
+   tab: it keeps running and keeps its panel and overlay on screen, but it can
+   no longer reach the extension, so pressing the aperture collects nothing and
+   nothing is filed — silently. Until now the only cure was refreshing each
+   page by hand, and a tab that was missed looked exactly like adding being
+   broken. So every open page gets a fresh copy the moment this worker
+   installs; content.js clears away what the orphaned copy left behind. */
+/* Anything left in the old savedProducts inbox — collected by a version that
+   handed batches to the panels — is filed once, here, so it is not stranded
+   now that the panels no longer file on the dev session. */
+async function fileLeftovers() {
+  if (!devSession()) return;
+  const { savedProducts = [] } = await chrome.storage.local.get({ savedProducts: [] });
+  if (!savedProducts.length) return;
+  // Filed first, cleared after: a failed filing leaves them to try again.
+  await fileInBackground(savedProducts);
+  await chrome.storage.local.set({ savedProducts: [] });
 }
+chrome.runtime.onStartup.addListener(() => { fileLeftovers().catch(() => {}); });
+
+chrome.runtime.onInstalled.addListener(async () => {
+  fileLeftovers().catch(() => {});
+  let tabs = [];
+  try { tabs = await chrome.tabs.query({}); } catch (e) { return; }
+  for (const tab of tabs) {
+    if (!tab.id || !tab.url || !/^(https?|file):/.test(tab.url)) continue;
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: CONTENT_SCRIPT_FILES
+    }).catch(() => { /* a page that refuses scripts (the Web Store, a PDF) */ });
+  }
+});
+
+// Handles browser action icon clicks to toggle extension state on/off
 
 chrome.action.onClicked.addListener(async (tab) => {
   // Guard against system, browser extension store, and blank internal pages

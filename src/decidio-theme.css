@@ -1435,18 +1435,29 @@
 }
 .decidio-sidebar:not(.is-auth) .queue-move:hover svg { opacity: 0.75; }
 
-/* A row collected since this page was last open nudges its arrow towards the
-   list name beside it: the item is on its way there. One pass, a few pixels,
-   and it eases back where it was — nothing flashes and nothing repeats. An
-   arrow that vanished and restarted read as an alert about the row rather
-   than a remark about where it is going. */
+/* A row collected since this page was last open sends its arrow towards the
+   list name beside it: the item is on its way there.
+
+   It swells as it goes and contracts as it comes back — the stroke thickens
+   on the way out and returns to its resting weight before it settles — so it
+   reads as an effort towards the list, not a twitch. The weight is the
+   stroke, not a scale: a thicker stroke grows evenly about the arrow's own
+   line, so it stays vertically centred on the list name, where scaling would
+   also stretch it.
+
+   Slower for the first few visits (--queue-arrow-duration, set by
+   renderQueue), so someone seeing it for the first time can tell what it is
+   saying; quicker once it is familiar. Once per row, never on a loop. */
 @keyframes decidio-queue-arrow {
-    0%   { transform: translateX(0); }
-    40%  { transform: translateX(5px); }
-    100% { transform: translateX(0); }
+    0%   { transform: translateX(0);     stroke-width: 3.2; }
+    45%  { transform: translateX(6px);   stroke-width: 4.6; }
+    80%  { transform: translateX(-0.5px); stroke-width: 3.3; }
+    100% { transform: translateX(0);     stroke-width: 3.2; }
 }
 .decidio-sidebar:not(.is-auth) .queue-row.is-fresh .queue-move svg {
-    animation: decidio-queue-arrow 820ms cubic-bezier(0.33, 0, 0.3, 1) 1 both;
+    /* Room for the thicker stroke at the arrowhead's tips. */
+    overflow: visible;
+    animation: decidio-queue-arrow var(--queue-arrow-duration, 1000ms) cubic-bezier(0.45, 0, 0.25, 1) 1 both;
     animation-delay: var(--queue-arrow-delay, 0ms);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1454,6 +1465,9 @@
         animation: none;
     }
 }
+
+/* A row opens its item. The whole row is the target, so it says so. */
+.decidio-sidebar:not(.is-auth) .queue-row { cursor: pointer; }
 
 /* The destinations, under the row they belong to. */
 .decidio-sidebar:not(.is-auth) .queue-destinations {
@@ -2179,3 +2193,516 @@
 }
 .decidio-sidebar:not(.is-auth) .add-collect-glyph line { stroke-width: 1.9; }
 
+
+/* ==========================================================================
+   FIND AND ORDER (My Collections)
+   After Spotify's Your Library: a search that opens into a field on the
+   left, the current order on the right with its menu under it.
+   ========================================================================== */
+.decidio-sidebar:not(.is-auth) .collections-tools {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 20px 0;
+    min-height: 34px;
+}
+.decidio-sidebar.is-in-list:not(.is-auth) .collections-tools { display: none; }
+
+/* Search, tucked above the lists until revealed. A grid row animated from
+   0fr to 1fr, so it opens to exactly its own height — no guessed max-height
+   — and pushes the lists down as it goes rather than appearing over them. */
+.decidio-sidebar:not(.is-auth) .collections-search-row {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    padding: 0 20px;
+    transition: grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+                opacity 200ms ease, padding-top 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.decidio-sidebar:not(.is-auth) .collections-search-row.is-open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    padding-top: 10px;
+}
+.decidio-sidebar:not(.is-auth) .collections-search-inner { min-height: 0; overflow: hidden; }
+.decidio-sidebar.is-in-list:not(.is-auth) .collections-search-row { display: none; }
+@media (prefers-reduced-motion: reduce) {
+    .decidio-sidebar:not(.is-auth) .collections-search-row { transition: none; }
+}
+.decidio-sidebar:not(.is-auth) .collections-search-row svg,
+.decidio-sidebar:not(.is-auth) .collections-tools svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+}
+.decidio-sidebar:not(.is-auth) .tools-search-btn,
+.decidio-sidebar:not(.is-auth) .tools-search-clear {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin-left: -6px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 999px;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .tools-search-btn:hover,
+.decidio-sidebar:not(.is-auth) .tools-search-clear:hover { color: var(--ink); background: var(--plate); }
+.decidio-sidebar:not(.is-auth) .tools-search-btn svg { width: 18px; height: 18px; }
+.decidio-sidebar:not(.is-auth) .tools-search-btn[hidden] { display: none; }
+
+.decidio-sidebar:not(.is-auth) .tools-search {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 2px 0 10px;
+    background: var(--plate);
+    border-radius: 8px;
+    color: var(--ink-soft);
+}
+.decidio-sidebar:not(.is-auth) .tools-search[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .tools-search > svg { flex: 0 0 auto; width: 15px; height: 15px; }
+.decidio-sidebar:not(.is-auth) .tools-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--ink);
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+}
+.decidio-sidebar:not(.is-auth) .tools-search input::placeholder { color: var(--ink-faint); }
+.decidio-sidebar:not(.is-auth) .tools-search-clear { margin-left: 0; width: 28px; height: 28px; }
+.decidio-sidebar:not(.is-auth) .tools-search-clear svg { width: 14px; height: 14px; }
+
+.decidio-sidebar:not(.is-auth) .tools-sort-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    padding: 6px 2px 6px 8px;
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .tools-sort-btn:hover { color: var(--ink); }
+.decidio-sidebar:not(.is-auth) .tools-sort-btn svg { width: 16px; height: 16px; }
+/* While searching, the field has the row to itself. */
+.decidio-sidebar:not(.is-auth) .collections-tools.is-searching .tools-sort-btn { display: none; }
+
+.decidio-sidebar:not(.is-auth) .tools-sort-menu {
+    position: absolute;
+    top: 44px;
+    right: 16px;
+    z-index: 8;
+    min-width: 180px;
+    padding: 8px 6px;
+    background: var(--field);
+    border: 0.75px solid var(--hairline);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.decidio-sidebar:not(.is-auth) .tools-sort-menu[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .tools-sort-title {
+    padding: 4px 10px 6px;
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+}
+.decidio-sidebar:not(.is-auth) .tools-sort-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 9px 10px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: var(--ink-soft);
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .tools-sort-option:hover { background: var(--plate); color: var(--ink); }
+.decidio-sidebar:not(.is-auth) .tools-sort-option.is-current { color: var(--ink); font-weight: 700; }
+/* The current order is marked with Decidio Blue, the colour of the
+   wordmark's dot. */
+.decidio-sidebar:not(.is-auth) .tools-sort-option.is-current::after {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--decidio-blue, #476DA7);
+}
+
+.decidio-sidebar:not(.is-auth) .collections-empty {
+    padding: 14px 0 0;
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-faint);
+}
+
+/* ==========================================================================
+   ONE ITEM — the Swift app's detail, page for page
+   Three pages side by side, swiped between, opening on the middle one:
+     Purchase  (DetailPrice)        Decidio Green
+     Detail    (OptionsDetailView)  the matte page
+     Notes     (DetailNotes)        Decidio Blue
+   Type, sizes and spacing are the app's own (SFProDisplay Heavy 40/52/30/20,
+   Semibold 17, Regular 17/20). Everything that shows content is editable in
+   place; the accent while editing is the app's own — Tangerine in Twilight,
+   Decidio Blue in Aero.
+   ========================================================================== */
+.decidio-sidebar:not(.is-auth) .detail-view {
+    --d-green: #608F52;
+    --d-blue: #476DA7;
+    --d-purple: #803065;
+    --d-red: #A94041;
+    --d-page: #000000;
+    --d-ink: #FFFFFF;          /* on the matte page */
+    --d-on-accent: #000000;    /* on the green and blue pages (inverse, as the app) */
+    --d-edit: #FF9300;         /* Tangerine */
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    background: var(--d-page);
+    font-family: "SFProDisplay", -apple-system, sans-serif;
+}
+.decidio-sidebar.is-aero:not(.is-auth) .detail-view {
+    --d-page: #FFFFFF;
+    --d-ink: #000000;
+    --d-on-accent: #FFFFFF;
+    --d-edit: #476DA7;
+}
+.decidio-sidebar:not(.is-auth) .detail-view[hidden] { display: none; }
+
+.decidio-sidebar:not(.is-auth) .detail-pager {
+    display: flex;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+}
+.decidio-sidebar:not(.is-auth) .detail-pager::-webkit-scrollbar { display: none; }
+.decidio-sidebar:not(.is-auth) .detail-page {
+    position: relative;
+    flex: 0 0 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    scrollbar-width: none;
+}
+.decidio-sidebar:not(.is-auth) .detail-page::-webkit-scrollbar { display: none; }
+
+/* Editing in place: no box, just the app's accent as caret and underline. */
+.decidio-sidebar:not(.is-auth) .detail-view [contenteditable] {
+    outline: none;
+    caret-color: var(--d-edit);
+    border-radius: 2px;
+    cursor: text;
+    word-break: break-word;
+}
+.decidio-sidebar:not(.is-auth) .detail-view [contenteditable]:focus {
+    box-shadow: 0 2px 0 0 var(--d-edit);
+}
+.decidio-sidebar:not(.is-auth) .detail-view [contenteditable]:empty::before {
+    content: attr(data-placeholder);
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+/* ---------- Purchase (DetailPrice) ---------- */
+.decidio-sidebar:not(.is-auth) .detail-price { background: var(--d-green); color: var(--d-on-accent); }
+.decidio-sidebar:not(.is-auth) .dp-pad { display: flex; flex-direction: column; padding: 28px 10px 120px 16px; }
+.decidio-sidebar:not(.is-auth) .dp-name { font-weight: 800; font-size: 40px; line-height: 1.08; }
+.decidio-sidebar:not(.is-auth) .dp-price {
+    margin-top: 24px;
+    font-weight: 800;
+    font-size: 52px;
+    line-height: 1.05;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.decidio-sidebar:not(.is-auth) .dp-price:focus { text-overflow: clip; }
+.decidio-sidebar:not(.is-auth) .dp-sub { font-size: 20px; font-weight: 400; opacity: 0.5; margin-top: 2px; }
+.decidio-sidebar:not(.is-auth) .dp-view {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 48px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    color: inherit;
+    font-size: 17px;
+    font-weight: 400;
+    text-decoration: none;
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .dp-view span { flex: 1 1 auto; }
+.decidio-sidebar:not(.is-auth) .dp-view svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.decidio-sidebar:not(.is-auth) .dp-view svg polygon { fill: currentColor; stroke: none; }
+.decidio-sidebar:not(.is-auth) .dp-view .dp-view-arrow { width: 14px; height: 14px; stroke-width: 2.2; }
+.decidio-sidebar:not(.is-auth) .dp-view.is-disabled { opacity: 0.45; cursor: default; }
+.decidio-sidebar:not(.is-auth) .dp-link {
+    margin-top: 8px;
+    font-size: 13px;
+    opacity: 0.45;
+    word-break: break-all;
+}
+.decidio-sidebar:not(.is-auth) .dp-link:focus { opacity: 0.85; }
+.decidio-sidebar:not(.is-auth) .dp-bought {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 44px;
+    height: 58px;
+    border: none;
+    border-radius: 16px;
+    background: #FFFFFF;
+    color: var(--d-green);
+    font-family: inherit;
+    font-size: 20px;
+    font-weight: 800;
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .dp-bought svg { width: 22px; height: 22px; }
+
+/* The celebration (PurchaseOverlay): slides up, the ring draws, then the
+   check, then the words and a burst of sparks. */
+.decidio-sidebar:not(.is-auth) .dp-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: var(--d-green);
+    color: var(--d-on-accent);
+    animation: dp-overlay-in 520ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+.decidio-sidebar:not(.is-auth) .dp-overlay[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .dp-overlay.is-leaving { animation: dp-overlay-out 350ms ease-in-out both; }
+@keyframes dp-overlay-in { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes dp-overlay-out { from { transform: none; } to { transform: translateY(100%); } }
+.decidio-sidebar:not(.is-auth) .dp-overlay-mark { position: relative; margin-top: auto; width: 160px; height: 160px; display: grid; place-items: center; }
+.decidio-sidebar:not(.is-auth) .dp-overlay-mark svg { width: 140px; height: 140px; overflow: visible; }
+.decidio-sidebar:not(.is-auth) .dp-ring-track { fill: none; stroke: currentColor; stroke-opacity: 0.15; stroke-width: 3; }
+.decidio-sidebar:not(.is-auth) .dp-ring {
+    fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round;
+    stroke-dasharray: 408.4; stroke-dashoffset: 408.4;
+    transform: rotate(-90deg); transform-origin: 70px 70px;
+    animation: dp-draw 750ms ease-in-out 350ms forwards;
+}
+.decidio-sidebar:not(.is-auth) .dp-check {
+    fill: none; stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 60; stroke-dashoffset: 60;
+    animation: dp-draw 260ms ease-out 870ms forwards;
+}
+@keyframes dp-draw { to { stroke-dashoffset: 0; } }
+.decidio-sidebar:not(.is-auth) .dp-spark {
+    position: absolute; left: 50%; top: 50%;
+    width: 8px; height: 8px; margin: -4px 0 0 -4px;
+    border-radius: 50%; background: currentColor; opacity: 0;
+    --a: 0deg;
+    animation: dp-spark 700ms cubic-bezier(0.3, 1.4, 0.5, 1) 1000ms both;
+}
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(even) { width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(1)  { --a: 0deg; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(2)  { --a: 36deg; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(3)  { --a: 72deg; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(4)  { --a: 108deg; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(5)  { --a: 144deg; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(6)  { --a: 180deg; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(7)  { --a: 216deg; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(8)  { --a: 252deg; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(9)  { --a: 288deg; }
+.decidio-sidebar:not(.is-auth) .dp-spark:nth-child(10) { --a: 324deg; }
+@keyframes dp-spark {
+    0%   { opacity: 0; transform: rotate(var(--a)) translateX(18px); }
+    35%  { opacity: 1; }
+    100% { opacity: 0; transform: rotate(var(--a)) translateX(90px); }
+}
+.decidio-sidebar:not(.is-auth) .dp-overlay-text { margin-top: 36px; text-align: center; padding: 0 36px; animation: dp-fade 350ms ease-in 850ms both; }
+.decidio-sidebar:not(.is-auth) .dp-overlay-title { font-size: 40px; font-weight: 800; }
+.decidio-sidebar:not(.is-auth) .dp-overlay-name { margin-top: 8px; font-size: 20px; opacity: 0.6; }
+@keyframes dp-fade { from { opacity: 0; } to { opacity: 1; } }
+.decidio-sidebar:not(.is-auth) .dp-overlay-done {
+    margin: auto 36px 52px;
+    align-self: stretch;
+    height: 58px;
+    border: none; border-radius: 16px;
+    background: #FFFFFF; color: var(--d-green);
+    font-family: inherit; font-size: 20px; font-weight: 800;
+    cursor: pointer;
+    animation: dp-fade 350ms ease-in 850ms both;
+}
+
+/* ---------- Detail (OptionsDetailView) ---------- */
+.decidio-sidebar:not(.is-auth) .detail-main { background: var(--d-page); color: var(--d-ink); }
+.decidio-sidebar:not(.is-auth) .dm-name {
+    margin: 18px 16px 8px;
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.2;
+}
+.decidio-sidebar:not(.is-auth) .dm-rule { height: 2px; background: var(--d-ink); }
+
+/* The collected image, whole. Full width at its own proportions — never
+   cropped, never stretched — and capped in height so a tall shot does not
+   push Description off the screen; a capped one is fitted inside the cap,
+   centred, on the page's own colour. */
+.decidio-sidebar:not(.is-auth) .dm-carousel[hidden],
+.decidio-sidebar:not(.is-auth) .dm-rule[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .dm-hero {
+    display: flex;
+    justify-content: center;
+    background: var(--d-page);
+}
+.decidio-sidebar:not(.is-auth) .dm-hero img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 300px;
+    object-fit: contain;
+}
+.decidio-sidebar:not(.is-auth) .dm-credits-back svg,
+.decidio-sidebar:not(.is-auth) .dm-top svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+/* Back to top reads as the page's last word, so it is set heavier. */
+.decidio-sidebar:not(.is-auth) .dm-top svg { stroke-width: 2.7; }
+
+.decidio-sidebar:not(.is-auth) .dm-body { display: flex; flex-direction: column; padding: 0 16px 8px; }
+.decidio-sidebar:not(.is-auth) .dm-body .dm-rule { margin: 0 -16px; }
+.decidio-sidebar:not(.is-auth) .dm-heading { margin-top: 12px; font-size: 20px; font-weight: 800; }
+.decidio-sidebar:not(.is-auth) .dm-heading-specs { margin-top: 8px; }
+.decidio-sidebar:not(.is-auth) .dm-desc {
+    margin: 8px 0 14px;
+    font-size: 17px;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: pointer;
+}
+.decidio-sidebar:not(.is-auth) .dm-desc.is-expanded,
+.decidio-sidebar:not(.is-auth) .dm-desc:focus { display: block; -webkit-line-clamp: unset; overflow: visible; }
+.decidio-sidebar:not(.is-auth) .dm-confidence {
+    align-self: flex-end;
+    margin: 16px 0 8px;
+    padding: 0;
+    background: none; border: none; cursor: pointer;
+    color: var(--d-ink); opacity: 0.6;
+    font-family: inherit; font-size: 17px; font-weight: 400;
+}
+.decidio-sidebar:not(.is-auth) .dm-spec {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 8px 0;
+}
+.decidio-sidebar:not(.is-auth) .dm-spec + .dm-spec { border-top: 1px solid var(--d-ink); }
+.decidio-sidebar:not(.is-auth) .dm-spec-name { flex: 1 1 45%; font-size: 17px; font-weight: 600; min-width: 0; }
+.decidio-sidebar:not(.is-auth) .dm-spec-vals { flex: 1 1 55%; display: flex; flex-direction: column; align-items: flex-end; text-align: right; min-width: 0; }
+.decidio-sidebar:not(.is-auth) .dm-spec-val { font-size: 17px; font-weight: 400; }
+.decidio-sidebar:not(.is-auth) .dm-spec.is-unknown .dm-spec-val { opacity: 0.45; }
+.decidio-sidebar:not(.is-auth) .dm-conf { font-size: 17px; font-weight: 400; color: #476DA7; animation: dm-conf-in 220ms ease-out both; }
+@keyframes dm-conf-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.decidio-sidebar:not(.is-auth) .dm-spec-del {
+    /* In the page's left margin, clear of the name it removes. */
+    position: absolute; left: -15px; top: 12px;
+    width: 13px; height: 13px; padding: 0;
+    display: grid; place-items: center;
+    border: none; border-radius: 50%;
+    /* Just the ×, in the page's own ink — white in Twilight, black in Aero. */
+    background: none; color: var(--d-ink);
+    opacity: 0; cursor: pointer;
+    transition: opacity 150ms ease;
+}
+.decidio-sidebar:not(.is-auth) .dm-spec:hover .dm-spec-del,
+.decidio-sidebar:not(.is-auth) .dm-spec:focus-within .dm-spec-del { opacity: 1; }
+.decidio-sidebar:not(.is-auth) .dm-spec-del svg { width: 11px; height: 11px; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
+.decidio-sidebar:not(.is-auth) .dm-add-spec {
+    align-self: flex-start;
+    margin-top: 10px;
+    padding: 0;
+    background: none; border: none; cursor: pointer;
+    color: var(--d-ink); opacity: 0.6;
+    font-family: inherit; font-size: 17px; font-weight: 600;
+}
+.decidio-sidebar:not(.is-auth) .dm-add-spec::before { content: "+ "; }
+.decidio-sidebar:not(.is-auth) .dm-add-spec:hover,
+.decidio-sidebar:not(.is-auth) .dm-confidence:hover { opacity: 1; }
+.decidio-sidebar:not(.is-auth) .dm-top {
+    display: block;
+    margin: 24px auto 20px;
+    padding: 0;
+    background: none; border: none; cursor: pointer;
+    color: var(--d-ink);
+}
+
+/* ---------- Notes (DetailNotes) ---------- */
+.decidio-sidebar:not(.is-auth) .detail-notes { background: var(--d-blue); color: var(--d-on-accent); }
+.decidio-sidebar:not(.is-auth) .dn-pad { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: 28px 10px 24px 16px; }
+.decidio-sidebar:not(.is-auth) .dn-name { font-size: 40px; font-weight: 800; line-height: 1.08; }
+.decidio-sidebar:not(.is-auth) .dn-editor { flex: 1 1 auto; display: flex; gap: 8px; margin-top: 70px; min-height: 0; }
+.decidio-sidebar:not(.is-auth) .dn-editor textarea {
+    flex: 1 1 auto;
+    min-height: 60%;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    color: inherit;
+    caret-color: var(--d-edit);
+    font-family: inherit;
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1.3;
+}
+.decidio-sidebar:not(.is-auth) .dn-editor textarea::placeholder { color: inherit; opacity: 0.3; }
+.decidio-sidebar:not(.is-auth) .dn-mic { flex: 0 0 28px; align-self: flex-start; margin-top: 2px; padding: 0; background: none; border: none; color: inherit; cursor: pointer; }
+.decidio-sidebar:not(.is-auth) .dn-mic[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .dn-mic svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.decidio-sidebar:not(.is-auth) .dn-mic.is-recording { color: var(--d-red); }
+
+@media (prefers-reduced-motion: reduce) {
+    .decidio-sidebar:not(.is-auth) .dp-overlay,
+    .decidio-sidebar:not(.is-auth) .dp-overlay * { animation-duration: 1ms !important; animation-delay: 0ms !important; }
+}
+
+/* Write-on (SequentialWriteViewAll): what the page has not reached yet is
+   not there at all, so it grows downward; what is being typed shows no
+   placeholder in the meantime. */
+.decidio-sidebar:not(.is-auth) .detail-view .wo-pending { display: none !important; }
+.decidio-sidebar:not(.is-auth) .detail-view .wo-typing::before { content: none !important; }

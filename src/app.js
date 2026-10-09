@@ -837,6 +837,8 @@ document.addEventListener('DOMContentLoaded', () => {
      ------------------------------------------------------------------------ */
   const RECENT_COUNT = 3;
   let recentUse = {};        // { [listId]: timestamp }
+  let listSort = 'recents';  // 'recents' | 'added' | 'alpha' — see Find and order
+  let listQuery = '';        // what is typed in the list search
 
   function loadRecentUse() {
     return new Promise((resolve) => {
@@ -888,16 +890,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!host) return;
 
     host.innerHTML = '';
+    const query = listQuery.trim().toLowerCase();
 
     // New Collection leads the list, with a + where a number would be — the
     // app's own My Collections sets it that way, as the first line of the
-    // same column rather than a control parked under it.
+    // same column rather than a control parked under it. Not while
+    // searching: the column is then only the lists that match.
     const add = document.createElement('button');
     add.className = 'collection-name is-new';
     add.dataset.value = 'create-new';
     add.innerHTML = '<span class="collection-num">+</span>'
       + '<span class="collection-label">New Collection</span>';
-    host.appendChild(add);
+    if (!query) host.appendChild(add);
 
     const row = (list) => {
       const btn = document.createElement('button');
@@ -930,6 +934,28 @@ document.addEventListener('DOMContentLoaded', () => {
       host.appendChild(h);
     };
 
+    // Searching: just the lists whose names match, in the chosen order.
+    if (query) {
+      const matches = sortLists(availableLists.filter(
+        (l) => (l.name || 'Untitled list').toLowerCase().includes(query)));
+      matches.forEach(row);
+      if (!matches.length) {
+        const none = document.createElement('div');
+        none.className = 'collections-empty';
+        none.textContent = 'No lists match \u201c' + listQuery.trim() + '\u201d';
+        host.appendChild(none);
+      }
+      return;
+    }
+
+    // Any order but Recents is one plain column in that order. Recent is a
+    // section only of the Recents view — next to an A–Z column it would just
+    // repeat three names out of order.
+    if (listSort !== 'recents') {
+      sortLists(availableLists).forEach(row);
+      return;
+    }
+
     const { recent } = splitByRecency(availableLists);
 
     // Recent is a shortcut to the top of All, not a section cut out of it:
@@ -951,6 +977,159 @@ document.addEventListener('DOMContentLoaded', () => {
   // Kept under its old name so the many call sites that just mean "repaint the
   // list of lists" do not all have to change.
   const renderListBar = renderCollections;
+
+  /* ---------- Find and order ------------------------------------------------
+     Sort and search for My Collections, after Spotify's Your Library.
+     Recents is the order it always had (Recent, then All in the lists' own
+     order); Recently added is newest first; Alphabetical is A–Z as people
+     read it (case and accents ignored, "List 2" before "List 10"). The
+     choice is remembered; the search is not.
+     ------------------------------------------------------------------------ */
+  const SORT_LABELS = { recents: 'Recents', added: 'Recently added', alpha: 'Alphabetical' };
+
+  function sortLists(lists) {
+    if (listSort === 'alpha') {
+      return [...lists].sort((a, b) => (a.name || '').localeCompare(
+        b.name || '', undefined, { sensitivity: 'base', numeric: true }));
+    }
+    // availableLists is in the order the lists were made, oldest first.
+    if (listSort === 'added') return [...lists].reverse();
+    return lists;
+  }
+
+  (() => {
+    const tools = document.getElementById('collectionsTools');
+    const searchRow = document.getElementById('listSearchRow');
+    const search = document.getElementById('listSearch');
+    const clear = document.getElementById('listSearchClear');
+    const sortBtn = document.getElementById('listSortBtn');
+    const sortLabel = document.getElementById('listSortLabel');
+    const sortMenu = document.getElementById('listSortMenu');
+    if (!tools || !search || !sortBtn || !sortMenu) return;
+
+    const showSort = () => {
+      if (sortLabel) sortLabel.textContent = SORT_LABELS[listSort] || 'Recents';
+      sortMenu.querySelectorAll('.tools-sort-option').forEach((o) => {
+        const on = o.dataset.sort === listSort;
+        o.classList.toggle('is-current', on);
+        o.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+    };
+    const setMenu = (open) => {
+      sortMenu.hidden = !open;
+      sortBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+
+    /* Search stays tucked above the lists until it is asked for, as iOS
+       keeps it above a list until you pull down. A trackpad or mouse has no
+       pull past the top, and a short My Collections does not scroll at all,
+       so "pull down" here is scrolling UP while already at the top — that
+       works whether or not there is anything to scroll. Scrolling down with
+       nothing typed tucks it away again. And typing anywhere on My
+       Collections opens it with what was typed, for anyone who already knows
+       the name. */
+    const isOpen = () => searchRow.classList.contains('is-open');
+    const openSearch = (focus) => {
+      setMenu(false);
+      searchRow.classList.add('is-open');
+      search.tabIndex = 0;
+      clear.tabIndex = 0;
+      if (focus) search.focus();
+    };
+    const closeSearch = () => {
+      const had = !!listQuery;
+      search.value = '';
+      listQuery = '';
+      searchRow.classList.remove('is-open');
+      search.tabIndex = -1;
+      clear.tabIndex = -1;
+      if (document.activeElement === search) search.blur();
+      if (had) renderCollections();
+    };
+
+    search.addEventListener('input', () => { listQuery = search.value; renderCollections(); });
+    search.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      // Ends the search only; the panel's own Escape handling stays out of it.
+      e.stopPropagation();
+      closeSearch();
+    });
+    clear.addEventListener('click', closeSearch);
+
+    // What actually scrolls the lists — found rather than assumed, since it
+    // is set by the panel's layout, not here.
+    const scrollerOf = (el) => {
+      for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+        const oy = getComputedStyle(n).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+      }
+      return null;
+    };
+    const onMyCollections = () => sidebarPanel
+      && !sidebarPanel.classList.contains('is-in-list')
+      && !sidebarPanel.classList.contains('is-titled');
+
+    let pull = 0;
+    let pullReset = null;
+    const body = tools.parentElement;
+    body.addEventListener('wheel', (e) => {
+      if (!onMyCollections()) return;
+      const sc = scrollerOf(body);
+      const atTop = !sc || sc.scrollTop <= 0;
+      if (e.deltaY < 0 && atTop) {
+        // A deliberate pull, not the tail of a fling up the list: it has to
+        // add up to a little distance within a short moment.
+        pull += -e.deltaY;
+        clearTimeout(pullReset);
+        pullReset = setTimeout(() => { pull = 0; }, 220);
+        if (pull > 36 && !isOpen()) openSearch(false);
+      } else if (e.deltaY > 0) {
+        pull = 0;
+        if (isOpen() && !search.value && document.activeElement !== search) closeSearch();
+      }
+    }, { passive: true });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.length !== 1 || !/\S/.test(e.key)) return;
+      if (!onMyCollections()) return;
+      const a = document.activeElement;
+      if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
+      if (panelMenu && !panelMenu.hidden) return;
+      e.preventDefault();
+      openSearch(true);
+      search.value += e.key;
+      listQuery = search.value;
+      renderCollections();
+    });
+
+    sortBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setMenu(sortMenu.hidden);
+    });
+    sortMenu.addEventListener('click', (e) => {
+      const opt = e.target.closest('.tools-sort-option');
+      if (!opt) return;
+      listSort = opt.dataset.sort;
+      try { chrome.storage.local.set({ listSortMode: listSort }); } catch (err) {}
+      showSort();
+      setMenu(false);
+      renderCollections();
+    });
+    // Anywhere else closes the menu, as a menu does.
+    document.addEventListener('click', (e) => {
+      if (!sortMenu.hidden && !e.target.closest('#listSortMenu, #listSortBtn')) setMenu(false);
+    });
+
+    try {
+      chrome.storage.local.get({ listSortMode: 'recents' }, (r) => {
+        const m = r && r.listSortMode;
+        if (SORT_LABELS[m]) listSort = m;
+        showSort();
+        renderCollections();
+      });
+    } catch (e) { showSort(); }
+  })();
 
   /* ---------- Queue ---------------------------------------------------------
      What was collected into a list but never got a name. The app keeps the
@@ -1043,8 +1222,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let dropped = false;
     const kept = items.filter((it) => {
       if (dropped) return true;                 // only the one copy
-      const same = (it.productUrl || null) === (row.productUrl || null)
-        && (it.productTitle || null) === (row.title || null);
+      // By id when the row has one: two collects of the same product share a
+      // link and a name, and only the id says which of them this row is.
+      const same = row.itemId
+        ? it.id === row.itemId
+        : (it.productUrl || null) === (row.productUrl || null)
+          && (it.productTitle || null) === (row.title || null);
       if (same) { dropped = true; return false; }
       return true;
     });
@@ -1129,11 +1312,22 @@ document.addEventListener('DOMContentLoaded', () => {
        about the item, and a row that has been watched travel should not do it
        again on every later visit. renderQueue only ever runs with the page
        up, so reading it here is reading it as it is shown. */
-    const seenAt = await new Promise((resolve) => {
-      try { chrome.storage.local.get({ queueSeenAt: 0 }, (r) => resolve((r && r.queueSeenAt) || 0)); }
-      catch (e) { resolve(0); }
+    const { seenAt, arrowShows } = await new Promise((resolve) => {
+      try {
+        chrome.storage.local.get({ queueSeenAt: 0, queueArrowShows: 0 }, (r) => resolve({
+          seenAt: (r && r.queueSeenAt) || 0,
+          arrowShows: (r && r.queueArrowShows) || 0
+        }));
+      } catch (e) { resolve({ seenAt: 0, arrowShows: 0 }); }
     });
     let freshCount = 0;
+
+    // The first few times the arrows run they run slowly, so someone seeing
+    // them for the first time has the time to take in what they are saying;
+    // after that they keep a quicker pace.
+    const ARROW_INTRO_SHOWS = 3;
+    queueList.style.setProperty('--queue-arrow-duration',
+      arrowShows < ARROW_INTRO_SHOWS ? '1600ms' : '1000ms');
 
     queueList.innerHTML = '';
 
@@ -1219,7 +1413,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Seen now. Anything already on screen has had its run; only what arrives
     // after this moment is new next time.
     if (freshCount) {
-      try { chrome.storage.local.set({ queueSeenAt: Date.now() }); } catch (e) {}
+      try { chrome.storage.local.set({ queueSeenAt: Date.now(), queueArrowShows: arrowShows + 1 }); } catch (e) {}
     }
 
     refreshQueueCount();
@@ -1411,7 +1605,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (dest) { moveQueueRow(dest.dataset.id, dest.dataset.from, dest.dataset.to); return; }
 
       const discard = e.target.closest('.queue-discard');
-      if (discard) discardQueueRow(discard.dataset.id, listId);
+      if (discard) { discardQueueRow(discard.dataset.id, listId); return; }
+
+      // Anywhere else on a row opens that item, to see it whole and edit it.
+      if (row && !e.target.closest('button, a, .queue-destinations')) {
+        openItem(row.dataset.id, listId);
+      }
     });
   }
 
@@ -1435,6 +1634,612 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (queueOpenBtn) queueOpenBtn.addEventListener('click', openQueue);
+
+  /* ---------- One item ------------------------------------------------------
+     Tapping a row in Collected Items opens the item, laid out as the Swift
+     app's detail: Purchase (DetailPrice), the detail (OptionsDetailView) and
+     Notes (DetailNotes), side by side, opening on the middle page. Unlike the
+     app, every piece of content is editable in place.
+
+     An item collected from a page has a name, a link and a photo, and nothing
+     else the app shows. Until the real data exists, the rest is made up — the
+     first time an item is opened it gets a plausible price, description and
+     specs — and saved, so what is edited stays edited.
+
+     Everything lives on the item as `detail`, written to the Collected Items
+     row AND the item in its list in one write, so the two never disagree. The
+     row and the list item are tied by itemId where the row has one; older rows
+     are matched by link and name, as removing one always has been.
+     ------------------------------------------------------------------------ */
+  const itemView = document.getElementById('itemView');
+  const D = (id) => document.getElementById(id);
+  const detailPager = D('detailPager');
+  const detailCarousel = D('detailCarousel');
+  const detailSpecs = D('detailSpecs');
+  const detailNotes = D('detailNotes');
+  const detailBought = D('detailBought');
+  const detailViewProduct = D('detailViewProduct');
+  const detailAddImages = D('detailAddImages');
+  const detailConfidence = D('detailConfidence');
+
+  // { rowId, listId, match: { itemId, productUrl, title }, data }
+  let openItemState = null;
+  let itemSaveTimer = null;
+  let showConfidence = false;
+
+  const CREDIT_NAMES = [
+    'Saul Bass', 'Mario Bellini', 'Santiago Calatrava', 'Wim Crouwel',
+    'Lou Dorfsman', 'Ken C. Fleckhaus', 'Milton Glaser', 'Armin Hofmann',
+    'Yusaku Kamekura', 'Herb Lubalin', 'Elliot Noyes', 'Renzo Piano',
+    'Giovanni Pintori', 'Paul Rand', 'Dieter Rams', 'Ettore Sottsass',
+    'Fred Troller', 'Massimo Vignelli', 'Lance Wyman'
+  ];
+
+  const isListItemFor = (it, m) => (m.itemId && it.id === m.itemId)
+    || (!m.itemId && (it.productUrl || null) === (m.productUrl || null)
+        && (it.productTitle || null) === (m.title || null));
+
+  const escHtml = (v) => String(v == null ? '' : v).replace(/[<>&"]/g, (c) => (
+    { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+
+  /* Made-up detail for an item that has none yet. Seeded from the name, so
+     the same item always gets the same mock — opening it twice before saving
+     does not reshuffle it. */
+  function mockDetail(row) {
+    const name = (row.title || 'Untitled item').trim();
+    let seed = 0;
+    for (const ch of name) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const pick = (arr, k) => arr[(seed >>> k) % arr.length];
+    const words = name.split(/\s+/);
+    const brand = row.brand || (words.length > 1 ? words[0] : 'Decidio Studio');
+    const price = '$' + (149 + (seed % 23) * 75).toLocaleString('en-US');
+    const w = 20 + (seed % 40), d = 15 + ((seed >>> 3) % 30), h = 25 + ((seed >>> 5) % 120);
+    return {
+      mock: true,
+      description: name + ' brings a considered, quietly confident design to everyday use. '
+        + 'Built from durable materials with a refined finish, it balances form and function and sits as '
+        + 'comfortably in a modern space as a classic one. Assembly is minimal, care is simple, and it is '
+        + 'made to last well beyond the first season.',
+      specs: [
+        { name: 'Price',      value: price,                                   confidence: 96 },
+        { name: 'Brand',      value: brand,                                   confidence: 88 },
+        { name: 'Model',      value: name,                                    confidence: 74 },
+        { name: 'Material',   value: pick(['Aluminium', 'Steel and glass', 'Solid oak', 'Brass', 'Polycarbonate', 'Ceramic'], 2), confidence: 81 },
+        { name: 'Dimensions', value: w + ' × ' + d + ' × ' + h + ' cm',      confidence: 69 },
+        { name: 'Weight',     value: (1 + (seed % 140) / 10).toFixed(1) + ' kg', confidence: 63 },
+        { name: 'Color',      value: pick(['Matte black', 'White', 'Brushed nickel', 'Natural', 'Anthracite', 'Sage'], 4), confidence: 90 },
+        { name: 'Warranty',   value: pick(['1 year', '2 years', '5 years'], 6), confidence: 55 }
+      ],
+      notes: '',
+      bought: false,
+      images: row.thumb ? [row.thumb] : []
+    };
+  }
+
+  const priceSpec = (data) => data.specs.find((s) => /^price( today)?$/i.test((s.name || '').trim()));
+  const isUnknownValue = (v) => !v || /^unknown$/i.test(String(v).trim());
+
+  async function readListItems2(listId) {
+    const key = 'devListItems_' + listId;
+    return new Promise((resolve) => {
+      try { chrome.storage.local.get({ [key]: [] }, (r) => resolve((r && r[key]) || [])); }
+      catch (e) { resolve([]); }
+    });
+  }
+
+  async function openItem(rowId, listId) {
+    if (!itemView || !listId) return;
+    const rows = await readQueue(listId);
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) return;
+    const listItems = await readListItems2(listId);
+    const match = { itemId: row.itemId || null, productUrl: row.productUrl || null, title: row.title || null };
+    const li = listItems.find((it) => isListItemFor(it, match));
+
+    const detail = (li && li.detail) || row.detail || mockDetail(row);
+    const data = {
+      title: row.title || '',
+      productUrl: row.productUrl || '',
+      ...JSON.parse(JSON.stringify(detail))
+    };
+    if (!Array.isArray(data.images)) data.images = row.thumb ? [row.thumb] : [];
+    if (!Array.isArray(data.specs)) data.specs = [];
+
+    openItemState = { rowId, listId, match, data };
+    showConfidence = false;
+    renderDetail();
+    // The first time this item is opened, its spec values write themselves in.
+    if (!data.writtenOn) writeOn.start();
+
+    itemView.hidden = false;
+    setHeaderTitle(listNameFor(listId));
+    // Open on the middle page, as the app does.
+    requestAnimationFrame(() => {
+      detailPager.scrollLeft = detailPager.clientWidth;
+      itemView.querySelectorAll('.detail-page').forEach((p) => { p.scrollTop = 0; });
+    });
+    // A mock is saved as soon as it is shown, so edits build on it.
+    if (!(li && li.detail) && !row.detail) saveItem();
+  }
+
+  function renderDetail() {
+    const { data } = openItemState;
+    // Name, three times — one per page — kept in step as it is typed.
+    itemView.querySelectorAll('[data-field="title"]').forEach((el) => {
+      if (document.activeElement !== el) el.textContent = data.title;
+    });
+    const p = priceSpec(data);
+    const priceEl = itemView.querySelector('[data-field="price"]');
+    if (document.activeElement !== priceEl) priceEl.textContent = p && !isUnknownValue(p.value) ? p.value : '';
+    const linkEl = itemView.querySelector('[data-field="productUrl"]');
+    if (document.activeElement !== linkEl) linkEl.textContent = data.productUrl || '';
+    const descEl = itemView.querySelector('[data-field="description"]');
+    if (document.activeElement !== descEl) descEl.textContent = data.description || '';
+    if (document.activeElement !== detailNotes) detailNotes.value = data.notes || '';
+    renderViewProduct();
+    renderBought();
+    renderCarousel();
+    renderSpecs();
+  }
+
+  function renderViewProduct() {
+    const url = (openItemState.data.productUrl || '').trim();
+    const ok = /^https?:\/\//i.test(url);
+    detailViewProduct.classList.toggle('is-disabled', !ok);
+    if (ok) detailViewProduct.href = url; else detailViewProduct.removeAttribute('href');
+  }
+
+  const SEAL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.6l2.3 1.7 2.8-.2 1 2.6 2.5 1.3-.4 2.8 1.6 2.3-1.6 2.3.4 2.8-2.5 1.3-1 2.6-2.8-.2L12 22.4l-2.3-1.7-2.8.2-1-2.6-2.5-1.3.4-2.8L2.2 12l1.6-2.3-.4-2.8 2.5-1.3 1-2.6 2.8.2z"/><path d="M7.8 12.3l2.8 2.8 5.6-5.8" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function renderBought() {
+    const b = !!openItemState.data.bought;
+    detailBought.innerHTML = (b ? SEAL : '') + '<span>' + (b ? 'Bought' : 'Mark as Bought') + '</span>';
+  }
+
+  /* The image is the one that was collected, and only that — no Images.,
+     Add your own images. or Credits. cards around it. Shown whole: full
+     width at its own proportions, so nothing is cropped off it (see
+     .dm-hero). An item collected without a picture has no image area at all,
+     rather than an empty box. */
+  function renderCarousel() {
+    const src = openItemState.data.images[0];
+    detailCarousel.hidden = !src;
+    // The rule under the image goes with it, or two rules would meet.
+    if (detailCarousel.nextElementSibling) detailCarousel.nextElementSibling.hidden = !src;
+    detailCarousel.innerHTML = src ? `<div class="dm-hero"><img src="${escHtml(src)}" alt=""></div>` : '';
+  }
+
+  /* Write-on, as the Swift app builds a page (SequentialWriteViewAll): the
+     page writes itself top to bottom, and nothing below the point it has
+     reached exists yet — so there are never names sitting beside empty
+     values, only a page growing downward.
+       - text is typed a letter at a time (the name; the description, which
+         is held to one second however long it is) — see WO_LETTER;
+       - headers, rules and the picture appear whole when they are reached;
+       - each spec types its name, then its value, then the next row starts.
+     Once per item, the first time its detail is opened (detail.writtenOn).
+     Clicking into anything, a repaint, or leaving finishes it at once, so a
+     field is never edited half written. */
+  /* The pace. 15ms a letter (the app's page build) was more than the eye
+     could follow in a narrow panel, so it runs nearer the app's spec-column
+     rhythm instead: a letter every 23ms, a beat after each row so it lands
+     before the next starts, and a slightly longer one after a heading so the
+     section is found before its text begins. */
+  const WO_LETTER = 23;
+  // Prose reads faster than a spec, so the description's visible lines type
+  // a little quicker than a spec does — but readably, not in a blur.
+  const WO_DESC_LETTER = 10;
+  const WO_ROW_PAUSE = 130;
+  const WO_HEADING_PAUSE = 170;
+
+  const writeOn = {
+    timer: null,
+    running: false,
+    steps: [],
+    start() {
+      this.stop();
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) { this.done(); return; }
+      const page = itemView.querySelector('.detail-main');
+      const steps = [];
+      // pause: how long the page rests after this step, so each piece lands
+      // before the next begins.
+      const type = (el, cap, pause) => { if (el && el.textContent) steps.push({ el, text: el.textContent, cap, pause }); else if (el) steps.push({ el, pause }); };
+      const show = (el, pause) => { if (el && !el.hidden) steps.push({ el, pause }); };
+
+      type(page.querySelector('.dm-name'), null, WO_ROW_PAUSE);
+      const rules = [...page.querySelectorAll(':scope > .dm-rule')];
+      show(rules[0]);
+      show(detailCarousel);
+      show(rules[1]);
+      const body = page.querySelector('.dm-body');
+      for (const el of body.children) {
+        if (el === detailSpecs) {
+          for (const row of detailSpecs.querySelectorAll('.dm-spec')) {
+            steps.push({ el: row });
+            type(row.querySelector('.dm-spec-name'));
+            type(row.querySelector('.dm-spec-val'), null, WO_ROW_PAUSE);
+          }
+        } else if (el.matches('.dm-desc')) {
+          // Typed only as far as can be seen: the description shows three
+          // lines until tapped, and typing the hidden rest either left a long
+          // wait with nothing changing before the specs (held to 3.5s) or
+          // rushed the visible lines to fit it all into a second. Now the
+          // visible lines type at a readable pace and the rest goes in at
+          // once, out of sight.
+          steps.push({ el, text: el.textContent, per: WO_DESC_LETTER, untilClamped: true, pause: WO_ROW_PAUSE });
+        } else {
+          show(el, el.matches('.dm-heading') ? WO_HEADING_PAUSE : 0);
+        }
+      }
+      show(page.querySelector('.dm-top'));
+
+      // Everything waits, gone, until its turn.
+      for (const st of steps) {
+        st.el.classList.add('wo-pending');
+        if (st.text != null) { st.el.textContent = ''; st.el.classList.add('wo-typing'); }
+      }
+      this.steps = steps;
+      this.running = true;
+      this.next(0);
+    },
+    next(i) {
+      if (!this.running) return;
+      const st = this.steps[i];
+      if (!st) { this.done(); return; }
+      st.el.classList.remove('wo-pending');
+      const after = () => {
+        if (st.pause) this.timer = setTimeout(() => this.next(i + 1), st.pause);
+        else this.next(i + 1);
+      };
+      if (st.text == null) { after(); return; }
+      // WO_LETTER a letter, or quicker if the whole text would take longer
+      // than its cap.
+      const per = st.per || (st.cap ? Math.min(WO_LETTER, st.cap / st.text.length) : WO_LETTER);
+      const chunk = per < 4 ? Math.ceil(4 / per) : 1;
+      let n = 0;
+      const tick = () => {
+        if (!this.running) return;
+        n = Math.min(st.text.length, n + chunk);
+        st.el.textContent = st.text.slice(0, n);
+        // Past the last visible line: the rest goes in unseen, all at once.
+        if (st.untilClamped && st.el.scrollHeight > st.el.clientHeight + 1) {
+          n = st.text.length;
+          st.el.textContent = st.text;
+        }
+        if (n < st.text.length) { this.timer = setTimeout(tick, Math.max(per * chunk, 4)); return; }
+        st.el.classList.remove('wo-typing');
+        after();
+      };
+      tick();
+    },
+    // The page whole, now.
+    finish() {
+      if (!this.running) return;
+      for (const st of this.steps) {
+        st.el.classList.remove('wo-pending', 'wo-typing');
+        if (st.text != null) st.el.textContent = st.text;
+      }
+      this.done();
+    },
+    done() {
+      this.stop();
+      this.steps = [];
+      if (openItemState && !openItemState.data.writtenOn) {
+        openItemState.data.writtenOn = true;
+        saveItem();
+      }
+    },
+    stop() {
+      this.running = false;
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+  };
+
+  const X_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+  function renderSpecs(focusIndex) {
+    writeOn.finish();
+    const { data } = openItemState;
+    // The list's order, except specs with no value for this item go last
+    // (OptionsDetailView.specCategoriesKnownFirst).
+    const order = data.specs.map((s, i) => i);
+    order.sort((a, b) => Number(isUnknownValue(data.specs[a].value)) - Number(isUnknownValue(data.specs[b].value)) || a - b);
+    detailSpecs.innerHTML = order.map((i) => {
+      const s = data.specs[i];
+      const conf = showConfidence && s.confidence != null && !isUnknownValue(s.value)
+        ? `<div class="dm-conf">${s.confidence}%</div>` : '';
+      return `<div class="dm-spec${isUnknownValue(s.value) ? ' is-unknown' : ''}" data-i="${i}">
+          <div class="dm-spec-name" contenteditable="plaintext-only" data-spec="name" data-placeholder="Spec" spellcheck="false">${escHtml(s.name)}</div>
+          <div class="dm-spec-vals">
+            <div class="dm-spec-val" contenteditable="plaintext-only" data-spec="value" data-placeholder="Unknown" spellcheck="false">${escHtml(isUnknownValue(s.value) ? '' : s.value)}</div>
+            ${conf}
+          </div>
+          <button class="dm-spec-del" data-act="del-spec" data-i="${i}" aria-label="Remove ${escHtml(s.name)}" title="Remove">${X_ICON}</button>
+        </div>`;
+    }).join('');
+    detailConfidence.textContent = showConfidence ? 'Hide Confidence' : 'Show Confidence';
+    if (focusIndex != null) {
+      const el = detailSpecs.querySelector(`.dm-spec[data-i="${focusIndex}"] .dm-spec-name`);
+      if (el) el.focus();
+    }
+  }
+
+  // ---- Saving ----
+  async function saveItem() {
+    clearTimeout(itemSaveTimer);
+    if (!openItemState) return;
+    const { rowId, listId, match, data } = openItemState;
+    const title = (data.title || '').trim() || null;
+    const productUrl = (data.productUrl || '').trim() || null;
+    const thumb = data.images[0] || null;
+    const detail = {
+      mock: !!data.mock,
+      description: data.description || '',
+      specs: data.specs,
+      notes: data.notes || '',
+      bought: !!data.bought,
+      images: data.images,
+      writtenOn: !!data.writtenOn
+    };
+
+    const rows = await readQueue(listId);
+    const row = rows.find((r) => r.id === rowId);
+    if (!row) return;
+    Object.assign(row, { title, productUrl, thumb, detail });
+
+    const key = 'devListItems_' + listId;
+    const listItems = await readListItems2(listId);
+    const li = listItems.find((it) => isListItemFor(it, match));
+    if (li) Object.assign(li, { productTitle: title, productUrl, imageUrl: thumb, detail });
+
+    const out = { [queueKey(listId)]: rows };
+    if (li) out[key] = listItems;
+    await new Promise((resolve) => {
+      try { chrome.storage.local.set(out, resolve); } catch (e) { resolve(); }
+    });
+    // Found by what it looks like now, next time.
+    openItemState.match = { itemId: match.itemId, productUrl, title };
+  }
+  function queueItemSave() {
+    clearTimeout(itemSaveTimer);
+    itemSaveTimer = setTimeout(saveItem, 450);
+  }
+
+  async function closeItem() {
+    if (!itemView || itemView.hidden) return;
+    writeOn.finish();
+    await saveItem();
+    itemView.hidden = true;
+    D('detailPurchased').hidden = true;
+    openItemState = null;
+    setHeaderTitle('Collected Items');
+    renderQueue();
+  }
+
+  // ---- Editing ----
+  if (itemView) {
+    // Any editable field: name, price, link, description, spec names and values.
+    itemView.addEventListener('input', (e) => {
+      if (!openItemState) return;
+      const { data } = openItemState;
+      const el = e.target;
+      const text = el.isContentEditable ? el.textContent : el.value;
+
+      if (el === detailNotes) { data.notes = text; queueItemSave(); return; }
+
+      const field = el.dataset.field;
+      if (field === 'title') {
+        data.title = text;
+        // The other two pages' copies follow as it is typed.
+        itemView.querySelectorAll('[data-field="title"]').forEach((o) => { if (o !== el) o.textContent = text; });
+      } else if (field === 'price') {
+        let p = priceSpec(data);
+        if (!p) { p = { name: 'Price', value: '', confidence: null }; data.specs.unshift(p); }
+        p.value = text.trim();
+        p.confidence = 100;   // typed by hand (Criterion.handEdited)
+        renderSpecs();
+      } else if (field === 'productUrl') {
+        data.productUrl = text.trim();
+        renderViewProduct();
+      } else if (field === 'description') {
+        data.description = text;
+      } else if (el.dataset.spec) {
+        const row = el.closest('.dm-spec');
+        const s = data.specs[Number(row.dataset.i)];
+        if (!s) return;
+        if (el.dataset.spec === 'name') s.name = text.trim();
+        else {
+          s.value = text.trim();
+          s.confidence = 100;
+          row.classList.toggle('is-unknown', isUnknownValue(s.value));
+          // Price on the Purchase page is this same spec.
+          if (s === priceSpec(data)) {
+            const pe = itemView.querySelector('[data-field="price"]');
+            pe.textContent = isUnknownValue(s.value) ? '' : s.value;
+          }
+        }
+      } else {
+        return;
+      }
+      if (data.mock) data.mock = false;
+      queueItemSave();
+    });
+
+    // Editing anything mid-write-on finishes it first, so no field is ever
+    // edited half written.
+    itemView.addEventListener('focusin', () => writeOn.finish());
+
+    // Return ends a one-line field (everything but the description and notes).
+    itemView.addEventListener('keydown', (e) => {
+      const el = e.target;
+      if (e.key === 'Enter' && el.isContentEditable && el.dataset.field !== 'description') {
+        e.preventDefault();
+        el.blur();
+      }
+      // Arrow keys move between the pages when nothing is being edited.
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !el.isContentEditable && el !== detailNotes) {
+        e.preventDefault();
+        detailPager.scrollBy({ left: (e.key === 'ArrowRight' ? 1 : -1) * detailPager.clientWidth, behavior: 'smooth' });
+      }
+    });
+    itemView.addEventListener('focusout', (e) => {
+      if (e.target.isContentEditable || e.target === detailNotes) {
+        // A spec cleared of both name and value is a removed spec.
+        if (e.target.dataset.spec && openItemState) {
+          const row = e.target.closest('.dm-spec');
+          const i = Number(row.dataset.i);
+          const s = openItemState.data.specs[i];
+          if (s && !s.name && isUnknownValue(s.value) && !row.contains(e.relatedTarget)) {
+            openItemState.data.specs.splice(i, 1);
+            renderSpecs();
+          }
+        }
+        if (e.target.dataset.field === 'description') e.target.classList.remove('is-expanded');
+        saveItem();
+      }
+    });
+
+    // Description: three lines until tapped, as the app; tapped, it opens in full.
+    const desc = itemView.querySelector('[data-field="description"]');
+    desc.addEventListener('click', () => desc.classList.add('is-expanded'));
+
+    itemView.addEventListener('click', (e) => {
+      if (!openItemState) return;
+      const { data } = openItemState;
+      const act = e.target.closest('[data-act]');
+      if (!act) return;
+      const a = act.dataset.act;
+      if (a === 'add-images') { detailAddImages.click(); return; }
+      if (a === 'to-first') {
+        const first = detailCarousel.querySelector('.dm-card-img') || detailCarousel.firstElementChild;
+        if (first) first.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+        return;
+      }
+      if (a === 'del-image') {
+        data.images.splice(Number(act.dataset.i), 1);
+        renderCarousel();
+        saveItem();
+        return;
+      }
+      if (a === 'del-spec') {
+        data.specs.splice(Number(act.dataset.i), 1);
+        renderSpecs();
+        const p = priceSpec(data);
+        itemView.querySelector('[data-field="price"]').textContent = p && !isUnknownValue(p.value) ? p.value : '';
+        saveItem();
+      }
+    });
+
+    D('detailAddSpec').addEventListener('click', () => {
+      if (!openItemState) return;
+      openItemState.data.specs.push({ name: '', value: '', confidence: 100 });
+      renderSpecs(openItemState.data.specs.length - 1);
+    });
+
+    detailConfidence.addEventListener('click', () => {
+      showConfidence = !showConfidence;
+      renderSpecs();
+    });
+
+    D('detailTop').addEventListener('click', () => {
+      itemView.querySelector('.detail-main').scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    detailViewProduct.addEventListener('click', (e) => {
+      if (detailViewProduct.classList.contains('is-disabled')) {
+        e.preventDefault();
+        itemView.querySelector('[data-field="productUrl"]').focus();
+      }
+    });
+
+    // Bought is a toggle; only marking it bought celebrates (DetailPrice).
+    detailBought.addEventListener('click', () => {
+      if (!openItemState) return;
+      const data = openItemState.data;
+      data.bought = !data.bought;
+      renderBought();
+      saveItem();
+      if (data.bought) {
+        const o = D('detailPurchased');
+        D('detailPurchasedName').textContent = data.title || '';
+        o.classList.remove('is-leaving');
+        o.hidden = false;
+        // Restart the drawing each time it is shown.
+        o.querySelectorAll('.dp-ring, .dp-check, .dp-spark, .dp-overlay-text, .dp-overlay-done')
+          .forEach((n) => { n.style.animation = 'none'; void n.offsetWidth; n.style.animation = ''; });
+      }
+    });
+    D('detailPurchasedDone').addEventListener('click', () => {
+      const o = D('detailPurchased');
+      o.classList.add('is-leaving');
+      setTimeout(() => { o.hidden = true; o.classList.remove('is-leaving'); }, 350);
+    });
+
+    // Add your own images: stored small (as collected photos are), at most
+    // 1600px on the long edge, as the app's storageSized.
+    detailAddImages.addEventListener('change', async () => {
+      if (!openItemState) return;
+      const files = [...(detailAddImages.files || [])];
+      detailAddImages.value = '';
+      let last = null;
+      for (const f of files) {
+        const url = await new Promise((resolve) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result);
+          r.onerror = () => resolve(null);
+          r.readAsDataURL(f);
+        });
+        if (!url) continue;
+        const small = await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+            const c = document.createElement('canvas');
+            c.width = Math.round(img.naturalWidth * k);
+            c.height = Math.round(img.naturalHeight * k);
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            resolve(c.toDataURL('image/jpeg', 0.85));
+          };
+          img.onerror = () => resolve(null);
+          img.src = url;
+        });
+        if (!small) continue;
+        openItemState.data.images.push(small);
+        last = openItemState.data.images.length - 1;
+      }
+      if (last != null) {
+        renderCarousel(last);
+        saveItem();
+      }
+    });
+
+    // Dictation, where the browser has it (DetailNotes' mic). Brave and some
+    // others do not — then there is no mic, rather than one that fails.
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const mic = D('detailMic');
+    if (SR && mic && !navigator.brave) {
+      mic.hidden = false;
+      let rec = null;
+      mic.addEventListener('click', () => {
+        if (rec) { rec.stop(); return; }
+        rec = new SR();
+        rec.interimResults = true;
+        rec.continuous = true;
+        const base = detailNotes.value;
+        rec.onresult = (ev) => {
+          let spoken = '';
+          for (let i = 0; i < ev.results.length; i++) spoken += ev.results[i][0].transcript;
+          detailNotes.value = base ? base + ' ' + spoken : spoken;
+          if (openItemState) { openItemState.data.notes = detailNotes.value; queueItemSave(); }
+        };
+        rec.onend = () => { rec = null; mic.classList.remove('is-recording'); };
+        rec.onerror = rec.onend;
+        mic.classList.add('is-recording');
+        rec.start();
+      });
+    }
+  }
 
   /* ---------- An opened list ------------------------------------------------
      Tapping a name opens it: the header takes the list's name in place of
@@ -2044,7 +2849,14 @@ document.addEventListener('DOMContentLoaded', () => {
           refreshQueueCount();
           if (queueView && !queueView.hidden) renderQueue();
         }
-        if (todo.list && openListId) openList(openListId);
+        // Not while another screen is over the list: openList also sets the
+        // header, and it put the list's name over "Details" or "Collected
+        // Items" the moment an edit was saved. Closing those screens repaints
+        // the list anyway.
+        const covered = (queueView && !queueView.hidden)
+          || (itemView && !itemView.hidden)
+          || (notesView && !notesView.hidden);
+        if (todo.list && openListId && !covered) openList(openListId);
         else if (!openListId && todo.recent) renderListBar();
       });
     });
@@ -2081,6 +2893,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // them, and the menu can be opened over either.
       if (panelMenu && !panelMenu.hidden) {
         setMenuOpen(false);
+        return;
+      }
+
+      if (itemView && !itemView.hidden) {
+        closeItem();
         return;
       }
 
@@ -2377,6 +3194,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('pagehide', flushNotes);
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (itemView && !itemView.hidden) {
+      closeItem();
+      return;
+    }
     if (queueView && !queueView.hidden) {
       closeQueue();
       return;

@@ -247,15 +247,30 @@ const ProductPageExtractor = {
    * @returns {string} Absolute product page URL.
    */
   extractProductUrl(targetImg, container) {
-    // Check if the card container is an anchor itself or contains a product link
-    if (container && container !== document.body) {
-      const structuralLink = container.tagName === 'A' ? container : container.querySelector('a[href]');
-      if (structuralLink && structuralLink.href) return structuralLink.href;
-    }
-
-    // Check closest anchor wrapping the clicked image
+    // The link wrapped round the clicked image first. This used to come
+    // second, after the first link anywhere in the "card" — and when the card
+    // found was wider than one product (a row of a grid, a carousel), that
+    // first link belonged to the first product in it, so every item collected
+    // from the row got the same link.
     const parentLink = targetImg?.closest('a[href]');
-    if (parentLink) return parentLink.href;
+    if (parentLink && parentLink.href) return parentLink.href;
+
+    if (container && container !== document.body) {
+      if (container.tagName === 'A' && container.href) return container.href;
+
+      // One product per card: its only link is the product's.
+      const links = [...container.querySelectorAll('a[href]')].filter((a) => a.href);
+      const distinct = [...new Set(links.map((a) => a.href))];
+      if (distinct.length === 1) return distinct[0];
+
+      // Several: the first one after the image — a product's name and link
+      // follow its picture — rather than the first in the whole card.
+      if (targetImg && links.length) {
+        const after = links.find((a) =>
+          targetImg.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (after) return after.href;
+      }
+    }
 
     // Default to the current tab URL (PDP scenario)
     return window.location.href;

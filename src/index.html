@@ -229,6 +229,82 @@ to Decidio<span class="blue-dot">.</span></h1>
                      read as a notice about something being wrong. -->
             </div>
 
+            <!-- One collected item, opened by tapping its row in Collected
+                 Items. The Swift app's detail, page for page: three pages
+                 side by side — Purchase (DetailPrice) on the left, the detail
+                 itself (OptionsDetailView) in the middle where it opens, and
+                 Notes (DetailNotes) on the right — swiped between. Unlike the
+                 app, everything on them is editable in place. -->
+            <div class="detail-view" id="itemView" hidden>
+                <div class="detail-pager" id="detailPager">
+
+                    <section class="detail-page detail-price" aria-label="Purchase">
+                        <div class="dp-pad">
+                            <div class="dp-name" contenteditable="plaintext-only" data-field="title" data-placeholder="Name" spellcheck="false"></div>
+                            <div class="dp-price" contenteditable="plaintext-only" data-field="price" data-placeholder="Unknown" spellcheck="false"></div>
+                            <div class="dp-sub">Purchase.</div>
+                            <a class="dp-view" id="detailViewProduct" target="_blank" rel="noopener">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><polygon points="15.5,8.5 13.2,13.2 8.5,15.5 10.8,10.8"/></svg>
+                                <span>View Product</span>
+                                <svg class="dp-view-arrow" viewBox="0 0 24 24" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="9,7 17,7 17,15"/></svg>
+                            </a>
+                            <div class="dp-link" contenteditable="plaintext-only" data-field="productUrl" data-placeholder="Paste the product link" spellcheck="false"></div>
+                            <button class="dp-bought" id="detailBought"></button>
+                        </div>
+                    </section>
+
+                    <section class="detail-page detail-main" aria-label="Details">
+                        <div class="dm-name" contenteditable="plaintext-only" data-field="title" data-placeholder="Name" spellcheck="false"></div>
+                        <div class="dm-rule"></div>
+                        <div class="dm-carousel" id="detailCarousel"></div>
+                        <div class="dm-rule"></div>
+                        <div class="dm-body">
+                            <div class="dm-heading">Description</div>
+                            <div class="dm-desc" contenteditable="plaintext-only" data-field="description" data-placeholder="Add a description" spellcheck="false"></div>
+                            <div class="dm-rule"></div>
+                            <div class="dm-heading dm-heading-specs">Specifications</div>
+                            <button class="dm-confidence" id="detailConfidence">Show Confidence</button>
+                            <div class="dm-specs" id="detailSpecs"></div>
+                            <button class="dm-add-spec" id="detailAddSpec">Add specification</button>
+                        </div>
+                        <button class="dm-top" id="detailTop" aria-label="Back to top">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="17" x2="12" y2="7.5"/><polyline points="7.8,11.5 12,7.3 16.2,11.5"/></svg>
+                        </button>
+                    </section>
+
+                    <section class="detail-page detail-notes" aria-label="Notes">
+                        <div class="dn-pad">
+                            <div class="dn-name" contenteditable="plaintext-only" data-field="title" data-placeholder="Name" spellcheck="false"></div>
+                            <div class="dn-editor">
+                                <textarea id="detailNotes" placeholder="Your thoughts." spellcheck="false"></textarea>
+                                <button class="dn-mic" id="detailMic" aria-label="Dictate" title="Dictate" hidden>
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><rect x="9.6" y="6" width="4.8" height="8" rx="2.4"/><path d="M7.5 11.5a4.5 4.5 0 0 0 9 0"/><line x1="12" y1="16" x2="12" y2="18"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                <!-- The celebration covers the whole item, wherever the
+                     Purchase page is scrolled to. -->
+                <div class="dp-overlay" id="detailPurchased" hidden>
+                    <div class="dp-overlay-mark">
+                        <span class="dp-spark"></span><span class="dp-spark"></span><span class="dp-spark"></span><span class="dp-spark"></span><span class="dp-spark"></span>
+                        <span class="dp-spark"></span><span class="dp-spark"></span><span class="dp-spark"></span><span class="dp-spark"></span><span class="dp-spark"></span>
+                        <svg viewBox="0 0 140 140" aria-hidden="true">
+                            <circle class="dp-ring-track" cx="70" cy="70" r="65"/>
+                            <circle class="dp-ring" cx="70" cy="70" r="65"/>
+                            <path class="dp-check" d="M 52.4 71.4 L 64.9 83.7 L 86.7 58.7"/>
+                        </svg>
+                    </div>
+                    <div class="dp-overlay-text">
+                        <div class="dp-overlay-title">Purchase.</div>
+                        <div class="dp-overlay-name" id="detailPurchasedName"></div>
+                    </div>
+                    <button class="dp-overlay-done" id="detailPurchasedDone">Done</button>
+                </div>
+                <input type="file" id="detailAddImages" accept="image/*" multiple hidden>
+            </div>
+
             <!-- Main Body Content -->
             <div class="sidebar-body">
 
@@ -238,6 +314,37 @@ to Decidio<span class="blue-dot">.</span></h1>
                      "Collect +" heading and the aperture tile that used to sit
                      here are gone — the aperture lives in the footer now, and
                      the heading named a section that no longer exists. -->
+                <!-- Search, tucked away above the lists as iOS does: scroll
+                     up at the top of the list (or just start typing) and it
+                     slides open; scroll down with nothing typed and it tucks
+                     away again. Lives outside collectionsList so a repaint of
+                     the names never takes the field's focus. -->
+                <div class="collections-search-row" id="listSearchRow">
+                    <div class="collections-search-inner">
+                        <div class="tools-search" id="listSearchBox">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20.5" y2="20.5"/></svg>
+                            <input type="text" id="listSearch" placeholder="Search your lists"
+                                   autocomplete="off" spellcheck="false" aria-label="Search your lists" tabindex="-1">
+                            <button class="tools-search-clear" id="listSearchClear" aria-label="Close search" title="Close search" tabindex="-1">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="7" y1="7" x2="17" y2="17"/><line x1="17" y1="7" x2="7" y2="17"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- The order, after Spotify's Your Library: the current sort
+                     on the right with its menu under it. -->
+                <div class="collections-tools" id="collectionsTools">
+                    <button class="tools-sort-btn" id="listSortBtn" aria-haspopup="true" aria-expanded="false">
+                        <span id="listSortLabel">Recents</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="5" y1="7" x2="19" y2="7"/><line x1="5" y1="12" x2="15" y2="12"/><line x1="5" y1="17" x2="11" y2="17"/></svg>
+                    </button>
+                    <div class="tools-sort-menu" id="listSortMenu" role="menu" hidden>
+                        <div class="tools-sort-title">Sort by</div>
+                        <button class="tools-sort-option" role="menuitemradio" data-sort="recents">Recents</button>
+                        <button class="tools-sort-option" role="menuitemradio" data-sort="added">Recently added</button>
+                        <button class="tools-sort-option" role="menuitemradio" data-sort="alpha">Alphabetical</button>
+                    </div>
+                </div>
                 <div class="collections-list" id="collectionsList"></div>
 
                 <!-- The opened list's items, and before anything is filed,

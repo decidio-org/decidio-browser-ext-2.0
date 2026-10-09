@@ -129,16 +129,26 @@ async function fileNow(items) {
     // Named items go into the list as well; anything without a name waits in
     // Collected Items, where it can be retried or sent somewhere.
     const named = its.filter((it) => (it.state ? it.state === 'complete' : !!it.productTitle));
+    // One id per item, carried by both the list item and its Collected Items
+    // row, so an edit made from either finds the other exactly — even when
+    // the same product has been collected twice.
+    const ids = new Map(its.map((it) => [it, 'i' + now + Math.random().toString(36).slice(2, 8)]));
     out['devListItems_' + id] = (cur['devListItems_' + id] || []).concat(named.map((it) => ({
+      id: ids.get(it),
       imageUrl: it.imageUrl || null,
       productUrl: it.productUrl || null,
       productTitle: it.productTitle || null,
-      brand: it.brand || null
+      // Not the overlay's guess (the first word of the name — "Taccia" for a
+      // Flos lamp). A brand field that arrives filled in with a wrong guess
+      // is worse than an empty one; it is set by hand in the item's details.
+      brand: null
     })));
     out['listQueue_' + id] = (cur['listQueue_' + id] || []).concat(its.map((it) => ({
       id: 'q' + now + Math.random().toString(36).slice(2, 7),
+      itemId: ids.get(it),
       thumb: it.imageUrl || null,
       title: it.productTitle || null,
+      brand: null,
       productUrl: it.productUrl || null,
       state: it.state === 'pending' ? 'pending' : (named.includes(it) ? 'added' : 'failed'),
       error: it.error || null,

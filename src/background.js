@@ -12,11 +12,15 @@
  * picker.js and calls ui.js's globals); the others only declare. Injecting a
  * subset leaves those references undefined.
  */
+// The product-photo finder, shared with the overlay (see gallery.js).
+importScripts('gallery.js');
+
 const CONTENT_SCRIPT_FILES = [
   "util.js",
   "requests.js",
   "drivers.js",
   "productPageExtract.js",
+  "gallery.js",
   "picker.js",
   "ui.js",
   "content.js"
@@ -122,6 +126,7 @@ async function fileNow(items) {
 
   const now = Date.now();
   const out = {};
+  const galleryJobs = [];
   const cascade = Array.isArray(cur.listsAwaitingCascade) ? cur.listsAwaitingCascade.slice() : [];
   const recent = Object.assign({}, cur.listRecentUse || {});
 
@@ -135,6 +140,7 @@ async function fileNow(items) {
     const ids = new Map(its.map((it) => [it, 'i' + now + Math.random().toString(36).slice(2, 8)]));
     out['devListItems_' + id] = (cur['devListItems_' + id] || []).concat(named.map((it) => ({
       id: ids.get(it),
+      gallery: Array.isArray(it.gallery) ? it.gallery : [],
       imageUrl: it.imageUrl || null,
       productUrl: it.productUrl || null,
       productTitle: it.productTitle || null,
@@ -146,6 +152,7 @@ async function fileNow(items) {
     out['listQueue_' + id] = (cur['listQueue_' + id] || []).concat(its.map((it) => ({
       id: 'q' + now + Math.random().toString(36).slice(2, 7),
       itemId: ids.get(it),
+      gallery: Array.isArray(it.gallery) ? it.gallery : [],
       thumb: it.imageUrl || null,
       title: it.productTitle || null,
       brand: null,
@@ -156,12 +163,82 @@ async function fileNow(items) {
     })));
     if (!cascade.includes(id)) cascade.push(id);
     recent[id] = now;
+
+    // Items collected from a listing still need their photos found: the
+    // product's own page is read once the batch is saved.
+    for (const it of its) {
+      if (it.galleryTried || !/^https?:/i.test(it.productUrl || '')) continue;
+      galleryJobs.push({
+        listId: id, itemId: ids.get(it), productUrl: it.productUrl,
+        title: it.productTitle || '', exclude: [it.sourceImageUrl]
+      });
+    }
   }
   out.listsAwaitingCascade = cascade;
   out.listRecentUse = recent;
 
   await chrome.storage.local.set(out);
+  // Not awaited: Done is answered as soon as the items are saved, and the
+  // photos arrive a moment later.
+  for (const job of galleryJobs) findGallery(job);
   return [...groups.keys()];
+}
+
+/* --------------------------------------------------------------------------
+   PHOTOS FROM THE PRODUCT'S PAGE
+   --------------------------------------------------------------------------
+   For an item collected from a listing: the product's page is fetched in
+   the background — no tab opens — and its photos read by gallery.js. The
+   extension may read any site (host permission <all_urls>), so no shop has
+   to allow it. At most three pages at a time, each given 12 seconds, and a
+   page that fails, blocks the request, or only builds itself with
+   JavaScript simply leaves the item with the one photo it was collected
+   with. The result is written through the same chain as filing, so it can
+   never cross a batch being saved. */
+let galleryActive = 0;
+const galleryWaiting = [];
+function findGallery(job) {
+  if (galleryActive >= 3) { galleryWaiting.push(job); return; }
+  galleryActive++;
+  readGallery(job)
+    .then((photos) => photos.length ? saveGallery(job, photos) : null)
+    .catch(() => {})
+    .finally(() => {
+      galleryActive--;
+      const next = galleryWaiting.shift();
+      if (next) findGallery(next);
+    });
+}
+
+async function readGallery(job) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 12000);
+  try {
+    const res = await fetch(job.productUrl, { signal: ctl.signal, credentials: 'omit', redirect: 'follow' });
+    if (!res.ok || !/html/i.test(res.headers.get('content-type') || 'text/html')) return [];
+    const html = (await res.text()).slice(0, 3000000);
+    return DecidioGallery.fromHtml(html, res.url || job.productUrl, {
+      title: job.title, productUrl: job.productUrl, exclude: job.exclude
+    });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function saveGallery(job, photos) {
+  const write = async () => {
+    const listKey = 'devListItems_' + job.listId;
+    const rowKey = 'listQueue_' + job.listId;
+    const cur = await chrome.storage.local.get({ [listKey]: [], [rowKey]: [] });
+    const out = {};
+    const li = cur[listKey].find((it) => it.id === job.itemId);
+    if (li) { li.gallery = photos; out[listKey] = cur[listKey]; }
+    const row = cur[rowKey].find((r) => r.itemId === job.itemId);
+    if (row) { row.gallery = photos; out[rowKey] = cur[rowKey]; }
+    if (Object.keys(out).length) await chrome.storage.local.set(out);
+  };
+  filingChain = filingChain.then(write, write);
+  return filingChain;
 }
 
 /* --------------------------------------------------------------------------

@@ -37,6 +37,7 @@
         "requests.js",
         "drivers.js",
         "productPageExtract.js",
+        "gallery.js",
         "picker.js",
         "ui.js",
         "content.js"

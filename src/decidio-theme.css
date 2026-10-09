@@ -2717,3 +2717,76 @@
 /* A list's items open their details when tapped, so the whole tile says so. */
 .decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile { cursor: pointer; }
 .decidio-sidebar:not(.is-auth) .is-view-list .product-tile-remove { cursor: pointer; }
+
+/* The product's photos, when it has more than one: a strip to swipe through
+   (GalleryCarousel). Every photo at the same height and its own width, so
+   none is cropped; the number under each, flush right, as the app sets it.
+   Spaced from the rules above and below like the single image. */
+.decidio-sidebar:not(.is-auth) .dm-strip {
+    display: flex;
+    gap: 10px;
+    padding: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 16px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+}
+.decidio-sidebar:not(.is-auth) .dm-strip::-webkit-scrollbar { display: none; }
+.decidio-sidebar:not(.is-auth) .dm-shot {
+    flex: 0 0 auto;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    scroll-snap-align: start;
+}
+.decidio-sidebar:not(.is-auth) .dm-shot.is-broken { display: none; }
+.decidio-sidebar:not(.is-auth) .dm-shot img {
+    display: block;
+    height: 220px;
+    width: auto;
+    max-width: 300px;
+    min-width: 120px;
+    object-fit: contain;
+    background: color-mix(in srgb, var(--d-ink) 6%, transparent);
+}
+.decidio-sidebar:not(.is-auth) .dm-shot figcaption {
+    align-self: flex-end;
+    margin-top: 4px;
+    padding-right: 2px;
+    font-size: 16px;
+    font-weight: 800;
+}
+
+/* Through the photos without swiping: a click on a photo moves to the next,
+   and round arrows sit on the strip's edges while there is a photo that
+   way. */
+.decidio-sidebar:not(.is-auth) .dm-strip-wrap { position: relative; }
+.decidio-sidebar:not(.is-auth) .dm-shot { cursor: pointer; }
+.decidio-sidebar:not(.is-auth) .dm-strip-arrow {
+    position: absolute;
+    top: calc(16px + 110px);
+    transform: translateY(-50%);
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #FFFFFF;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: opacity 150ms ease, background 150ms ease;
+}
+.decidio-sidebar:not(.is-auth) .dm-strip-arrow:hover { background: rgba(0, 0, 0, 0.75); }
+.decidio-sidebar:not(.is-auth) .dm-strip-arrow[hidden] { display: none; }
+.decidio-sidebar:not(.is-auth) .dm-strip-arrow.is-prev { left: 8px; }
+.decidio-sidebar:not(.is-auth) .dm-strip-arrow.is-next { right: 8px; }
+.decidio-sidebar:not(.is-auth) .dm-strip-arrow svg {
+    width: 18px; height: 18px;
+    fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+}

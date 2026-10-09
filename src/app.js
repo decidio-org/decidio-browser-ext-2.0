@@ -1774,6 +1774,9 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     if (!Array.isArray(data.images)) data.images = src.thumb ? [src.thumb] : [];
     if (!Array.isArray(data.specs)) data.specs = [];
+    // The product's other photos, found for it (gallery.js), after the one
+    // it was collected with.
+    mergeGallery(data, (li && li.gallery) || (row && row.gallery) || []);
 
     openItemState = { rowId: row ? row.id : null, listId, match, data, from: fromList ? 'list' : 'queue' };
     showConfidence = false;
@@ -1825,12 +1828,98 @@ document.addEventListener('DOMContentLoaded', () => {
     detailBought.innerHTML = (b ? SEAL : '') + '<span>' + (b ? 'Bought' : 'Mark as Bought') + '</span>';
   }
 
+  // Adds found photos not already there, the collected one staying first.
+  // Returns whether anything was added.
+  function mergeGallery(data, gallery) {
+    if (!Array.isArray(gallery) || !gallery.length) return false;
+    const have = new Set(data.images);
+    let added = false;
+    for (const u of gallery) {
+      if (data.images.length >= 9) break;
+      if (!have.has(u)) { data.images.push(u); have.add(u); added = true; }
+    }
+    return added;
+  }
+
+  /* One photo: shown whole, as below. More than one — the collected photo
+     and those found for the product — a strip to swipe through, as the
+     app's GalleryCarousel: each photo at its own proportions at a common
+     height (none cropped), numbered 01, 02… under its right edge, the
+     collected one first. A found photo that will not load (the shop moved
+     or blocks it) drops out of the strip rather than leaving a gap. */
+  function renderStrip(images) {
+    detailCarousel.hidden = false;
+    if (detailCarousel.nextElementSibling) detailCarousel.nextElementSibling.hidden = false;
+    const ARROW = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="${d < 0 ? '14.5,6 8.5,12 14.5,18' : '9.5,6 15.5,12 9.5,18'}"/></svg>`;
+    detailCarousel.innerHTML = `<div class="dm-strip-wrap">
+        <div class="dm-strip">${images.map((src, i) => `
+          <figure class="dm-shot">
+            <img src="${escHtml(src)}" alt="" ${i ? 'loading="lazy" referrerpolicy="no-referrer"' : ''}>
+            <figcaption>${String(i + 1).padStart(2, '0')}</figcaption>
+          </figure>`).join('')}</div>
+        <button class="dm-strip-arrow is-prev" aria-label="Previous photo">${ARROW(-1)}</button>
+        <button class="dm-strip-arrow is-next" aria-label="Next photo">${ARROW(1)}</button>
+      </div>`;
+
+    /* Moving through the photos without swiping: click a photo for the next
+       one (the last goes back to the first), or the arrows at the edges,
+       which only show while there is a photo that way. */
+    const strip = detailCarousel.querySelector('.dm-strip');
+    const shots = () => [...strip.querySelectorAll('.dm-shot:not(.is-broken)')];
+    const current = () => {
+      const x = strip.scrollLeft;
+      let best = 0, d = Infinity;
+      shots().forEach((s, k) => { const dd = Math.abs(s.offsetLeft - 16 - x); if (dd < d) { d = dd; best = k; } });
+      return best;
+    };
+    const goTo = (k) => {
+      const all = shots();
+      if (!all.length) return;
+      const n = ((k % all.length) + all.length) % all.length;
+      strip.scrollTo({ left: Math.max(0, all[n].offsetLeft - 16), behavior: 'smooth' });
+    };
+    const prev = detailCarousel.querySelector('.is-prev');
+    const next = detailCarousel.querySelector('.is-next');
+    const arrows = () => {
+      prev.hidden = strip.scrollLeft <= 4;
+      next.hidden = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4;
+    };
+    prev.addEventListener('click', () => goTo(current() - 1));
+    next.addEventListener('click', () => goTo(current() + 1));
+    strip.addEventListener('click', (e) => {
+      const shot = e.target.closest('.dm-shot');
+      if (!shot) return;
+      const k = shots().indexOf(shot);
+      // The photo after the one clicked; the last goes back to the start.
+      goTo(k + 1 >= shots().length ? 0 : k + 1);
+    });
+    strip.addEventListener('scroll', arrows, { passive: true });
+    // Measured again whenever the strip's size changes — photos loading in,
+    // or the strip appearing at all (the first open's write-on holds it back
+    // at first, when there is nothing yet to measure).
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(arrows);
+      ro.observe(strip);
+      shots().forEach((sh) => ro.observe(sh));
+    }
+    strip.querySelectorAll('img').forEach((img) => img.addEventListener('load', arrows, { once: true }));
+    requestAnimationFrame(arrows);
+    const renumber = () => {
+      detailCarousel.querySelectorAll('.dm-shot:not(.is-broken) figcaption')
+        .forEach((c, k) => { c.textContent = String(k + 1).padStart(2, '0'); });
+    };
+    detailCarousel.querySelectorAll('.dm-shot img').forEach((img) => {
+      img.addEventListener('error', () => { img.closest('.dm-shot').classList.add('is-broken'); renumber(); arrows(); }, { once: true });
+    });
+  }
+
   /* The image is the one that was collected, and only that — no Images.,
      Add your own images. or Credits. cards around it. Shown whole: full
      width at its own proportions, so nothing is cropped off it (see
      .dm-hero). An item collected without a picture has no image area at all,
      rather than an empty box. */
   function renderCarousel() {
+    if (openItemState.data.images.length > 1) { renderStrip(openItemState.data.images); return; }
     const src = openItemState.data.images[0];
     detailCarousel.hidden = !src;
     // The rule under the image goes with it, or two rules would meet.
@@ -2869,6 +2958,20 @@ document.addEventListener('DOMContentLoaded', () => {
       // overwriting it with a stale copy the next time a list is used.
       if (changes.listRecentUse && changes.listRecentUse.newValue) {
         recentUse = changes.listRecentUse.newValue;
+      }
+
+      // Photos found for the item that is open, arriving while it is open.
+      if (openItemState && (keys.includes('devListItems_' + openItemState.listId)
+                            || keys.includes('listQueue_' + openItemState.listId))) {
+        const st = openItemState;
+        const items = (changes['devListItems_' + st.listId] || {}).newValue || [];
+        const rows = (changes['listQueue_' + st.listId] || {}).newValue || [];
+        const found = items.find((it) => isListItemFor(it, st.match))
+          || rows.find((r) => r.id === st.rowId);
+        if (found && mergeGallery(st.data, found.gallery)) {
+          renderCarousel();
+          saveItem();
+        }
       }
 
       const listChanged = openListId && keys.includes('devListItems_' + openListId);

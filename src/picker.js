@@ -1980,6 +1980,9 @@ class DecidioContentPicker {
         : { imageUrl: null, productUrl: location.href, productTitle: null };
 
       if (picture && picture.url) item.imageUrl = picture.url;
+      // The full photo the crop comes from: it is left out of the item's
+      // gallery, which would otherwise open on the same picture twice.
+      item.sourceImageUrl = (picture && picture.url) || (item.imageUrl && !item.imageUrl.startsWith('data:') ? item.imageUrl : null);
 
       // The box is a crop, as it is in the app — so what gets collected is the
       // framed region, not the whole source image.
@@ -2013,6 +2016,20 @@ class DecidioContentPicker {
           picture.node,
           this.findValidProductContainer(picture.node) || picture.node.parentElement
         ) || null;
+      }
+
+      // Collected on the product's own page: its other photos are right
+      // here, so they are read now, from the live page — which also covers
+      // shops that only build their pages in the browser. Collected from a
+      // listing, the background reads them from the product's page instead.
+      const here = (u) => String(u || '').split('#')[0];
+      if (item.productUrl && here(item.productUrl) === here(location.href) && typeof DecidioGallery !== 'undefined') {
+        try {
+          item.gallery = DecidioGallery.fromDocument(document, location.href, {
+            title: item.productTitle, productUrl: item.productUrl, exclude: [item.sourceImageUrl]
+          });
+        } catch (e) { item.gallery = []; }
+        item.galleryTried = true;
       }
 
       const entry = this.enqueueForIdentify(item);
@@ -2067,6 +2084,9 @@ class DecidioContentPicker {
       brand: null,
       // True when the only name available described the page, not this item.
       borrowedTitle: !!item.borrowedTitle,
+      sourceImageUrl: item.sourceImageUrl || null,
+      gallery: item.gallery || null,
+      galleryTried: !!item.galleryTried,
       state: 'pending',
       error: null
     };
@@ -2278,6 +2298,9 @@ class DecidioContentPicker {
       brand: q.brand || null,
       state: q.state,
       error: q.error || null,
+      sourceImageUrl: q.sourceImageUrl || null,
+      gallery: q.gallery || null,
+      galleryTried: !!q.galleryTried,
       // The list this was collected FOR, fixed at the moment the overlay
       // opened. Filing used to read the destination off whichever panel
       // happened to pick the batch up — and every tab with Decidio on has a

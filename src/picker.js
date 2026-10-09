@@ -913,20 +913,9 @@ class DecidioContentPicker {
 
       this.shadowRoot.appendChild(this.identifyPage);
 
-      // One-time signpost, matching ARCameraPage's own onAppear timing:
-      // present on open, held 2s, then faded over 0.8s and left alone.
-      this.hint = document.createElement('div');
-      this.hint.className = 'decidio-ar-hint';
-      this.hint.textContent = 'Collect';
-      this.shadowRoot.appendChild(this.hint);
-
-      // The hint used to be lifted clear of the bottom bar. There is no bar
-      // any more, so it sits on its own margin.
-      this.hint.style.setProperty('--decidio-hint-bottom', '40px');
-
-      this.hintTimer = setTimeout(() => {
-        if (this.hint) this.hint.classList.add('is-faded');
-      }, 2000);
+      // No vertical "Collect" signpost on open. It sat down the right edge
+      // for two seconds over whatever was there, and the overlay already says
+      // what it is for. this.hint stays null; the guarded uses are inert.
 
       this.renderIdentify();
       this.updateCarouselSelection(true);

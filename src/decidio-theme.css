@@ -2574,7 +2574,10 @@
     font-weight: 800;
     line-height: 1.2;
 }
-.decidio-sidebar:not(.is-auth) .dm-rule { height: 2px; background: var(--d-ink); }
+/* One heavy rule under the name, as the head of the page; every other rule
+   is light, so the sections read as parts of it rather than as equals. */
+.decidio-sidebar:not(.is-auth) .dm-rule { height: 1px; background: var(--d-ink); }
+.decidio-sidebar:not(.is-auth) .dm-name + .dm-rule { height: 3px; }
 
 /* The collected image, whole. Full width at its own proportions — never
    cropped, never stretched — and capped in height so a tall shot does not
@@ -2585,6 +2588,10 @@
 .decidio-sidebar:not(.is-auth) .dm-hero {
     display: flex;
     justify-content: center;
+    /* Room between the image and the rules on either side of it — the heavy
+       rule under the name above, the rule that starts Description below — so
+       neither reads as the image's own edge. */
+    padding: 16px 0;
     background: var(--d-page);
 }
 .decidio-sidebar:not(.is-auth) .dm-hero img {
@@ -2631,7 +2638,7 @@
     gap: 16px;
     padding: 8px 0;
 }
-.decidio-sidebar:not(.is-auth) .dm-spec + .dm-spec { border-top: 1px solid var(--d-ink); }
+.decidio-sidebar:not(.is-auth) .dm-spec + .dm-spec { border-top: 0.75px solid var(--d-ink); }
 .decidio-sidebar:not(.is-auth) .dm-spec-name { flex: 1 1 45%; font-size: 17px; font-weight: 600; min-width: 0; }
 .decidio-sidebar:not(.is-auth) .dm-spec-vals { flex: 1 1 55%; display: flex; flex-direction: column; align-items: flex-end; text-align: right; min-width: 0; }
 .decidio-sidebar:not(.is-auth) .dm-spec-val { font-size: 17px; font-weight: 400; }
@@ -2706,3 +2713,7 @@
    placeholder in the meantime. */
 .decidio-sidebar:not(.is-auth) .detail-view .wo-pending { display: none !important; }
 .decidio-sidebar:not(.is-auth) .detail-view .wo-typing::before { content: none !important; }
+
+/* A list's items open their details when tapped, so the whole tile says so. */
+.decidio-sidebar:not(.is-auth) .is-view-list .collected-product-tile { cursor: pointer; }
+.decidio-sidebar:not(.is-auth) .is-view-list .product-tile-remove { cursor: pointer; }

@@ -773,6 +773,17 @@ document.addEventListener('DOMContentLoaded', () => {
      the tiles flashed up, vanished, then cascaded in. The open list is the
      only thing drawn here now (openList). */
 
+  // Tapping an item in a list opens it — its photo or its text, anywhere but
+  // the remove control.
+  if (productsContainer) {
+    productsContainer.addEventListener('click', (e) => {
+      if (e.target.closest('.product-tile-remove')) return;
+      const tile = e.target.closest('.collected-product-tile');
+      if (!tile || !openListId || tile.dataset.idx == null) return;
+      openItem(null, openListId, { index: Number(tile.dataset.idx) });
+    });
+  }
+
   // Handle tile deletion via event delegation on the product container
   if (productsContainer) {
     productsContainer.addEventListener('click', (event) => {
@@ -1727,25 +1738,44 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  async function openItem(rowId, listId) {
+  /* Opened from Collected Items (rowId) or from a list (fromList.index).
+     Either way both copies are found — the row and the list item — so an
+     edit lands in both; an item with only one of them (removed from
+     Collected Items, or never filed into the list) edits the one it has. */
+  async function openItem(rowId, listId, fromList) {
     if (!itemView || !listId) return;
     const rows = await readQueue(listId);
-    const row = rows.find((r) => r.id === rowId);
-    if (!row) return;
     const listItems = await readListItems2(listId);
-    const match = { itemId: row.itemId || null, productUrl: row.productUrl || null, title: row.title || null };
-    const li = listItems.find((it) => isListItemFor(it, match));
+    let row = null;
+    let li = null;
+    if (fromList) {
+      li = listItems[fromList.index];
+      if (!li) return;
+      row = rows.find((r) => (li.id && r.itemId === li.id)
+        || (!r.itemId && (r.productUrl || null) === (li.productUrl || null)
+            && (r.title || null) === (li.productTitle || null))) || null;
+    } else {
+      row = rows.find((r) => r.id === rowId) || null;
+      if (!row) return;
+    }
+    const src = row || { title: li.productTitle, productUrl: li.productUrl, thumb: li.imageUrl, brand: li.brand };
+    const match = {
+      itemId: (row && row.itemId) || (li && li.id) || null,
+      productUrl: src.productUrl || null,
+      title: src.title || null
+    };
+    if (!li) li = listItems.find((it) => isListItemFor(it, match)) || null;
 
-    const detail = (li && li.detail) || row.detail || mockDetail(row);
+    const detail = (li && li.detail) || (row && row.detail) || mockDetail(src);
     const data = {
-      title: row.title || '',
-      productUrl: row.productUrl || '',
+      title: src.title || '',
+      productUrl: src.productUrl || '',
       ...JSON.parse(JSON.stringify(detail))
     };
-    if (!Array.isArray(data.images)) data.images = row.thumb ? [row.thumb] : [];
+    if (!Array.isArray(data.images)) data.images = src.thumb ? [src.thumb] : [];
     if (!Array.isArray(data.specs)) data.specs = [];
 
-    openItemState = { rowId, listId, match, data };
+    openItemState = { rowId: row ? row.id : null, listId, match, data, from: fromList ? 'list' : 'queue' };
     showConfidence = false;
     renderDetail();
     // The first time this item is opened, its spec values write themselves in.
@@ -1759,7 +1789,7 @@ document.addEventListener('DOMContentLoaded', () => {
       itemView.querySelectorAll('.detail-page').forEach((p) => { p.scrollTop = 0; });
     });
     // A mock is saved as soon as it is shown, so edits build on it.
-    if (!(li && li.detail) && !row.detail) saveItem();
+    if (!(li && li.detail) && !(row && row.detail)) saveItem();
   }
 
   function renderDetail() {
@@ -1982,16 +2012,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const rows = await readQueue(listId);
-    const row = rows.find((r) => r.id === rowId);
-    if (!row) return;
-    Object.assign(row, { title, productUrl, thumb, detail });
+    const row = rowId ? rows.find((r) => r.id === rowId) : null;
+    if (row) Object.assign(row, { title, productUrl, thumb, detail });
 
     const key = 'devListItems_' + listId;
     const listItems = await readListItems2(listId);
     const li = listItems.find((it) => isListItemFor(it, match));
     if (li) Object.assign(li, { productTitle: title, productUrl, imageUrl: thumb, detail });
+    if (!row && !li) return;
 
-    const out = { [queueKey(listId)]: rows };
+    const out = {};
+    if (row) out[queueKey(listId)] = rows;
     if (li) out[key] = listItems;
     await new Promise((resolve) => {
       try { chrome.storage.local.set(out, resolve); } catch (e) { resolve(); }
@@ -2010,9 +2041,15 @@ document.addEventListener('DOMContentLoaded', () => {
     await saveItem();
     itemView.hidden = true;
     D('detailPurchased').hidden = true;
+    const { from, listId } = openItemState;
     openItemState = null;
-    setHeaderTitle('Collected Items');
-    renderQueue();
+    // Back to where it was opened from, repainted with any edits.
+    if (from === 'list') {
+      openList(listId);
+    } else {
+      setHeaderTitle('Collected Items');
+      renderQueue();
+    }
   }
 
   // ---- Editing ----
@@ -2329,6 +2366,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // Newest first, the order the collected rows already use.
       [...items].reverse().forEach((it) => {
         displaySelectedProduct(it.imageUrl, it.productUrl, it.productTitle || 'Product', productsContainer);
+      });
+      // Newest first on screen, so tile k is item (length - 1 - k).
+      productsContainer.querySelectorAll('.collected-product-tile').forEach((tile, k) => {
+        tile.dataset.idx = String(items.length - 1 - k);
       });
 
       // Cascade them in, only on the first open after something was added.
@@ -3364,35 +3405,9 @@ function displaySelectedProduct(imageUrl, productUrl, productTitle, container) {
   const titleLabel = document.createElement('div');
   titleLabel.className = 'product-tile-title';
   titleLabel.textContent = productTitle || '';
-  titleLabel.setAttribute('contenteditable', 'plaintext-only');
-  titleLabel.setAttribute('spellcheck', 'false');
-  titleLabel.title = 'Click to edit';
-
-  // Editing must not also open the product — the row itself is a link.
-  titleLabel.addEventListener('click', (e) => e.stopPropagation());
-
-  titleLabel.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); titleLabel.blur(); }
-    if (e.key === 'Escape') { titleLabel.textContent = productTitle || ''; titleLabel.blur(); }
-  });
-
-  titleLabel.addEventListener('blur', () => {
-    const next = titleLabel.textContent.trim();
-    if (!next) { titleLabel.textContent = productTitle || ''; return; }
-    if (next === productTitle) return;
-
-    brandLine.textContent = next.split(' ')[0] || 'Product';
-
-    // Persist against the stored item, matched on productUrl.
-    try {
-      chrome.storage.local.get({ savedProducts: [] }, (result) => {
-        if (chrome.runtime.lastError || !result) return;
-        const list = (result.savedProducts || []).map((item) =>
-          item.productUrl === productUrl ? { ...item, productTitle: next } : item);
-        chrome.storage.local.set({ savedProducts: list });
-      });
-    } catch (e) { /* orphaned context — the edit still shows for this session */ }
-  });
+  // Not edited in place any more: tapping the tile opens the item, where
+  // the name is edited along with everything else. The in-place edit also
+  // saved to the collect inbox rather than the list, so it never stuck.
 
   textBlock.appendChild(brandLine);
   textBlock.appendChild(titleLabel);
